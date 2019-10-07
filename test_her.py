@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise
 from stable_baselines.bench import Monitor
 from stable_baselines.common import set_global_seeds
+from stable_baselines import logger
 import os
 import imageio
 import argparse
@@ -22,16 +23,29 @@ def arg_parse():
     parser.add_argument('--env', default='FetchReach-v1')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--num_timesteps', default=2e6)
+    parser.add_argument('--log_path', default=None, type=str)
+    parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
     args = parser.parse_args()
     return args
 
 
-def main(env_name, seed, num_timesteps, play):
-    if MPI is not None:
-        rank = MPI.COMM_WORLD.Get_rank()
+def configure_logger(log_path, **kwargs):
+    if log_path is not None:
+        logger.configure(log_path)
     else:
+        logger.configure(**kwargs)
+
+
+def main(env_name, seed, num_timesteps, log_path, load_path, play):
+    log_dir = log_path if (log_path is not None) else os.path.join("./logs", env_name, "her")
+    if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
+        configure_logger(log_dir)
+    else:
+        rank = MPI.COMM_WORLD.Get_rank()
+        configure_logger(log_dir, format_strs=[])   
+    
     set_global_seeds(seed)
 
     model_class = DDPG  # works also with SAC, DDPG and TD3
@@ -50,10 +64,9 @@ def main(env_name, seed, num_timesteps, play):
         raise NotImplementedError("%s not implemented" % env_name)
 
     if not play:
-        log_dir = os.path.join("./logs", env_name, "her")
         os.makedirs(log_dir, exist_ok=True)
 
-        env = Monitor(env, log_dir, allow_early_resets=True)
+        env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=True)
     # Available strategies (cf paper): future, final, episode, random
     goal_selection_strategy = 'future' # equivalent to GoalSelectionStrategy.FUTURE
 
@@ -73,24 +86,34 @@ def main(env_name, seed, num_timesteps, play):
                 policy_kwargs = dict(layers=[64, 64, 64])
             else:
                 policy_kwargs = {}
+            def callback(_locals, _globals):
+                steps_per_epoch = train_kwargs["nb_rollout_steps"] * 50
+                if rank ==0 and _locals['total_steps'] % (steps_per_epoch * 5) == 0:
+                    model_path = os.path.join(log_dir, 'model_' + str(_locals['total_steps'] // (steps_per_epoch)))
+                    model.save(model_path)
+                    print('model saved to', model_path)
+                return True
         else:
             train_kwargs = {}
             policy_kwargs = {}
+            callback = None
         # Wrap the model
         model = HER('MlpPolicy', env, model_class, n_sampled_goal=4, goal_selection_strategy=goal_selection_strategy,
                     policy_kwargs=policy_kwargs, 
                     verbose=1,
                     **train_kwargs)
+
         # Train the model
-        model.learn(num_timesteps, seed=seed)
+        model.learn(num_timesteps, seed=seed, callback=callback)
 
         if rank == 0:
-            model.save(os.path.join("./model", "her_" + env_name))
+            model.save(os.path.join(log_dir, 'final'))
 
     # WARNING: you must pass an env
     # or wrap your environment with HERGoalEnvWrapper to use the predict method
-    if rank == 0:
-        model = HER.load(os.path.join("./model", "her_" + env_name), env=env)
+    if play and rank == 0:
+        assert load_path is not None
+        model = HER.load(load_path, env=env)
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
@@ -115,4 +138,5 @@ def main(env_name, seed, num_timesteps, play):
 
 if __name__ == '__main__':
     args = arg_parse()
-    main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), play=args.play)
+    main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
+         log_path=args.log_path, load_path=args.load_path, play=args.play)
