@@ -7,20 +7,33 @@ import gym
 import matplotlib.pyplot as plt
 from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise
 from stable_baselines.bench import Monitor
+from stable_baselines.common import set_global_seeds
 import os
 import imageio
 import argparse
+try:
+    from mpi4py import MPI
+except ImportError:
+    MPI = None
 
 
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', default='FetchReach-v1')
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--num_timesteps', default=2e6)
     parser.add_argument('--play', action="store_true", default=False)
     args = parser.parse_args()
     return args
 
 
-def main(env_name, play):
+def main(env_name, seed, num_timesteps, play):
+    if MPI is not None:
+        rank = MPI.COMM_WORLD.Get_rank()
+    else:
+        rank = 0
+    set_global_seeds(seed)
+
     model_class = DDPG  # works also with SAC, DDPG and TD3
 
     # N_BITS = 16
@@ -51,7 +64,7 @@ def main(env_name, play):
                                 normalize_observations=True,
                                 random_exploration=0.2,
                                 nb_rollout_steps=16*50, nb_train_steps=40,
-                                buffer_size=int(1e6),
+                                buffer_size=int(1e5),
                                 actor_lr=1e-3, critic_lr=1e-3,
                                 gamma=0.98,
                                 batch_size=128,
@@ -69,35 +82,37 @@ def main(env_name, play):
                     verbose=1,
                     **train_kwargs)
         # Train the model
-        model.learn(int(2e6))
+        model.learn(num_timesteps, seed=seed)
 
-        model.save(os.path.join("./model", "her_" + env_name))
+        if rank == 0:
+            model.save(os.path.join("./model", "her_" + env_name))
 
     # WARNING: you must pass an env
     # or wrap your environment with HERGoalEnvWrapper to use the predict method
-    model = HER.load(os.path.join("./model", "her_" + env_name), env=env)
+    if rank == 0:
+        model = HER.load(os.path.join("./model", "her_" + env_name), env=env)
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-    obs = env.reset()
-    img = env.render(mode='rgb_array')
-    episode_reward = 0.0
-    images = []
-    for _ in range(200):
-        images.append(img)
-        action, _ = model.predict(obs)
-        print('action', action)
-        obs, reward, done, _ = env.step(action)
-        episode_reward += reward
-        ax.cla()
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        obs = env.reset()
         img = env.render(mode='rgb_array')
-        ax.imshow(img)
-        plt.pause(0.2)
-        if done:
-            obs = env.reset()
-            print('episode_reward', episode_reward)
-            episode_reward = 0.0
-    imageio.mimsave(env_name + '.gif', images)
+        episode_reward = 0.0
+        images = []
+        for _ in range(200):
+            images.append(img)
+            action, _ = model.predict(obs)
+            print('action', action)
+            obs, reward, done, _ = env.step(action)
+            episode_reward += reward
+            ax.cla()
+            img = env.render(mode='rgb_array')
+            ax.imshow(img)
+            plt.pause(0.2)
+            if done:
+                obs = env.reset()
+                print('episode_reward', episode_reward)
+                episode_reward = 0.0
+        imageio.mimsave(env_name + '.gif', images)
 
 if __name__ == '__main__':
     args = arg_parse()
-    main(env_name=args.env, play=args.play)
+    main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), play=args.play)
