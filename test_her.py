@@ -3,13 +3,14 @@ from stable_baselines.her import GoalSelectionStrategy, HERGoalEnvWrapper
 from stable_baselines.common.policies import MlpPolicy
 # from stable_baselines.common.bit_flipping_env import BitFlippingEnv
 from push_obstacle import FetchPushEnv
+from push_wall import FetchPushWallEnv
 import gym
 import matplotlib.pyplot as plt
 from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise
 from stable_baselines.bench import Monitor
 from stable_baselines.common import set_global_seeds
 from stable_baselines import logger
-import os
+import os, time
 import imageio
 import argparse
 try:
@@ -17,12 +18,15 @@ try:
 except ImportError:
     MPI = None
 
+ENTRY_POINT = {'FetchPushObstacle-v1': FetchPushEnv,
+               'FetchPushWall-v1': FetchPushWallEnv,
+               }
 
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', default='FetchReach-v1')
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--num_timesteps', default=2e6)
+    parser.add_argument('--num_timesteps', type=float, default=2e6)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
@@ -38,7 +42,7 @@ def configure_logger(log_path, **kwargs):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play):
-    log_dir = log_path if (log_path is not None) else os.path.join("./logs", env_name, "her")
+    log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
         configure_logger(log_dir)
@@ -50,16 +54,11 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
 
     model_class = DDPG  # works also with SAC, DDPG and TD3
 
-    # N_BITS = 16
-    # env = BitFlippingEnv(N_BITS, continuous=model_class in [DDPG, SAC, TD3], max_steps=N_BITS)
-    # gym.register('MyFetchPush-v1', entry_point=FetchPushEnv, max_episode_steps=50)
-    # env = gym.make('MyFetchPush-v1')
-    # env = gym.make('FetchPush-v1')
     if env_name in ['FetchReach-v1', 'FetchPush-v1']:
         env = gym.make(env_name)
-    elif env_name == 'MyFetchPush-v1':
-        gym.register('MyFetchPush-v1', entry_point=FetchPushEnv, max_episode_steps=50)
-        env = gym.make('MyFetchPush-v1')
+    elif env_name in ['FetchPushObstacle-v1', 'FetchPushWall-v1']:
+        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50)
+        env = gym.make(env_name)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
 
@@ -71,7 +70,6 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
     goal_selection_strategy = 'future' # equivalent to GoalSelectionStrategy.FUTURE
 
     if not play:
-        # policy_kwargs = dict(layers=[64, 64, 64])
         if model_class is DDPG:
             train_kwargs = dict(action_noise=NormalActionNoise(mean=0.0 * env.action_space.high, sigma=0.05 * env.action_space.high),
                                 normalize_observations=True,
@@ -82,7 +80,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
                                 gamma=0.98,
                                 batch_size=128,
                                 )
-            if env_name in ["FetchPush-v1", "MyFetchPush-v1"]:
+            if env_name in ["FetchPush-v1", "FetchPushWall-v1", "FetchPushObstacle-v1"]:
                 policy_kwargs = dict(layers=[64, 64, 64])
             else:
                 policy_kwargs = {}
@@ -97,6 +95,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
             train_kwargs = {}
             policy_kwargs = {}
             callback = None
+        if rank == 0:
+            print('train_kwargs', train_kwargs)
+            print('policy_kwargs', policy_kwargs)
         # Wrap the model
         model = HER('MlpPolicy', env, model_class, n_sampled_goal=4, goal_selection_strategy=goal_selection_strategy,
                     policy_kwargs=policy_kwargs, 
