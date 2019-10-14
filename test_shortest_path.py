@@ -103,7 +103,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
                       **train_kwargs)
 
         # Train the model
-        model.learn(num_timesteps, seed=seed, callback=callback)
+        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=20)
 
         if rank == 0:
             model.save(os.path.join(log_dir, 'final'))
