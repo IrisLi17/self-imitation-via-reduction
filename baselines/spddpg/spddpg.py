@@ -199,7 +199,7 @@ class SPDDPG(OffPolicyRLModel):
                  return_range=(-np.inf, np.inf), actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1.,
                  render=False, render_eval=False, memory_limit=None, buffer_size=50000, random_exploration=0.0,
                  verbose=0, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
-                 full_tensorboard_log=False, nb_subgoal_candidates=10):
+                 full_tensorboard_log=False, nb_subgoal_candidates=31):
 
         super(SPDDPG, self).__init__(policy=policy, env=env, replay_buffer=None,
                                    verbose=verbose, policy_base=DDPGPolicy,
@@ -624,17 +624,39 @@ class SPDDPG(OffPolicyRLModel):
         return action, q_value
 
     def _measure_access(self, obs, subgoal):
+        # TODO: accept a batch of subgoals
+        def arraymin2d(arr):
+            arr = np.asarray(arr)
+            assert len(arr.shape) <= 2
+            if len(arr.shape) == 1:
+                arr = np.expand_dims(arr, 0)
+            return arr
+        subgoal = arraymin2d(subgoal)
         ultimate_goal = self.env.convert_obs_to_dict(obs)['desired_goal']
-        way_point = self.env.env.goal2observation(subgoal)
-        obs1 = obs.copy()
-        obs1 = self.env.convert_obs_to_dict(obs1)
-        obs1['desired_goal'] = subgoal
-        obs1 = self.env.convert_dict_to_obs(obs1)
+        # obs1 = [obs.copy() for _ in range(subgoal.shape[0])]
+        # obs1 = [self.env.convert_obs_to_dict(_obs1) for _obs1 in obs1]
+        # obs1['desired_goal'] = subgoal
+        # obs1 = self.env.convert_dict_to_obs(obs1)
+        obs1 = []
+        for i in range(subgoal.shape[0]):
+            _obs1 = obs.copy()
+            _obs1 = self.env.convert_obs_to_dict(_obs1)
+            _obs1['desired_goal'] = subgoal[i]
+            obs1.append(self.env.convert_dict_to_obs(_obs1))
+        obs1 = np.asarray(obs1)
         _, q1 = self._policy(obs1, apply_noise=False, compute_q=True)
-        way_point['desired_goal'] = ultimate_goal
-        way_point = self.env.convert_dict_to_obs(way_point)
+        way_point = []
+        for i in range(subgoal.shape[0]):
+            _way_point = self.env.env.goal2observation(subgoal[i])
+            _way_point['desired_goal'] = ultimate_goal
+            way_point.append(self.env.convert_dict_to_obs(_way_point))
+        way_point = np.asarray(way_point)
+        # way_point = [self.env.env.goal2observation(subgoal[i]) for i in range(subgoal.shape[0])]
+        # way_point['desired_goal'] = ultimate_goal
+        # way_point = self.env.convert_dict_to_obs(way_point)
         _, q2 = self._policy(way_point, apply_noise=False, compute_q=True)
-        return np.clip(q1 + self.bias, 0, self.bias) * np.clip(q2 + self.bias, 0, self.bias)
+        value = np.clip((q1 + self.bias) / self.bias, 0., 1.) * np.clip((q2 + self.bias) / self.bias, 0., 1.)
+        return np.squeeze(value, axis=-1)
 
     def _store_transition(self, obs, action, reward, next_obs, done):
         """
@@ -878,7 +900,10 @@ class SPDDPG(OffPolicyRLModel):
                                 subgoal_candidates = [self.env.convert_obs_to_dict(obs)['achieved_goal'],] + \
                                     [self.env.convert_obs_to_dict(obs_batch[b])['achieved_goal'] for b in range(self.nb_subgoal_candidates)]
                                 # Compute p*p
-                                access_values = [self._measure_access(obs, subgoal) for subgoal in subgoal_candidates]
+                                # access_values = [self._measure_access(obs, subgoal) for subgoal in subgoal_candidates]
+                                access_values = self._measure_access(obs, subgoal_candidates)
+                                if total_steps % 10 == 0:
+                                    print(np.mean(access_values), np.std(access_values), np.max(access_values))
                                 subgoal = subgoal_candidates[np.argmax(access_values)]
                                 # Relabel goal in observation
                                 obs = self.env.convert_obs_to_dict(obs)
