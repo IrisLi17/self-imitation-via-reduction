@@ -869,6 +869,8 @@ class SPDDPG(OffPolicyRLModel):
 
             eval_episode_rewards_history = deque(maxlen=100)
             episode_rewards_history = deque(maxlen=100)
+            access_value_max_history = deque(maxlen=100)
+            access_value_mean_history = deque(maxlen=100)
             self.episode_reward = np.zeros((1,))
             episode_successes = []
             with self.sess.as_default(), self.graph.as_default():
@@ -907,27 +909,26 @@ class SPDDPG(OffPolicyRLModel):
                                 return self
                             # Sample subgoal candidates
                             # TODO: Generate subgoal candidates
-                            if self.replay_buffer.can_sample(self.nb_subgoal_candidates):
-                                obs_batch, _, _, _, _, mask_batch = self.replay_buffer.sample(self.nb_subgoal_candidates)
-                                # TODO: don't know if self.env.env.object_mask is the corresponding mask for obs here.
-                                # Randomize mask_batch. TODO: now every object gets the same probability.
-                                subgoal_candidates = [(self.env.convert_obs_to_dict(obs)['desired_goal'], self.env.env.object_mask)] + \
-                                    [(self.env.convert_obs_to_dict(obs_batch[b])['achieved_goal'], np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) for b in range(self.nb_subgoal_candidates)]
-                                # Compute p*p
-                                access_values = self._measure_access(obs, subgoal_candidates)
-                                subgoal, submask = subgoal_candidates[np.argmax(access_values)] # add mask
-                                if total_steps % 10 == 0:
-                                    pass
-                                    # print('subgoal_candidates', subgoal_candidates)
-                                    # print(np.mean(access_values), np.std(access_values), np.max(access_values))
-                                    # print(submask)
-                                # Relabel goal in observation
-                                obs = self.env.convert_obs_to_dict(obs)
-                                # self.original_goal = obs['desired_goal']
-                                obs['desired_goal'] = subgoal
-                                obs = self.env.convert_dict_to_obs(obs)
-                            else:
-                                subgoal, submask = self.env.convert_obs_to_dict(obs)['desired_goal'], self.env.env.object_mask
+                            if total_steps % 10 == 0:
+                                if self.replay_buffer.can_sample(self.nb_subgoal_candidates):
+                                    obs_batch, _, _, _, _, mask_batch = self.replay_buffer.sample(self.nb_subgoal_candidates)
+                                    # TODO: don't know if self.env.env.object_mask is the corresponding mask for obs here.
+                                    # Randomize mask_batch. TODO: now every object gets the same probability.
+                                    assert self.env.env.object_mask[0] == 1 and self.env.env.object_mask[1] == 0
+                                    subgoal_candidates = [(self.env.convert_obs_to_dict(obs)['desired_goal'], self.env.env.object_mask)] + \
+                                        [(self.env.convert_obs_to_dict(obs_batch[b])['achieved_goal'], np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) for b in range(self.nb_subgoal_candidates)]
+                                    # Compute p*p. TODO: record
+                                    access_values = self._measure_access(obs, subgoal_candidates)
+                                    subgoal, submask = subgoal_candidates[np.argmax(access_values)] # add mask
+                                    access_value_max_history.append(np.max(access_values))
+                                    access_value_mean_history.append(np.mean(access_values))
+                                    # Relabel goal in observation
+                                    obs = self.env.convert_obs_to_dict(obs)
+                                    # self.original_goal = obs['desired_goal']
+                                    obs['desired_goal'] = subgoal
+                                    obs = self.env.convert_dict_to_obs(obs)
+                                else:
+                                    subgoal, submask = self.env.convert_obs_to_dict(obs)['desired_goal'], self.env.env.object_mask
                             # Predict next action.
                             action, q_value = self._policy(self.env.mask_obs(obs, submask), apply_noise=True, compute_q=True)
                             assert action.shape == self.env.action_space.shape
@@ -1056,6 +1057,8 @@ class SPDDPG(OffPolicyRLModel):
                     combined_stats['rollout/episode_steps'] = np.mean(epoch_episode_steps)
                     combined_stats['rollout/actions_mean'] = np.mean(epoch_actions)
                     combined_stats['rollout/Q_mean'] = np.mean(epoch_qs)
+                    combined_stats['rollout/access_mean'] = np.mean(access_value_mean_history)
+                    combined_stats['rollout/access_max'] = np.mean(access_value_max_history)
                     combined_stats['train/loss_actor'] = np.mean(epoch_actor_losses)
                     combined_stats['train/loss_critic'] = np.mean(epoch_critic_losses)
                     if len(epoch_adaptive_distances) != 0:
