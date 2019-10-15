@@ -2,7 +2,8 @@
 from baselines import SPHER, SPDDPG
 from stable_baselines.her import GoalSelectionStrategy, HERGoalEnvWrapper
 from stable_baselines.common.policies import MlpPolicy
-from push_obstacle import FetchPushEnv
+from push_obstacle import FetchPushObstacleEnv
+from push_obstacle_mask import FetchPushObstacleMaskEnv
 import gym
 import matplotlib.pyplot as plt
 from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise
@@ -17,7 +18,8 @@ try:
 except ImportError:
     MPI = None
 
-ENTRY_POINT = {'FetchPushObstacle-v1': FetchPushEnv,
+ENTRY_POINT = {'FetchPushObstacle-v1': FetchPushObstacleEnv,
+               'FetchPushObstacleMask-v1': FetchPushObstacleMaskEnv,
                }
 
 def arg_parse():
@@ -54,7 +56,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
 
     if env_name in ['FetchReach-v1', 'FetchPush-v1']:
         env = gym.make(env_name)
-    elif env_name in ['FetchPushObstacle-v1', ]:
+    elif env_name in ['FetchPushObstacle-v1', 'FetchPushObstacleMask-v1']:
         gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50)
         env = gym.make(env_name)
     else:
@@ -78,7 +80,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
                                 gamma=0.98,
                                 batch_size=128,
                                 )
-            if env_name in ["FetchPush-v1", "FetchPushWall-v1", "FetchPushObstacle-v1"]:
+            if env_name in ["FetchPush-v1", "FetchPushWall-v1", "FetchPushObstacle-v1", "FetchPushObstacleMask-v1"]:
                 policy_kwargs = dict(layers=[64, 64, 64])
             else:
                 policy_kwargs = {}
@@ -103,7 +105,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
                       **train_kwargs)
 
         # Train the model
-        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=20)
+        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=5)
 
         if rank == 0:
             model.save(os.path.join(log_dir, 'final'))

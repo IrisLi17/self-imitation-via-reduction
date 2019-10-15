@@ -8,8 +8,11 @@ import numpy as np
 # Ensure we get the path separator correct on windows
 MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'push_obstacle.xml')
 
+def goal_distance(goal_a, goal_b):
+    assert goal_a.shape == goal_b.shape
+    return np.linalg.norm(goal_a - goal_b, axis=-1)
 
-class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
+class FetchPushObstacleMaskEnv(fetch_env.FetchEnv, utils.EzPickle):
     def __init__(self, reward_type='sparse'):
         initial_qpos = {
             'robot0:slide0': 0.405,
@@ -70,7 +73,7 @@ class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         if not self.has_object:
             achieved_goal = grip_pos.copy()
         else:
-            # every object should get involved
+            # every object should get involved, add a mask
             achieved_goal = np.squeeze(object_pos.copy())
         obs = np.concatenate([
             grip_pos, object_pos.ravel(), object_rel_pos.ravel(), gripper_state, object_rot.ravel(), 
@@ -125,20 +128,45 @@ class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
                 _goal += self.target_offset
                 _goal[2] = self.height_offset
                 goal.append(_goal)
-            goal = np.concatenate(goal)            
+            goal = np.concatenate(goal)
+            # idx 0 refers to target object  
+            self.object_mask = np.asarray([1., 0.])          
         else:
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-0.15, 0.15, size=3)
         return goal.copy()
+    
+    def compute_reward(self, achieved_goal, goal, info):
+        # Compute distance between goal and the achieved goal.
+        mask = self.object_mask
+        mask = np.outer(mask, np.asarray([1,1,1])).ravel()
+        achieved_goal = mask * achieved_goal
+        goal = mask * goal
+        d = goal_distance(achieved_goal, goal)
+        if self.reward_type == 'sparse':
+            return -(d > self.distance_threshold).astype(np.float32)
+        else:
+            return -d
+    
+    def _is_success(self, achieved_goal, desired_goal):
+        mask = self.object_mask
+        mask = np.outer(mask, np.asarray([1,1,1])).ravel()
+        achieved_goal = mask * achieved_goal
+        desired_goal = mask * desired_goal
+        d = goal_distance(achieved_goal, desired_goal)
+        return (d < self.distance_threshold).astype(np.float32)
     
     def goal2observation(self, goal):
         '''
         generate an observation that starts from the goal.
         '''
+        assert len(goal) == 3 * self.n_object
         obs = self._get_obs()
         assert isinstance(obs, dict)
         # object_pos
-        obs['observation'][3:9] = goal
+        obs['observation'][3:3 + 3 * self.n_object] = goal
         # object_rel_pos
-        obs['observation'][9:12] = obs['observation'][3:6] - obs['observation'][0:3]
-        obs['observation'][12:15] = obs['observation'][6:9] - obs['observation'][0:3]
+        for i in range(self.n_object):
+            obs['observation'][3 + 3 * (self.n_object + i): 3 + 3 * (self.n_object + i + 1)] = obs['observation'][3 * (1 + i) : 3 * (2 + i)] - obs['observation'][0:3]
+        # obs['observation'][9:12] = obs['observation'][3:6] - obs['observation'][0:3]
+        # obs['observation'][12:15] = obs['observation'][6:9] - obs['observation'][0:3]
         return obs.copy()

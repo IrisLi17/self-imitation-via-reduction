@@ -5,7 +5,8 @@ from stable_baselines.common import OffPolicyRLModel
 from stable_baselines.common.base_class import _UnvecWrapper
 from stable_baselines.common.vec_env import VecEnvWrapper
 from .replay_buffer import SPHindsightExperienceReplayWrapper, KEY_TO_GOAL_STRATEGY
-from stable_baselines.her.utils import HERGoalEnvWrapper
+# from stable_baselines.her.utils import HERGoalEnvWrapper
+from .utils import HERMaskGoalEnvWrapper
 
 
 class SPHER(BaseRLModel):
@@ -58,8 +59,10 @@ class SPHER(BaseRLModel):
         Wrap the environment in a HERGoalEnvWrapper
         if needed and create the replay buffer wrapper.
         """
-        if not isinstance(env, HERGoalEnvWrapper):
-            env = HERGoalEnvWrapper(env)
+        # if not isinstance(env, HERGoalEnvWrapper):
+        #     env = HERGoalEnvWrapper(env)
+        if not isinstance(env, HERMaskGoalEnvWrapper):
+            env = HERMaskGoalEnvWrapper(env)
 
         self.env = env
         # NOTE: we cannot do that check directly with VecEnv

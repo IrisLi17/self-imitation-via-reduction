@@ -18,7 +18,8 @@ from stable_baselines.common.mpi_adam import MpiAdam
 from stable_baselines.ddpg.policies import DDPGPolicy
 from stable_baselines.common.mpi_running_mean_std import RunningMeanStd
 from stable_baselines.a2c.utils import total_episode_reward_logger
-from stable_baselines.deepq.replay_buffer import ReplayBuffer
+# from stable_baselines.deepq.replay_buffer import ReplayBuffer
+from baselines.spher.replay_buffer import MaskReplayBuffer
 
 
 def normalize(tensor, stats):
@@ -324,7 +325,7 @@ class SPDDPG(OffPolicyRLModel):
             with self.graph.as_default():
                 self.sess = tf_util.single_threaded_session(graph=self.graph)
 
-                self.replay_buffer = ReplayBuffer(self.buffer_size)
+                self.replay_buffer = MaskReplayBuffer(self.buffer_size)
 
                 with tf.variable_scope("input", reuse=False):
                     # Observation normalization.
@@ -624,7 +625,7 @@ class SPDDPG(OffPolicyRLModel):
         return action, q_value
 
     def _measure_access(self, obs, subgoal):
-        # TODO: accept a batch of subgoals
+        # accept a batch of subgoals
         def arraymin2d(arr):
             arr = np.asarray(arr)
             assert len(arr.shape) <= 2
@@ -632,7 +633,8 @@ class SPDDPG(OffPolicyRLModel):
                 arr = np.expand_dims(arr, 0)
             return arr
         subgoal = arraymin2d(subgoal)
-        ultimate_goal = self.env.convert_obs_to_dict(obs)['desired_goal']
+        ultimate_goal = self.env.convert_obs_to_dict(obs)['desired_goal'] # TODO: maybe buggy
+        ultimate_mask = self.env.env.object_mask.copy()
         # obs1 = [obs.copy() for _ in range(subgoal.shape[0])]
         # obs1 = [self.env.convert_obs_to_dict(_obs1) for _obs1 in obs1]
         # obs1['desired_goal'] = subgoal
@@ -641,14 +643,17 @@ class SPDDPG(OffPolicyRLModel):
         for i in range(subgoal.shape[0]):
             _obs1 = obs.copy()
             _obs1 = self.env.convert_obs_to_dict(_obs1)
-            _obs1['desired_goal'] = subgoal[i]
+            # multiply by mask here, because obs1 will be fed into network
+            _obs1['achieved_goal'] = _obs1['achieved_goal'] * self.env.expand_mask(subgoal[i][1])
+            _obs1['desired_goal'] = subgoal[i][0] * self.env.expand_mask(subgoal[i][1])
             obs1.append(self.env.convert_dict_to_obs(_obs1))
         obs1 = np.asarray(obs1)
         _, q1 = self._policy(obs1, apply_noise=False, compute_q=True)
         way_point = []
         for i in range(subgoal.shape[0]):
-            _way_point = self.env.env.goal2observation(subgoal[i])
-            _way_point['desired_goal'] = ultimate_goal
+            _way_point = self.env.env.goal2observation(subgoal[i][0])
+            _way_point['achieved_goal'] = _way_point['achieved_goal'] * self.env.expand_mask(ultimate_mask)
+            _way_point['desired_goal'] = ultimate_goal * self.env.expand_mask(ultimate_mask)
             way_point.append(self.env.convert_dict_to_obs(_way_point))
         way_point = np.asarray(way_point)
         # way_point = [self.env.env.goal2observation(subgoal[i]) for i in range(subgoal.shape[0])]
@@ -658,7 +663,7 @@ class SPDDPG(OffPolicyRLModel):
         value = np.clip((q1 + self.bias) / self.bias, 0., 1.) * np.clip((q2 + self.bias) / self.bias, 0., 1.)
         return np.squeeze(value, axis=-1)
 
-    def _store_transition(self, obs, action, reward, next_obs, done):
+    def _store_transition(self, obs, action, reward, next_obs, done, mask):
         """
         Store a transition in the replay buffer
 
@@ -669,7 +674,7 @@ class SPDDPG(OffPolicyRLModel):
         :param done: (bool) Whether the episode is over
         """
         reward *= self.reward_scale
-        self.replay_buffer.add(obs, action, reward, next_obs, float(done))
+        self.replay_buffer.add(obs, action, reward, next_obs, float(done), mask)
         if self.normalize_observations:
             self.obs_rms.update(np.array([obs]))
 
@@ -683,7 +688,10 @@ class SPDDPG(OffPolicyRLModel):
         :return: (float, float) critic loss, actor loss
         """
         # Get a batch
-        obs, actions, rewards, next_obs, terminals = self.replay_buffer.sample(batch_size=self.batch_size)
+        obs, actions, rewards, next_obs, terminals, masks = self.replay_buffer.sample(batch_size=self.batch_size)
+        # Mask obs
+        obs = np.asarray([self.env.mask_obs(obs[i], masks[i]) for i in range(obs.shape[0])])
+        next_obs = np.asarray([self.env.mask_obs(next_obs[i], masks[i]) for i in range(obs.shape[0])])
         # Reshape to match previous behavior and placeholder shape
         rewards = rewards.reshape(-1, 1)
         terminals = terminals.reshape(-1, 1)
@@ -768,7 +776,9 @@ class SPDDPG(OffPolicyRLModel):
         if self.stats_sample is None:
             # Get a sample and keep that fixed for all further computations.
             # This allows us to estimate the change in value for the same set of inputs.
-            obs, actions, rewards, next_obs, terminals = self.replay_buffer.sample(batch_size=self.batch_size)
+            obs, actions, rewards, next_obs, terminals, masks = self.replay_buffer.sample(batch_size=self.batch_size)
+            obs = np.asarray([self.env.mask_obs(obs[i], masks[i]) for i in range(obs.shape[0])])
+            next_obs = np.asarray([self.env.mask_obs(next_obs[i], masks[i]) for i in range(obs.shape[0])])
             self.stats_sample = {
                 'obs': obs,
                 'actions': actions,
@@ -810,7 +820,8 @@ class SPDDPG(OffPolicyRLModel):
             return 0.
 
         # Perturb a separate copy of the policy to adjust the scale for the next "real" perturbation.
-        obs, *_ = self.replay_buffer.sample(batch_size=self.batch_size)
+        obs, _, _, _, _, masks = self.replay_buffer.sample(batch_size=self.batch_size)
+        obs = np.asarray([self.env.mask_obs(obs[i], masks[i])])
         self.sess.run(self.perturb_adaptive_policy_ops, feed_dict={
             self.param_noise_stddev: self.param_noise.current_stddev,
         })
@@ -865,6 +876,7 @@ class SPDDPG(OffPolicyRLModel):
                 self._reset()
                 obs = self.env.reset()
                 self.replay_buffer.original_goal = self.env.convert_obs_to_dict(obs)['desired_goal']
+                self.replay_buffer.original_mask = self.env.env.object_mask
                 eval_obs = None
                 if self.eval_env is not None:
                     eval_obs = self.eval_env.reset()
@@ -896,22 +908,28 @@ class SPDDPG(OffPolicyRLModel):
                             # Sample subgoal candidates
                             # TODO: Generate subgoal candidates
                             if self.replay_buffer.can_sample(self.nb_subgoal_candidates):
-                                obs_batch, _, _, _, _ = self.replay_buffer.sample(self.nb_subgoal_candidates)
-                                subgoal_candidates = [self.env.convert_obs_to_dict(obs)['achieved_goal'],] + \
-                                    [self.env.convert_obs_to_dict(obs_batch[b])['achieved_goal'] for b in range(self.nb_subgoal_candidates)]
+                                obs_batch, _, _, _, _, mask_batch = self.replay_buffer.sample(self.nb_subgoal_candidates)
+                                # TODO: don't know if self.env.env.object_mask is the corresponding mask for obs here.
+                                # Randomize mask_batch. TODO: now every object gets the same probability.
+                                subgoal_candidates = [(self.env.convert_obs_to_dict(obs)['desired_goal'], self.env.env.object_mask)] + \
+                                    [(self.env.convert_obs_to_dict(obs_batch[b])['achieved_goal'], np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) for b in range(self.nb_subgoal_candidates)]
                                 # Compute p*p
-                                # access_values = [self._measure_access(obs, subgoal) for subgoal in subgoal_candidates]
                                 access_values = self._measure_access(obs, subgoal_candidates)
+                                subgoal, submask = subgoal_candidates[np.argmax(access_values)] # add mask
                                 if total_steps % 10 == 0:
-                                    print(np.mean(access_values), np.std(access_values), np.max(access_values))
-                                subgoal = subgoal_candidates[np.argmax(access_values)]
+                                    pass
+                                    # print('subgoal_candidates', subgoal_candidates)
+                                    # print(np.mean(access_values), np.std(access_values), np.max(access_values))
+                                    # print(submask)
                                 # Relabel goal in observation
                                 obs = self.env.convert_obs_to_dict(obs)
                                 # self.original_goal = obs['desired_goal']
                                 obs['desired_goal'] = subgoal
                                 obs = self.env.convert_dict_to_obs(obs)
+                            else:
+                                subgoal, submask = self.env.convert_obs_to_dict(obs)['desired_goal'], self.env.env.object_mask
                             # Predict next action.
-                            action, q_value = self._policy(obs, apply_noise=True, compute_q=True)
+                            action, q_value = self._policy(self.env.mask_obs(obs, submask), apply_noise=True, compute_q=True)
                             assert action.shape == self.env.action_space.shape
 
                             # Execute next action.
@@ -925,6 +943,8 @@ class SPDDPG(OffPolicyRLModel):
                             else:
                                 rescaled_action = action * np.abs(self.action_space.low)
 
+                            # When stepping environment, self.env.env.object_mask should always focus on target object.
+                            assert self.env.env.object_mask[0] == 1 and self.env.env.object_mask[1] == 0
                             new_obs, reward, done, info = self.env.step(rescaled_action)
 
                             if writer is not None:
@@ -943,7 +963,12 @@ class SPDDPG(OffPolicyRLModel):
                             # Book-keeping.
                             epoch_actions.append(action)
                             epoch_qs.append(q_value)
-                            self._store_transition(obs, action, reward, new_obs, done)
+                            # When storing transitions, reward should correspond to mask
+                            # HACK
+                            self.env.env.object_mask = submask
+                            achieved_goal = self.env.convert_obs_to_dict(obs)['achieved_goal']
+                            self._store_transition(obs, action, self.env.env.compute_reward(achieved_goal, subgoal, None), new_obs, done, submask)
+                            self.env.env.object_mask = self.replay_buffer.original_mask
                             obs = new_obs
                             if callback is not None:
                                 # Only stop training if return value is False, not when it is None.
@@ -969,6 +994,7 @@ class SPDDPG(OffPolicyRLModel):
                                 if not isinstance(self.env, VecEnv):
                                     obs = self.env.reset()
                                     self.replay_buffer.original_goal = self.env.convert_obs_to_dict(obs)['desired_goal']
+                                    self.replay_buffer.original_mask = self.env.env.object_mask
 
                         # Train.
                         epoch_actor_losses = []

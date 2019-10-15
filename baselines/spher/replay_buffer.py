@@ -2,7 +2,7 @@ import copy
 from enum import Enum
 
 import numpy as np
-
+from stable_baselines.deepq.replay_buffer import ReplayBuffer
 
 class GoalSelectionStrategy(Enum):
     """
@@ -60,8 +60,9 @@ class SPHindsightExperienceReplayWrapper(object):
         self.episode_transitions = []
         self.replay_buffer = replay_buffer
         self.original_goal = None
+        self.original_mask = wrapped_env.env.object_mask
 
-    def add(self, obs_t, action, reward, obs_tp1, done):
+    def add(self, obs_t, action, reward, obs_tp1, done, mask):
         """
         add a new transition to the buffer
 
@@ -70,10 +71,11 @@ class SPHindsightExperienceReplayWrapper(object):
         :param reward: (float) the reward of the transition
         :param obs_tp1: (np.ndarray) the new observation
         :param done: (bool) is the episode done
+        :param mask:
         """
         assert self.replay_buffer is not None
         # Update current episode buffer
-        self.episode_transitions.append((obs_t, action, reward, obs_tp1, done))
+        self.episode_transitions.append((obs_t, action, reward, obs_tp1, done, mask))
         if done:
             # Add transitions (and imagined ones) to buffer only when an episode is over
             self._store_episode()
@@ -123,7 +125,8 @@ class SPHindsightExperienceReplayWrapper(object):
         else:
             raise ValueError("Invalid goal selection strategy,"
                              "please use one of {}".format(list(GoalSelectionStrategy)))
-        return self.env.convert_obs_to_dict(selected_transition[0])['achieved_goal']
+        # also return mask
+        return (self.env.convert_obs_to_dict(selected_transition[0])['achieved_goal'], selected_transition[5])
 
     def _sample_achieved_goals(self, episode_transitions, transition_idx):
         """
@@ -148,10 +151,10 @@ class SPHindsightExperienceReplayWrapper(object):
         # create a set of artificial transitions
         for transition_idx, transition in enumerate(self.episode_transitions):
 
-            obs_t, action, reward, obs_tp1, done = transition
+            obs_t, action, reward, obs_tp1, done, mask = transition
 
             # Add to the replay buffer
-            self.replay_buffer.add(obs_t, action, reward, obs_tp1, done)
+            self.replay_buffer.add(obs_t, action, reward, obs_tp1, done, mask)
 
             # We cannot sample a goal from the future in the last step of an episode
             if (transition_idx == len(self.episode_transitions) - 1 and
@@ -162,21 +165,24 @@ class SPHindsightExperienceReplayWrapper(object):
             # this is called k in the paper
             sampled_goals = self._sample_achieved_goals(self.episode_transitions, transition_idx)
             assert self.original_goal is not None
-            sampled_goals += [self.original_goal]
+            sampled_goals += [(self.original_goal, self.original_mask)] # original_mask goes in here
             # For each sampled goals, store a new transition
             for goal in sampled_goals:
                 # Copy transition to avoid modifying the original one
-                obs, action, reward, next_obs, done = copy.deepcopy(transition)
+                obs, action, reward, next_obs, done, mask = copy.deepcopy(transition)
 
                 # Convert concatenated obs to dict, so we can update the goals
                 obs_dict, next_obs_dict = map(self.env.convert_obs_to_dict, (obs, next_obs))
 
                 # Update the desired goal in the transition
-                obs_dict['desired_goal'] = goal
-                next_obs_dict['desired_goal'] = goal
+                obs_dict['desired_goal'] = goal[0]
+                next_obs_dict['desired_goal'] = goal[0]
 
                 # Update the reward according to the new desired goal
-                reward = self.env.compute_reward(goal, next_obs_dict['achieved_goal'], None)
+                # hack mask
+                self.env.env.object_mask = goal[1]
+                reward = self.env.compute_reward(goal[0], next_obs_dict['achieved_goal'], None)
+                self.env.env.object_mask = self.original_mask
                 # Can we use achieved_goal == desired_goal?
                 done = False
 
@@ -184,4 +190,40 @@ class SPHindsightExperienceReplayWrapper(object):
                 obs, next_obs = map(self.env.convert_dict_to_obs, (obs_dict, next_obs_dict))
 
                 # Add artificial transition to the replay buffer
-                self.replay_buffer.add(obs, action, reward, next_obs, done)
+                self.replay_buffer.add(obs, action, reward, next_obs, done, goal[1])
+
+
+class MaskReplayBuffer(ReplayBuffer):
+    def __init__(self, size):
+        super(MaskReplayBuffer, self).__init__(size)
+
+    def add(self, obs_t, action, reward, obs_tp1, done, mask):
+        """
+        add a new transition to the buffer
+
+        :param obs_t: (Any) the last observation
+        :param action: ([float]) the action
+        :param reward: (float) the reward of the transition
+        :param obs_tp1: (Any) the current observation
+        :param done: (bool) is the episode done
+        """
+        data = (obs_t, action, reward, obs_tp1, done, mask)
+
+        if self._next_idx >= len(self._storage):
+            self._storage.append(data)
+        else:
+            self._storage[self._next_idx] = data
+        self._next_idx = (self._next_idx + 1) % self._maxsize
+    
+    def _encode_sample(self, idxes):
+        obses_t, actions, rewards, obses_tp1, dones, masks = [], [], [], [], [], []
+        for i in idxes:
+            data = self._storage[i]
+            obs_t, action, reward, obs_tp1, done, mask = data
+            obses_t.append(np.array(obs_t, copy=False))
+            actions.append(np.array(action, copy=False))
+            rewards.append(reward)
+            obses_tp1.append(np.array(obs_tp1, copy=False))
+            dones.append(done)
+            masks.append(np.array(mask, copy=False))
+        return np.array(obses_t), np.array(actions), np.array(rewards), np.array(obses_tp1), np.array(dones), np.array(masks)
