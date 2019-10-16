@@ -63,6 +63,7 @@ class SPHindsightExperienceReplayWrapper(object):
         self.original_mask = wrapped_env.env.object_mask
         self.signal_count = 0
         self.null_count = 0
+        self.subgoal_buffer = []
 
     def add(self, obs_t, action, reward, obs_tp1, done, mask):
         """
@@ -85,6 +86,7 @@ class SPHindsightExperienceReplayWrapper(object):
             self._store_episode()
             # Reset episode buffer
             self.episode_transitions = []
+            self.subgoal_buffer = []
 
     def sample(self, *args, **kwargs):
         return self.replay_buffer.sample(*args, **kwargs)
@@ -165,13 +167,17 @@ class SPHindsightExperienceReplayWrapper(object):
                     self.goal_selection_strategy == GoalSelectionStrategy.FUTURE):
                 break
 
+            '''
             # Sampled n goals per transition, where n is `n_sampled_goal`
             # this is called k in the paper
             sampled_goals = self._sample_achieved_goals(self.episode_transitions, transition_idx)
-            # TODO: replace achieved goals with good candidate goals? half-half?
-            # sampled_goals = self.subgoal_candidates
             assert np.linalg.norm(self.original_goal - self.env.env.goal) < 1e-3
             sampled_goals += [(self.original_goal, self.original_mask)] # original_mask goes in here
+            '''
+            # replace achieved goals with good candidate goals? half-half?
+            sampled_goals = self.subgoal_buffer[:self.n_sampled_goal]
+            print(sampled_goals)
+            
             # For each sampled goals, store a new transition
             for goal in sampled_goals:
                 # Copy transition to avoid modifying the original one

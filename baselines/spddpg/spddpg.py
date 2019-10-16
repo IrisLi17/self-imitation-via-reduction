@@ -963,16 +963,20 @@ class SPDDPG(OffPolicyRLModel):
                                     # print('selected_idx', np.argmax(access_values))
                                     access_value_max_history.append(np.max(access_values))
                                     access_value_mean_history.append(np.mean(access_values))
+                                    self.replay_buffer.subgoal_buffer.append((subgoal, submask)
                                 else:
                                     subgoal, submask = self.env.convert_obs_to_dict(obs)['desired_goal'], self.env.env.object_mask
+                                    self.replay_buffer.subgoal_buffer.append((subgoal, submask))
+                            '''
                             # Relabel goal in observation
-                            # obs = self.env.convert_obs_to_dict(obs)
-                            # obs['desired_goal'] = subgoal
-                            # obs = self.env.convert_dict_to_obs(obs)
                             obs[-self.env.goal_dim:] = subgoal
-                            
+                            '''
+
                             # Predict next action.
+                            '''
                             action, q_value = self._policy(self.env.mask_obs(obs, submask), apply_noise=True, compute_q=True)
+                            '''
+                            action, q_value = self._policy(self.env.mask_obs(obs, self.env.env.object_mask), apply_noise=True, compute_q=True)
                             assert action.shape == self.env.action_space.shape
 
                             # Execute next action.
@@ -1006,6 +1010,7 @@ class SPDDPG(OffPolicyRLModel):
                             # Book-keeping.
                             epoch_actions.append(action)
                             epoch_qs.append(q_value)
+                            '''
                             # When storing transitions, reward should correspond to mask
                             # HACK
                             self.env.env.object_mask = submask
@@ -1015,6 +1020,10 @@ class SPDDPG(OffPolicyRLModel):
                             achieved_goal = new_obs[-2*self.env.goal_dim:-self.env.goal_dim]
                             self._store_transition(obs, action, self.env.env.compute_reward(achieved_goal, subgoal, None), new_obs, done, submask)
                             self.env.env.object_mask = self.replay_buffer.original_mask
+                            '''
+                            
+                            self._store_transition(obs, action, reward, new_obs, done, self.env.env.object_mask)
+                            
                             obs = new_obs
                             if callback is not None:
                                 # Only stop training if return value is False, not when it is None.
