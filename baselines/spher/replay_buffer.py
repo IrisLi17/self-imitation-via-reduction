@@ -61,6 +61,8 @@ class SPHindsightExperienceReplayWrapper(object):
         self.replay_buffer = replay_buffer
         self.original_goal = None
         self.original_mask = wrapped_env.env.object_mask
+        self.signal_count = 0
+        self.null_count = 0
 
     def add(self, obs_t, action, reward, obs_tp1, done, mask):
         """
@@ -78,6 +80,8 @@ class SPHindsightExperienceReplayWrapper(object):
         self.episode_transitions.append((obs_t, action, reward, obs_tp1, done, mask))
         if done:
             # Add transitions (and imagined ones) to buffer only when an episode is over
+            self.signal_count = 0
+            self.null_count = 0
             self._store_episode()
             # Reset episode buffer
             self.episode_transitions = []
@@ -164,7 +168,9 @@ class SPHindsightExperienceReplayWrapper(object):
             # Sampled n goals per transition, where n is `n_sampled_goal`
             # this is called k in the paper
             sampled_goals = self._sample_achieved_goals(self.episode_transitions, transition_idx)
-            assert self.original_goal is not None
+            # TODO: replace achieved goals with good candidate goals? half-half?
+            # sampled_goals = self.subgoal_candidates
+            assert np.linalg.norm(self.original_goal - self.env.env.goal) < 1e-3
             sampled_goals += [(self.original_goal, self.original_mask)] # original_mask goes in here
             # For each sampled goals, store a new transition
             for goal in sampled_goals:
@@ -183,6 +189,10 @@ class SPHindsightExperienceReplayWrapper(object):
                 self.env.env.object_mask = goal[1]
                 reward = self.env.compute_reward(goal[0], next_obs_dict['achieved_goal'], None)
                 self.env.env.object_mask = self.original_mask
+                if reward == 0:
+                    self.signal_count += 1
+                else:
+                    self.null_count += 1
                 # Can we use achieved_goal == desired_goal?
                 done = False
 

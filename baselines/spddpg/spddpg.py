@@ -633,20 +633,22 @@ class SPDDPG(OffPolicyRLModel):
                 arr = np.expand_dims(arr, 0)
             return arr
         subgoal = arraymin2d(subgoal)
-        ultimate_goal = self.env.convert_obs_to_dict(obs)['desired_goal'] # TODO: maybe buggy
+        ultimate_goal = self.env.env.goal
         ultimate_mask = self.env.env.object_mask.copy()
-        # obs1 = [obs.copy() for _ in range(subgoal.shape[0])]
-        # obs1 = [self.env.convert_obs_to_dict(_obs1) for _obs1 in obs1]
-        # obs1['desired_goal'] = subgoal
-        # obs1 = self.env.convert_dict_to_obs(obs1)
+        # TODO: speed up
         obs1 = []
         for i in range(subgoal.shape[0]):
             _obs1 = obs.copy()
+            _obs1[-2*self.env.goal_dim:-self.env.goal_dim] = _obs1[-2*self.env.goal_dim:-self.env.goal_dim] * self.env.expand_mask(subgoal[i][1])
+            _obs1[-self.env.goal_dim:] = subgoal[i][0] * self.env.expand_mask(subgoal[i][1])
+            '''
             _obs1 = self.env.convert_obs_to_dict(_obs1)
             # multiply by mask here, because obs1 will be fed into network
             _obs1['achieved_goal'] = _obs1['achieved_goal'] * self.env.expand_mask(subgoal[i][1])
             _obs1['desired_goal'] = subgoal[i][0] * self.env.expand_mask(subgoal[i][1])
             obs1.append(self.env.convert_dict_to_obs(_obs1))
+            '''
+            obs1.append(_obs1)
         obs1 = np.asarray(obs1)
         _, q1 = self._policy(obs1, apply_noise=False, compute_q=True)
         way_point = []
@@ -662,6 +664,34 @@ class SPDDPG(OffPolicyRLModel):
         _, q2 = self._policy(way_point, apply_noise=False, compute_q=True)
         value = np.clip((q1 + self.bias) / self.bias, 0., 1.) * np.clip((q2 + self.bias) / self.bias, 0., 1.)
         return np.squeeze(value, axis=-1)
+
+    def _measure_access_from_obs(self, init_obs, subgoal_obs):
+        '''
+        :param init_obs array
+        :param obs list of tuple (obs array, mask array)
+        '''
+        def arraymin2d(arr):
+            arr = np.asarray(arr)
+            assert len(arr.shape) <= 2
+            if len(arr.shape) == 1:
+                arr = np.expand_dims(arr, 0)
+            return arr
+        subgoal_obs = arraymin2d(subgoal_obs)
+        subgoal_obs_obs = np.asarray([subgoal_obs[i][0] for i in range(subgoal_obs.shape[0])])
+        subgoal_obs_mask = np.asarray([subgoal_obs[i][1] for i in range(subgoal_obs.shape[0])])
+        ultimate_goal = self.env.env.goal.copy()
+        ultimate_mask = self.env.env.object_mask.copy()
+        obs1 = np.tile(init_obs, (subgoal_obs.shape[0], 1))
+        obs1[:, -2*self.env.goal_dim:-self.env.goal_dim] *= np.asarray([self.env.expand_mask(subgoal_obs[i][1]) for i in range(subgoal_obs.shape[0])])
+        obs1[:, -self.env.goal_dim:] = np.asarray([subgoal_obs[i][0][-self.env.goal_dim:] for i in range(subgoal_obs.shape[0])]) * np.asarray([self.env.expand_mask(subgoal_obs[i][1]) for i in range(subgoal_obs.shape[0])])
+        _, q1 = self._policy(obs1, apply_noise=False, compute_q=True)
+        way_point = subgoal_obs_obs
+        way_point[:, -2*self.env.goal_dim:-self.env.goal_dim] *= self.env.expand_mask(ultimate_mask)
+        way_point[:, -self.env.goal_dim:] = ultimate_goal * self.env.expand_mask(ultimate_mask)
+        _, q2 = self._policy(way_point, apply_noise=False, compute_q=True)
+        value = np.clip((q1 + self.bias) / self.bias, 0., 1.) * np.clip((q2 + self.bias) / self.bias, 0., 1.)
+        return np.squeeze(value, axis=-1)
+
 
     def _store_transition(self, obs, action, reward, next_obs, done, mask):
         """
@@ -877,8 +907,9 @@ class SPDDPG(OffPolicyRLModel):
                 # Prepare everything.
                 self._reset()
                 obs = self.env.reset()
-                self.replay_buffer.original_goal = self.env.convert_obs_to_dict(obs)['desired_goal']
+                self.replay_buffer.original_goal = self.env.convert_obs_to_dict(obs)['desired_goal'].copy()
                 self.replay_buffer.original_mask = self.env.env.object_mask
+                assert np.linalg.norm(self.replay_buffer.original_goal - self.env.env.goal) < 1e-3
                 eval_obs = None
                 if self.eval_env is not None:
                     eval_obs = self.eval_env.reset()
@@ -914,22 +945,32 @@ class SPDDPG(OffPolicyRLModel):
                                     obs_batch, _, _, _, _, mask_batch = self.replay_buffer.sample(self.nb_subgoal_candidates // 2)
                                     # Randomize mask_batch. TODO: now every object gets the same probability.
                                     assert self.env.env.object_mask[0] == 1 and self.env.env.object_mask[1] == 0
-                                    subgoal_candidates = [(self.env.convert_obs_to_dict(obs)['desired_goal'], self.env.env.object_mask)] + \
-                                        [(self.env.convert_obs_to_dict(obs_batch[b])['achieved_goal'], np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) for b in range(self.nb_subgoal_candidates // 2)]
+                                    # subgoal_candidates = [(self.env.env.goal, self.env.env.object_mask)] + \
+                                    #     [(obs_batch[b][-2*self.env.goal_dim:-self.env.goal_dim], np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) for b in range(self.nb_subgoal_candidates // 2)]
+                                    subgoal_candidates = [(obs, self.env.env.object_mask)] + [(obs_batch[b], np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) 
+                                                          for b in range(self.nb_subgoal_candidates // 2)]
+                                    
                                     # Generate subgoal
-                                    subgoal_candidates += [(self.env.env.sample_goal(), np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) for _ in range(self.nb_subgoal_candidates // 2)]
+                                    # subgoal_candidates += [(self.env.env.sample_goal(), np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) for _ in range(self.nb_subgoal_candidates // 2)]
                                     # Compute p*p. record
-                                    access_values = self._measure_access(obs, subgoal_candidates)
-                                    subgoal, submask = subgoal_candidates[np.argmax(access_values)] # add mask
+                                    # access_values = self._measure_access(obs, subgoal_candidates) # TODO: buggy, if we sample candidates, we don't need to generate observation from goal
+                                    # subgoal, submask = subgoal_candidates[np.argmax(access_values)] # add mask
+                                    
+                                    access_values = self._measure_access_from_obs(obs, subgoal_candidates)
+                                    
+                                    subgoal, submask = subgoal_candidates[np.argmax(access_values)]
+                                    subgoal = subgoal[-self.env.goal_dim:]
+                                    # print('selected_idx', np.argmax(access_values))
                                     access_value_max_history.append(np.max(access_values))
                                     access_value_mean_history.append(np.mean(access_values))
-                                    # Relabel goal in observation
-                                    obs = self.env.convert_obs_to_dict(obs)
-                                    # self.original_goal = obs['desired_goal']
-                                    obs['desired_goal'] = subgoal
-                                    obs = self.env.convert_dict_to_obs(obs)
                                 else:
                                     subgoal, submask = self.env.convert_obs_to_dict(obs)['desired_goal'], self.env.env.object_mask
+                            # Relabel goal in observation
+                            # obs = self.env.convert_obs_to_dict(obs)
+                            # obs['desired_goal'] = subgoal
+                            # obs = self.env.convert_dict_to_obs(obs)
+                            obs[-self.env.goal_dim:] = subgoal
+                            
                             # Predict next action.
                             action, q_value = self._policy(self.env.mask_obs(obs, submask), apply_noise=True, compute_q=True)
                             assert action.shape == self.env.action_space.shape
@@ -968,7 +1009,10 @@ class SPDDPG(OffPolicyRLModel):
                             # When storing transitions, reward should correspond to mask
                             # HACK
                             self.env.env.object_mask = submask
-                            achieved_goal = self.env.convert_obs_to_dict(new_obs)['achieved_goal']
+                            # Label new_obs goal, because it is set to env.goal after calling step.
+                            new_obs[-self.env.goal_dim:] = subgoal
+                            # achieved_goal = self.env.convert_obs_to_dict(new_obs)['achieved_goal']
+                            achieved_goal = new_obs[-2*self.env.goal_dim:-self.env.goal_dim]
                             self._store_transition(obs, action, self.env.env.compute_reward(achieved_goal, subgoal, None), new_obs, done, submask)
                             self.env.env.object_mask = self.replay_buffer.original_mask
                             obs = new_obs
@@ -995,7 +1039,7 @@ class SPDDPG(OffPolicyRLModel):
                                 self._reset()
                                 if not isinstance(self.env, VecEnv):
                                     obs = self.env.reset()
-                                    self.replay_buffer.original_goal = self.env.convert_obs_to_dict(obs)['desired_goal']
+                                    self.replay_buffer.original_goal = self.env.convert_obs_to_dict(obs)['desired_goal'].copy()
                                     self.replay_buffer.original_mask = self.env.env.object_mask
 
                         # Train.
@@ -1060,6 +1104,7 @@ class SPDDPG(OffPolicyRLModel):
                     combined_stats['rollout/Q_mean'] = np.mean(epoch_qs)
                     combined_stats['rollout/access_mean'] = np.mean(access_value_mean_history)
                     combined_stats['rollout/access_max'] = np.mean(access_value_max_history)
+                    combined_stats['rollout/signal_rate'] = self.replay_buffer.signal_count / (self.replay_buffer.signal_count + self.replay_buffer.null_count)
                     combined_stats['train/loss_actor'] = np.mean(epoch_actor_losses)
                     combined_stats['train/loss_critic'] = np.mean(epoch_critic_losses)
                     if len(epoch_adaptive_distances) != 0:
