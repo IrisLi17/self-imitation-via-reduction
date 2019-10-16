@@ -200,7 +200,7 @@ class SPDDPG(OffPolicyRLModel):
                  return_range=(-np.inf, np.inf), actor_lr=1e-4, critic_lr=1e-3, clip_norm=None, reward_scale=1.,
                  render=False, render_eval=False, memory_limit=None, buffer_size=50000, random_exploration=0.0,
                  verbose=0, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
-                 full_tensorboard_log=False, nb_subgoal_candidates=31):
+                 full_tensorboard_log=False, nb_subgoal_candidates=256):
 
         super(SPDDPG, self).__init__(policy=policy, env=env, replay_buffer=None,
                                    verbose=verbose, policy_base=DDPGPolicy,
@@ -910,14 +910,15 @@ class SPDDPG(OffPolicyRLModel):
                             # Sample subgoal candidates
                             # TODO: Generate subgoal candidates
                             if total_steps % 10 == 0:
-                                if self.replay_buffer.can_sample(self.nb_subgoal_candidates):
-                                    obs_batch, _, _, _, _, mask_batch = self.replay_buffer.sample(self.nb_subgoal_candidates)
-                                    # TODO: don't know if self.env.env.object_mask is the corresponding mask for obs here.
+                                if self.replay_buffer.can_sample(self.nb_subgoal_candidates // 2):
+                                    obs_batch, _, _, _, _, mask_batch = self.replay_buffer.sample(self.nb_subgoal_candidates // 2)
                                     # Randomize mask_batch. TODO: now every object gets the same probability.
                                     assert self.env.env.object_mask[0] == 1 and self.env.env.object_mask[1] == 0
                                     subgoal_candidates = [(self.env.convert_obs_to_dict(obs)['desired_goal'], self.env.env.object_mask)] + \
-                                        [(self.env.convert_obs_to_dict(obs_batch[b])['achieved_goal'], np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) for b in range(self.nb_subgoal_candidates)]
-                                    # Compute p*p. TODO: record
+                                        [(self.env.convert_obs_to_dict(obs_batch[b])['achieved_goal'], np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) for b in range(self.nb_subgoal_candidates // 2)]
+                                    # Generate subgoal
+                                    subgoal_candidates += [(self.env.env.sample_goal(), np.eye(self.env.env.n_object)[np.random.choice(self.env.env.n_object)]) for _ in range(self.nb_subgoal_candidates // 2)]
+                                    # Compute p*p. record
                                     access_values = self._measure_access(obs, subgoal_candidates)
                                     subgoal, submask = subgoal_candidates[np.argmax(access_values)] # add mask
                                     access_value_max_history.append(np.max(access_values))
@@ -967,7 +968,7 @@ class SPDDPG(OffPolicyRLModel):
                             # When storing transitions, reward should correspond to mask
                             # HACK
                             self.env.env.object_mask = submask
-                            achieved_goal = self.env.convert_obs_to_dict(obs)['achieved_goal']
+                            achieved_goal = self.env.convert_obs_to_dict(new_obs)['achieved_goal']
                             self._store_transition(obs, action, self.env.env.compute_reward(achieved_goal, subgoal, None), new_obs, done, submask)
                             self.env.env.object_mask = self.replay_buffer.original_mask
                             obs = new_obs

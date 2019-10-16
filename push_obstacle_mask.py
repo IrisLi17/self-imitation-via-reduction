@@ -135,6 +135,9 @@ class FetchPushObstacleMaskEnv(fetch_env.FetchEnv, utils.EzPickle):
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-0.15, 0.15, size=3)
         return goal.copy()
     
+    def sample_goal(self):
+        return self._sample_goal()
+    
     def compute_reward(self, achieved_goal, goal, info):
         # Compute distance between goal and the achieved goal.
         mask = self.object_mask
@@ -170,3 +173,10 @@ class FetchPushObstacleMaskEnv(fetch_env.FetchEnv, utils.EzPickle):
         # obs['observation'][9:12] = obs['observation'][3:6] - obs['observation'][0:3]
         # obs['observation'][12:15] = obs['observation'][6:9] - obs['observation'][0:3]
         return obs.copy()
+    
+    def _render_callback(self):
+        # Visualize target.
+        sites_offset = (self.sim.data.site_xpos - self.sim.model.site_pos).copy()
+        site_id = self.sim.model.site_name2id('target0')
+        self.sim.model.site_pos[site_id] = self.goal[:3] - sites_offset[0]
+        self.sim.forward()
