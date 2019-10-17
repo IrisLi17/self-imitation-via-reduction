@@ -10,7 +10,7 @@ MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'pus
 
 
 class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
-    def __init__(self, reward_type='sparse'):
+    def __init__(self, reward_type='sparse', penaltize_height=False):
         initial_qpos = {
             'robot0:slide0': 0.405,
             'robot0:slide1': 0.48,
@@ -19,6 +19,7 @@ class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
             'object1:joint': [1.35, 0.75, 0.4, 1., 0., 0., 0.],
         }
         self.n_object = sum([('object' in item) for item in initial_qpos.keys()])
+        self.penaltize_height = penaltize_height
         fetch_env.FetchEnv.__init__(
             self, MODEL_XML_PATH, has_object=True, block_gripper=True, n_substeps=20,
             gripper_extra_height=0.0, target_in_the_air=False, target_offset=0.0,
@@ -129,6 +130,25 @@ class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         else:
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-0.15, 0.15, size=3)
         return goal.copy()
+    
+    def step(self, action):
+        action = np.clip(action, self.action_space.low, self.action_space.high)
+        self._set_action(action)
+        self.sim.step()
+        self._step_callback()
+        obs = self._get_obs()
+
+        done = False
+        info = {
+            'is_success': self._is_success(obs['achieved_goal'], self.goal),
+        }
+        reward = self.compute_reward(obs['achieved_goal'], self.goal, info)
+        # Box penalty.
+        if self.penaltize_height:
+            gripper_height= obs['observation'][2]
+            height_penalty = gripper_height > 0.5 or gripper_height < 0.3
+            reward = reward - 10 * height_penalty
+        return obs, reward, done, info
     
     def goal2observation(self, goal):
         '''
