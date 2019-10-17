@@ -50,7 +50,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
     print('logger dir', rank, log_dir)
     env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets, info_keywords=('is_success',))
-    env.seed(seed)
+    env.seed(seed + 10000 * rank)
     return env
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play):
