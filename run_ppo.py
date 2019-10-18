@@ -42,47 +42,51 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     :return: (Gym Environment) The mujoco environment
     """
     if env_id in ENTRY_POINT.keys():
-        env = ENTRY_POINT[env_id](**kwargs)
-        from gym.wrappers.time_limit import TimeLimit
-        env = TimeLimit(env, max_episode_steps=50)
-    else:
+        # env = ENTRY_POINT[env_id](**kwargs)
+        # print(env)
+        # from gym.wrappers.time_limit import TimeLimit
+        gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=50, kwargs=kwargs)
         env = gym.make(env_id)
+        # env = TimeLimit(env, max_episode_steps=50)
+    else:
+        env = gym.make(env_id, reward_type='dense')
     env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
-    print('logger dir', rank, log_dir)
     env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets, info_keywords=('is_success',))
-    env.seed(seed + 10000 * rank)
+    # env.seed(seed + 10000 * rank)
     return env
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir) 
-    print('main logger dir', logger.get_dir())
     
     set_global_seeds(seed)
 
     n_cpu = 8 if not play else 1
-    if env_name in ['FetchReach-v1', 'FetchPush-v1']:
-        pass
+    if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1']:
+        env_kwargs = dict(reward_type='dense')
+        # pass
     elif env_name in ['FetchPushObstacle-v1', 'FetchPushObstacleMask-v1', 'FetchPushWall-v1']:
-        env_kwargs = dict(penaltize_height=True)
+        env_kwargs = dict(reward_type='dense', penaltize_height=True)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     env = SubprocVecEnv([lambda : make_env(env_name, seed, i, log_dir=log_dir, kwargs=env_kwargs) for i in range(n_cpu)])
-
     if not play:
         os.makedirs(log_dir, exist_ok=True)
 
-        policy_kwargs = dict(layers=[64, 64, 64])
+        # policy_kwargs = dict(layers=[64, 64, 64])
+        policy_kwargs = {}
         # TODO: vectorize env
-        model = PPO2('MlpPolicy', env, verbose=1, policy_kwargs=policy_kwargs)
+        model = PPO2('MlpPolicy', env, verbose=1, n_steps=2048, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
+                     ent_coef=0.0, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
+                     )
         def callback(_locals, _globals):
             num_update = _locals["update"]
-            if num_update % 100 == 0:
+            if num_update % 10 == 0:
                 model_path = os.path.join(log_dir, 'model_' + str(num_update))
                 model.save(model_path)
                 print('model saved to', model_path)
             return True
-        model.learn(total_timesteps=num_timesteps, callback=callback, seed=seed, log_interval=10)
+        model.learn(total_timesteps=num_timesteps, callback=callback, seed=seed, log_interval=1)
         model.save(os.path.join(log_dir, 'final'))
     
     else:
@@ -111,5 +115,6 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
 
 if __name__ == '__main__':
     args = arg_parse()
+    print('arg parsed')
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
          log_path=args.log_path, load_path=args.load_path, play=args.play)
