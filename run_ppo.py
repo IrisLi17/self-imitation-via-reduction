@@ -6,6 +6,7 @@ from gym.wrappers import FlattenDictWrapper
 
 from push_obstacle import FetchPushObstacleEnv
 from push_wall import FetchPushWallEnv
+from push_box import FetchPushBoxEnv
 import gym
 
 import os, time, argparse, imageio
@@ -13,6 +14,7 @@ import matplotlib.pyplot as plt
 
 ENTRY_POINT = {'FetchPushObstacle-v1': FetchPushObstacleEnv,
                'FetchPushWall-v1': FetchPushWallEnv,
+               'FetchPushBox-v1': FetchPushBoxEnv,
                }
 
 def arg_parse():
@@ -65,7 +67,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1']:
         env_kwargs = dict(reward_type='dense')
         # pass
-    elif env_name in ['FetchPushObstacle-v1', 'FetchPushObstacleMask-v1', 'FetchPushWall-v1']:
+    elif env_name in ENTRY_POINT.keys():
         env_kwargs = dict(reward_type='dense', penaltize_height=True)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
