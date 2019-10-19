@@ -68,10 +68,12 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
         env_kwargs = dict(reward_type='dense')
         # pass
     elif env_name in ENTRY_POINT.keys():
-        env_kwargs = dict(reward_type='dense', penaltize_height=True)
+        env_kwargs = dict(reward_type='dense', penaltize_height=False)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
-    env = SubprocVecEnv([lambda : make_env(env_name, seed, i, log_dir=log_dir, kwargs=env_kwargs) for i in range(n_cpu)])
+    def make_thunk(rank):
+        return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
+    env = SubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
     if not play:
         os.makedirs(log_dir, exist_ok=True)
 
@@ -79,7 +81,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
         policy_kwargs = {}
         # TODO: vectorize env
         model = PPO2('MlpPolicy', env, verbose=1, n_steps=2048, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
-                     ent_coef=0.0, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
+                     ent_coef=0.1, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      )
         def callback(_locals, _globals):
             num_update = _locals["update"]
