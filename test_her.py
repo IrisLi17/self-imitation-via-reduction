@@ -66,12 +66,12 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
     if not play:
         os.makedirs(log_dir, exist_ok=True)
 
-        env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=True)
     # Available strategies (cf paper): future, final, episode, random
     goal_selection_strategy = 'future' # equivalent to GoalSelectionStrategy.FUTURE
 
     if not play:
         if model_class is DDPG:
+            env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=True)
             train_kwargs = dict(action_noise=NormalActionNoise(mean=0.0 * env.action_space.high, sigma=0.05 * env.action_space.high),
                                 normalize_observations=True,
                                 random_exploration=0.2,
@@ -96,6 +96,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
             # wrap env
             from utils.wrapper import DoneOnSuccessWrapper
             env = DoneOnSuccessWrapper(env)
+            env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=True)
             train_kwargs = dict(buffer_size=int(1e6),
                                 ent_coef="auto",
                                 gamma=0.95,
