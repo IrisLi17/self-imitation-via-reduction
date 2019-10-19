@@ -121,10 +121,8 @@ class FetchPushBoxEnv(fetch_env.FetchEnv, utils.EzPickle):
             'is_success': self._is_success(obs['achieved_goal'], self.goal),
         }
         reward = self.compute_reward(obs['achieved_goal'], self.goal, info)
-        '''
         # Add reward_near. Mimic https://github.com/openai/gym/blob/master/gym/envs/mujoco/pusher.py.
         reward += 0.5 * self.compute_reward(obs['observation'][:3], obs['achieved_goal'], info)
-        '''
         # Box penalty.
         if self.penaltize_height:
             gripper_height= obs['observation'][2]
