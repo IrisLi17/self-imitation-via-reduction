@@ -68,7 +68,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
         env_kwargs = dict(reward_type='dense')
         # pass
     elif env_name in ENTRY_POINT.keys():
-        env_kwargs = dict(reward_type='dense', penaltize_height=False)
+        env_kwargs = dict(reward_type='dense', penaltize_height=True)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -77,11 +77,11 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
     if not play:
         os.makedirs(log_dir, exist_ok=True)
 
-        # policy_kwargs = dict(layers=[64, 64, 64])
-        policy_kwargs = {}
+        policy_kwargs = dict(layers=[64, 64, 64])
+        # policy_kwargs = {}
         # TODO: vectorize env
         model = PPO2('MlpPolicy', env, verbose=1, n_steps=2048, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
-                     ent_coef=0.1, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
+                     ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      )
         def callback(_locals, _globals):
             num_update = _locals["update"]
