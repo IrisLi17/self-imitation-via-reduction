@@ -1,9 +1,9 @@
 from stable_baselines import HER, DQN, SAC, DDPG, TD3
 from stable_baselines.her import GoalSelectionStrategy, HERGoalEnvWrapper
 from stable_baselines.common.policies import MlpPolicy
-# from stable_baselines.common.bit_flipping_env import BitFlippingEnv
-from push_obstacle import FetchPushEnv
+from push_obstacle import FetchPushObstacleEnv
 from push_wall import FetchPushWallEnv
+from push_box import  FetchPushBoxEnv
 import gym
 import matplotlib.pyplot as plt
 from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise
@@ -18,15 +18,16 @@ try:
 except ImportError:
     MPI = None
 
-ENTRY_POINT = {'FetchPushObstacle-v1': FetchPushEnv,
+ENTRY_POINT = {'FetchPushObstacle-v1': FetchPushObstacleEnv,
                'FetchPushWall-v1': FetchPushWallEnv,
+               'FetchPushBox-v1': FetchPushBoxEnv,
                }
 
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', default='FetchReach-v1')
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--num_timesteps', type=float, default=2e6)
+    parser.add_argument('--num_timesteps', type=float, default=3e6)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
@@ -52,12 +53,12 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
     
     set_global_seeds(seed)
 
-    model_class = DDPG  # works also with SAC, DDPG and TD3
+    model_class = SAC  # works also with SAC, DDPG and TD3
 
     if env_name in ['FetchReach-v1', 'FetchPush-v1']:
         env = gym.make(env_name)
     elif env_name in ['FetchPushObstacle-v1', 'FetchPushWall-v1']:
-        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50)
+        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=dict(penaltize_height=True))
         env = gym.make(env_name)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
@@ -90,6 +91,21 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
                     model_path = os.path.join(log_dir, 'model_' + str(_locals['total_steps'] // (steps_per_epoch)))
                     model.save(model_path)
                     print('model saved to', model_path)
+                return True
+        elif model_class is SAC:
+            # wrap env
+            from utils.wrapper import DoneOnSuccessWrapper
+            env = DoneOnSuccessWrapper(env)
+            train_kwargs = dict(buffer_size=int(1e6),
+                                ent_coef="auto",
+                                gamma=0.95,
+                                learning_starts=1000,
+                                train_freq=1,)
+            policy_kwargs = {}
+            def callback(_locals, _globals):
+                if _locals['step'] % int(1e4) == 0:
+                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step']))
+                    model.save(model_path)
                 return True
         else:
             train_kwargs = {}
