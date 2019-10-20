@@ -1,7 +1,7 @@
 from stable_baselines import HER, DQN, SAC, DDPG, TD3
 from stable_baselines.her import GoalSelectionStrategy, HERGoalEnvWrapper
 from stable_baselines.common.policies import MlpPolicy
-from push_obstacle import FetchPushObstacleEnv
+from push_wall_obstacle import FetchPushWallObstacleEnv
 from push_wall import FetchPushWallEnv
 from push_box import  FetchPushBoxEnv
 import gym
@@ -18,7 +18,7 @@ try:
 except ImportError:
     MPI = None
 
-ENTRY_POINT = {'FetchPushObstacle-v1': FetchPushObstacleEnv,
+ENTRY_POINT = {'FetchPushWallObstacle-v1': FetchPushWallObstacleEnv,
                'FetchPushWall-v1': FetchPushWallEnv,
                'FetchPushBox-v1': FetchPushBoxEnv,
                }

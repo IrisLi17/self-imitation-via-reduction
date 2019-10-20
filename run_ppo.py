@@ -4,7 +4,7 @@ from stable_baselines.common import set_global_seeds
 from stable_baselines.common.vec_env import SubprocVecEnv
 from gym.wrappers import FlattenDictWrapper
 
-from push_obstacle import FetchPushObstacleEnv
+from push_wall_obstacle import FetchPushWallObstacleEnv
 from push_wall import FetchPushWallEnv
 from push_box import FetchPushBoxEnv
 import gym
@@ -12,7 +12,7 @@ import gym
 import os, time, argparse, imageio
 import matplotlib.pyplot as plt
 
-ENTRY_POINT = {'FetchPushObstacle-v1': FetchPushObstacleEnv,
+ENTRY_POINT = {'FetchPushObstacle-v1': FetchPushWallObstacleEnv,
                'FetchPushWall-v1': FetchPushWallEnv,
                'FetchPushBox-v1': FetchPushBoxEnv,
                }

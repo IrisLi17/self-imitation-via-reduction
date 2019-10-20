@@ -1,7 +1,7 @@
 # import mujoco_py
 import matplotlib.pyplot as plt
 import numpy as np
-from push_obstacle import FetchPushEnv 
+from push_wall_obstacle import FetchPushWallObstacleEnv
 
 # def reset_mocap_welds(sim):
 #     """Resets the mocap welds that we use for actuation.
@@ -43,7 +43,7 @@ from push_obstacle import FetchPushEnv
 
 fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 seed = 42
-env = FetchPushEnv()
+env = FetchPushWallObstacleEnv()
 obs = env.reset()
 print(obs["observation"].shape)
 for t in range(50):

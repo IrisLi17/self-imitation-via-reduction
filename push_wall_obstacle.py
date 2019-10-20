@@ -6,10 +6,10 @@ import numpy as np
 
 
 # Ensure we get the path separator correct on windows
-MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'push_obstacle.xml')
+MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'push_wall_obstacle.xml')
 
 
-class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
+class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
     def __init__(self, reward_type='sparse', penaltize_height=False):
         initial_qpos = {
             'robot0:slide0': 0.405,
@@ -126,7 +126,13 @@ class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
             goal += self.target_offset
             goal[2] = self.height_offset
-            while (abs(goal[0] - 1.3) < 0.02 + 0.025):
+            if not hasattr(self, 'size_wall'):
+                self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
+            if not hasattr(self, 'size_object'):
+                self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
+            if not hasattr(self, 'pos_wall'):
+                self.pos_wall = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
+            while (abs(goal[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_object[0]):
                 goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
                 goal[2] = self.height_offset
             if self.target_in_the_air and self.np_random.uniform() < 0.5:
