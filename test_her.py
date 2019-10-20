@@ -4,6 +4,7 @@ from stable_baselines.common.policies import MlpPolicy
 from push_wall_obstacle import FetchPushWallObstacleEnv
 from push_wall import FetchPushWallEnv
 from push_box import  FetchPushBoxEnv
+from push_obstacle import FetchPushObstacleEnv
 import gym
 import matplotlib.pyplot as plt
 from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise
@@ -21,6 +22,7 @@ except ImportError:
 ENTRY_POINT = {'FetchPushWallObstacle-v1': FetchPushWallObstacleEnv,
                'FetchPushWall-v1': FetchPushWallEnv,
                'FetchPushBox-v1': FetchPushBoxEnv,
+               'FetchPushObstacle-v1': FetchPushObstacleEnv,
                }
 
 def arg_parse():
