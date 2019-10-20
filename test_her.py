@@ -104,8 +104,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
                                 train_freq=1,)
             policy_kwargs = {}
             def callback(_locals, _globals):
-                if _locals['step'] % int(1e4) == 0:
-                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step']))
+                if _locals['step'] % int(1e5) == 0:
+                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(1e5)))
                     model.save(model_path)
                 return True
         else:

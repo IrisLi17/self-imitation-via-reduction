@@ -26,6 +26,10 @@ class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
             obj_range=0.15, target_range=0.15, distance_threshold=0.05,
             initial_qpos=initial_qpos, reward_type=reward_type)
         utils.EzPickle.__init__(self)
+        self.pos_wall = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
+        self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
+        self.size_obstacle = self.sim.model.geom_size[self.sim.model.geom_name2id('object1')]
+        self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
 
     def _get_obs(self):
         # positions
@@ -101,8 +105,8 @@ class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
             object_xpos = self.initial_gripper_xpos[:2]
             stick_xpos = object_xpos.copy()
             while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1
-                   or abs(object_xpos[0] - 1.3) < 0.045 or abs(stick_xpos[0] - 1.3) < 0.045
-                   or (abs(object_xpos[0] - stick_xpos[0]) < 0.05 and abs(object_xpos[1] - stick_xpos[1]) < 0.225)):
+                   or abs(object_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_object[0] or abs(stick_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_obstacle[0]
+                   or (abs(object_xpos[0] - stick_xpos[0]) < self.size_object[0] + self.size_obstacle[0] and abs(object_xpos[1] - stick_xpos[1]) < self.size_object[1] + self.size_obstacle[1])):
                 object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
                 stick_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             object_qpos = self.sim.data.get_joint_qpos('object0:joint')
@@ -119,18 +123,18 @@ class FetchPushObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
 
     def _sample_goal(self):
         if self.has_object:
-            # every object should be goal
-            goal = []
-            for i in range(self.n_object):
-                _goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
-                _goal += self.target_offset
-                _goal[2] = self.height_offset
-                goal.append(_goal)
-            goal = np.concatenate(goal)            
+            goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+            goal += self.target_offset
+            goal[2] = self.height_offset
+            while (abs(goal[0] - 1.3) < 0.02 + 0.025):
+                goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+                goal[2] = self.height_offset
+            if self.target_in_the_air and self.np_random.uniform() < 0.5:
+                goal[2] += self.np_random.uniform(0, 0.45)
         else:
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-0.15, 0.15, size=3)
         return goal.copy()
-    
+
     def step(self, action):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         self._set_action(action)

@@ -24,7 +24,9 @@ class FetchPushWallEnv(fetch_env.FetchEnv, utils.EzPickle):
             obj_range=0.15, target_range=0.15, distance_threshold=0.05,
             initial_qpos=initial_qpos, reward_type=reward_type)
         utils.EzPickle.__init__(self)
-
+        self.pos_wall = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
+        self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
+        self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
     '''
     def _get_obs(self):
         # positions
@@ -89,7 +91,7 @@ class FetchPushWallEnv(fetch_env.FetchEnv, utils.EzPickle):
         if self.has_object:
             object_xpos = self.initial_gripper_xpos[:2]
             while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1
-                   or abs(object_xpos[0] - 1.3) < 0.045):
+                   or abs(object_xpos[0] - self.pos_wall[0]) < self.size_object[0] + self.size_wall[0]):
                 object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             object_qpos = self.sim.data.get_joint_qpos('object0:joint')
             assert object_qpos.shape == (7,)
@@ -104,7 +106,7 @@ class FetchPushWallEnv(fetch_env.FetchEnv, utils.EzPickle):
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
             goal += self.target_offset
             goal[2] = self.height_offset
-            while (abs(goal[0] - 1.3) < 0.045):
+            while (abs(goal[0] - 1.3) < 0.02 + 0.025):
                 goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
                 goal[2] = self.height_offset
             if self.target_in_the_air and self.np_random.uniform() < 0.5:
