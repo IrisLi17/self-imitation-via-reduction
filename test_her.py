@@ -57,8 +57,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
 
     if env_name in ['FetchReach-v1', 'FetchPush-v1']:
         env = gym.make(env_name)
-    elif env_name in ['FetchPushObstacle-v1', 'FetchPushWall-v1']:
-        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=dict(penaltize_height=True))
+    elif env_name in ENTRY_POINT.keys():
+        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=dict(penaltize_height=False))
         env = gym.make(env_name)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
