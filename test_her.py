@@ -136,7 +136,19 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
         model = HER.load(load_path, env=env)
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-        obs = env.reset()
+        if env_name in ['FetchPushWall-v1']:
+            obs = env.reset()
+            while (obs['achieved_goal'][0] - env.pos_wall[0]) * (obs['desired_goal'][0] - env.pos_wall[0]) > 0 \
+                  or (obs['desired_goal'][1] - 0.65) * (obs['desired_goal'][1] - 0.85) < 0 \
+                  or (obs['achieved_goal'][1] - 0.75) * (obs['desired_goal'][1] - 0.75) < 0:
+                obs = env.reset()
+        elif env_name in ['FetchPushWallObstacle-v1']:
+            obs = env.reset()
+            while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['observation'][6] < obs['achieved_goal'][0] or \
+                       obs['desired_goal'][0] > env.pos_wall[0] > obs['observation'][6] > obs['achieved_goal'][0]):
+                obs = env.reset()
+        else:
+            obs = env.reset()
         img = env.render(mode='rgb_array')
         episode_reward = 0.0
         images = []
@@ -151,7 +163,19 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
             ax.imshow(img)
             plt.pause(0.2)
             if done:
-                obs = env.reset()
+                if env_name in ['FetchPushWall-v1']:
+                    obs = env.reset()
+                    while (obs['achieved_goal'][0] - env.pos_wall[0])*(obs['desired_goal'][0] - env.pos_wall[0]) > 0 \
+                          or (obs['desired_goal'][1] - 0.65) * (obs['desired_goal'][1] - 0.85) < 0 \
+                          or (obs['achieved_goal'][1] - 0.75) * (obs['desired_goal'][1] - 0.75) < 0:
+                        obs = env.reset()
+                elif env_name in ['FetchPushWallObstacle-v1']:
+                    obs = env.reset()
+                    while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['observation'][6] < obs['achieved_goal'][0] or \
+                               obs['desired_goal'][0] > env.pos_wall[0] > obs['observation'][6] > obs['achieved_goal'][0]):
+                        obs = env.reset()
+                else:
+                    obs = env.reset()
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
         imageio.mimsave(env_name + '.gif', images)
