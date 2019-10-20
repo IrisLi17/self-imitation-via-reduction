@@ -6,7 +6,7 @@
         <material name="floor_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.2 0.2 0.2 1"></material>
         <material name="table_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.93 0.93 0.93 1"></material>
         <material name="block_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.1 0.1 0.5 1"></material>
-        <material name="stick_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.5 0.2 0.0 1"></material>
+        <material name="stick_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.5 0.2 0.0 0.5"></material>
         <material name="puck_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.2 0.2 0.2 1"></material>
         <material name="robot0:geomMat" shininess="0.03" specular="0.4"></material>
         <material name="robot0:gripper_finger_mat" shininess="0.03" specular="0.4" reflectance="0"></material>

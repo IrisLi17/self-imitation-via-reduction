@@ -75,8 +75,8 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         if not self.has_object:
             achieved_goal = grip_pos.copy()
         else:
-            # every object should get involved
-            achieved_goal = np.squeeze(object_pos.copy())
+            # achieved_goal = np.squeeze(object_pos.copy())
+            achieved_goal = self.sim.data.get_site_xpos('object0').copy()
         obs = np.concatenate([
             grip_pos, object_pos.ravel(), object_rel_pos.ravel(), gripper_state, object_rot.ravel(), 
             object_velp.ravel(), object_velr.ravel(), grip_velp, gripper_vel, 
