@@ -10,7 +10,7 @@ MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'pus
 
 
 class FetchPushBoxEnv(fetch_env.FetchEnv, utils.EzPickle):
-    def __init__(self, reward_type='sparse', penaltize_height=False):
+    def __init__(self, reward_type='sparse', penaltize_height=False, random_box=True):
         initial_qpos = {
             'robot0:slide0': 0.405,
             'robot0:slide1': 0.48,
@@ -18,6 +18,7 @@ class FetchPushBoxEnv(fetch_env.FetchEnv, utils.EzPickle):
             'object0:joint': [1.25, 0.53, 0.4, 1., 0., 0., 0.],
         }
         self.penaltize_height = penaltize_height
+        self.random_box = random_box
         fetch_env.FetchEnv.__init__(
             self, MODEL_XML_PATH, has_object=True, block_gripper=True, n_substeps=20,
             gripper_extra_height=0.0, target_in_the_air=False, target_offset=0.0,
@@ -87,9 +88,13 @@ class FetchPushBoxEnv(fetch_env.FetchEnv, utils.EzPickle):
 
         # Randomize start position of object.
         if self.has_object:
-            object_xpos = self.initial_gripper_xpos[:2]
-            while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1):
-                object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            if self.random_box:
+                object_xpos = self.initial_gripper_xpos[:2]
+                while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1):
+                    object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            else:
+                object_xpos = self.initial_gripper_xpos[:2] + np.array([self.obj_range / 2, self.obj_range / 2])
+    
             object_qpos = self.sim.data.get_joint_qpos('object0:joint')
             assert object_qpos.shape == (7,)
             object_qpos[:2] = object_xpos
@@ -121,8 +126,10 @@ class FetchPushBoxEnv(fetch_env.FetchEnv, utils.EzPickle):
             'is_success': self._is_success(obs['achieved_goal'], self.goal),
         }
         reward = self.compute_reward(obs['achieved_goal'], self.goal, info)
+        '''
         # Add reward_near. Mimic https://github.com/openai/gym/blob/master/gym/envs/mujoco/pusher.py.
         reward += 0.5 * self.compute_reward(obs['observation'][:3], obs['achieved_goal'], info)
+        '''
         # Box penalty.
         if self.penaltize_height:
             gripper_height= obs['observation'][2]

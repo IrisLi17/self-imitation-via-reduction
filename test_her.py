@@ -60,7 +60,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
     if env_name in ['FetchReach-v1', 'FetchPush-v1']:
         env = gym.make(env_name)
     elif env_name in ENTRY_POINT.keys():
-        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=dict(penaltize_height=False))
+        kwargs = dict(penaltize_height=False)
+        if env_name == 'FetchPushBox-v1':
+            kwargs['random_box'] = False
+        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=kwargs)
         env = gym.make(env_name)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
