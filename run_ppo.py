@@ -63,7 +63,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
     
     set_global_seeds(seed)
 
-    n_cpu = 8 if not play else 1
+    n_cpu = 32 if not play else 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1']:
         env_kwargs = dict(reward_type='dense')
         # pass
