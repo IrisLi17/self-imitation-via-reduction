@@ -62,7 +62,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
         env = gym.make(env_name)
     elif env_name in ENTRY_POINT.keys():
         kwargs = dict(penaltize_height=False)
-        if env_name == 'FetchPushBox-v1' or 'FetchPushWall-v1':
+        if env_name in ['FetchPushBox-v1', 'FetchPushWall-v1']:
             kwargs['random_box'] = not determine_box
         gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=kwargs)
         env = gym.make(env_name)
