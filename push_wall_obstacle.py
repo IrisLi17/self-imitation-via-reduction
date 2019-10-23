@@ -7,10 +7,15 @@ import numpy as np
 
 # Ensure we get the path separator correct on windows
 MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'push_wall_obstacle.xml')
+MODEL_XML_PATH2 = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'push_wall_heavy_obstacle.xml')
 
 
 class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
-    def __init__(self, reward_type='sparse', penaltize_height=False):
+    def __init__(self, reward_type='sparse', penaltize_height=False, heavy_obstacle=False, random_box=True):
+        if heavy_obstacle:
+            XML_PATH = MODEL_XML_PATH2
+        else:
+            XML_PATH = MODEL_XML_PATH
         initial_qpos = {
             'robot0:slide0': 0.405,
             'robot0:slide1': 0.48,
@@ -20,8 +25,9 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         }
         self.n_object = sum([('object' in item) for item in initial_qpos.keys()])
         self.penaltize_height = penaltize_height
+        self.random_box = random_box
         fetch_env.FetchEnv.__init__(
-            self, MODEL_XML_PATH, has_object=True, block_gripper=True, n_substeps=20,
+            self, XML_PATH, has_object=True, block_gripper=True, n_substeps=20,
             gripper_extra_height=0.0, target_in_the_air=False, target_offset=0.0,
             obj_range=0.15, target_range=0.15, distance_threshold=0.05,
             initial_qpos=initial_qpos, reward_type=reward_type)
@@ -102,13 +108,18 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
 
         # Randomize start position of object.
         if self.has_object:
-            object_xpos = self.initial_gripper_xpos[:2]
-            stick_xpos = object_xpos.copy()
-            while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1
-                   or abs(object_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_object[0] or abs(stick_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_obstacle[0]
-                   or (abs(object_xpos[0] - stick_xpos[0]) < self.size_object[0] + self.size_obstacle[0] and abs(object_xpos[1] - stick_xpos[1]) < self.size_object[1] + self.size_obstacle[1])):
-                object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
-                stick_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            if self.random_box:
+                object_xpos = self.initial_gripper_xpos[:2]
+                stick_xpos = object_xpos.copy()
+                while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1
+                       or abs(object_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_object[0] or abs(stick_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_obstacle[0]
+                       or (abs(object_xpos[0] - stick_xpos[0]) < self.size_object[0] + self.size_obstacle[0] and abs(object_xpos[1] - stick_xpos[1]) < self.size_object[1] + self.size_obstacle[1])):
+                    object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+                    stick_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            else:
+                object_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range / 4 * 3, self.obj_range / 2])
+                stick_xpos = np.asarray([self.pos_wall[0] + self.size_wall[0] + self.size_obstacle[0], 0.75])
+                # stick_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range / 4, 0])
             object_qpos = self.sim.data.get_joint_qpos('object0:joint')
             stick_qpos = self.sim.data.get_joint_qpos('object1:joint')
             assert object_qpos.shape == (7,)

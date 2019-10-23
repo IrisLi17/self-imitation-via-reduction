@@ -34,6 +34,7 @@ def arg_parse():
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--determine_box', action="store_true", default=False)
+    parser.add_argument('--heavy_obstacle', action="store_true", default=False)
     args = parser.parse_args()
     return args
 
@@ -45,7 +46,7 @@ def configure_logger(log_path, **kwargs):
         logger.configure(**kwargs)
 
 
-def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box):
+def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box, heavy_obstacle):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -62,8 +63,12 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
         env = gym.make(env_name)
     elif env_name in ENTRY_POINT.keys():
         kwargs = dict(penaltize_height=False)
-        if env_name in ['FetchPushBox-v1', 'FetchPushWall-v1']:
+        if env_name in ['FetchPushBox-v1', 'FetchPushWall-v1', 'FetchPushWallObstacle-v1']:
             kwargs['random_box'] = not determine_box
+            print('random_box =', kwargs['random_box'])
+        if env_name in ['FetchPushWallObstacle-v1']:
+            kwargs['heavy_obstacle'] = heavy_obstacle
+            print('heavy_obstacle =', kwargs['heavy_obstacle'])
         gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=kwargs)
         env = gym.make(env_name)
     else:
@@ -150,13 +155,14 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
             obs = env.reset()
             while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['observation'][6] < obs['achieved_goal'][0] or \
                        obs['desired_goal'][0] > env.pos_wall[0] > obs['observation'][6] > obs['achieved_goal'][0]):
+                break
                 obs = env.reset()
         else:
             obs = env.reset()
         img = env.render(mode='rgb_array')
         episode_reward = 0.0
         images = []
-        for _ in range(200):
+        for _ in range(500):
             images.append(img)
             action, _ = model.predict(obs)
             print('action', action)
@@ -165,7 +171,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
             ax.cla()
             img = env.render(mode='rgb_array')
             ax.imshow(img)
-            plt.pause(0.2)
+            plt.pause(0.05)
             if done:
                 if env_name in ['FetchPushWall-v1']:
                     obs = env.reset()
@@ -177,6 +183,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
                     obs = env.reset()
                     while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['observation'][6] < obs['achieved_goal'][0] or \
                                obs['desired_goal'][0] > env.pos_wall[0] > obs['observation'][6] > obs['achieved_goal'][0]):
+                        break
                         obs = env.reset()
                 else:
                     obs = env.reset()
@@ -187,4 +194,5 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
 if __name__ == '__main__':
     args = arg_parse()
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
-         log_path=args.log_path, load_path=args.load_path, play=args.play, determine_box=args.determine_box)
+         log_path=args.log_path, load_path=args.load_path, play=args.play, determine_box=args.determine_box,
+         heavy_obstacle=args.heavy_obstacle)
