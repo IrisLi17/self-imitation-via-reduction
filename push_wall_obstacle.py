@@ -12,7 +12,7 @@ MODEL_XML_PATH2 = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'pu
 
 class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
     def __init__(self, reward_type='sparse', penaltize_height=False, heavy_obstacle=False, random_box=True, 
-                 random_ratio=1.0):
+                 random_ratio=1.0, hack_obstacle=False):
         if heavy_obstacle:
             XML_PATH = MODEL_XML_PATH2
         else:
@@ -28,6 +28,7 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         self.penaltize_height = penaltize_height
         self.random_box = random_box
         self.random_ratio = random_ratio
+        self.hack_obstacle = hack_obstacle
         fetch_env.FetchEnv.__init__(
             self, XML_PATH, has_object=True, block_gripper=True, n_substeps=20,
             gripper_extra_height=0.0, target_in_the_air=False, target_offset=0.0,
@@ -154,6 +155,12 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-0.15, 0.15, size=3)
         return goal.copy()
 
+    def compute_reward(self, achieved_goal, goal, info):
+        r = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal, info)
+        if self.hack_obstacle:
+            r += -1 * info['is_blocked']
+        return r
+
     def step(self, action):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         self._set_action(action)
@@ -164,6 +171,10 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         done = False
         info = {
             'is_success': self._is_success(obs['achieved_goal'], self.goal),
+            'is_blocked': obs['observation'][7] + self.size_obstacle[1] * np.cos(obs['observation'][22]) > 0.85
+                          and obs['observation'][7] - self.size_obstacle[1] * np.cos(obs['observation'][22]) < 0.65
+                          and obs['observation'][6] - self.pos_wall[0] < self.size_wall[0] + self.size_obstacle[0] + self.size_object[0]
+
         }
         reward = self.compute_reward(obs['achieved_goal'], self.goal, info)
         # Box penalty.
