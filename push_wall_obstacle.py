@@ -11,7 +11,8 @@ MODEL_XML_PATH2 = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'pu
 
 
 class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
-    def __init__(self, reward_type='sparse', penaltize_height=False, heavy_obstacle=False, random_box=True):
+    def __init__(self, reward_type='sparse', penaltize_height=False, heavy_obstacle=False, random_box=True, 
+                 random_ratio=1.0):
         if heavy_obstacle:
             XML_PATH = MODEL_XML_PATH2
         else:
@@ -26,6 +27,7 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         self.n_object = sum([('object' in item) for item in initial_qpos.keys()])
         self.penaltize_height = penaltize_height
         self.random_box = random_box
+        self.random_ratio = random_ratio
         fetch_env.FetchEnv.__init__(
             self, XML_PATH, has_object=True, block_gripper=True, n_substeps=20,
             gripper_extra_height=0.0, target_in_the_air=False, target_offset=0.0,
@@ -108,7 +110,7 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
 
         # Randomize start position of object.
         if self.has_object:
-            if self.random_box:
+            if self.random_box and self.np_random.uniform() < self.random_ratio:
                 object_xpos = self.initial_gripper_xpos[:2]
                 stick_xpos = object_xpos.copy()
                 while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1
