@@ -25,6 +25,8 @@ ENTRY_POINT = {'FetchPushWallObstacle-v1': FetchPushWallObstacleEnv,
                'FetchPushObstacle-v1': FetchPushObstacleEnv,
                }
 
+hard_test = True
+
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', default='FetchReach-v1')
@@ -153,24 +155,29 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
                 obs = env.reset()
         elif env_name in ['FetchPushWallObstacle-v1']:
             obs = env.reset()
-            while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['observation'][6] < obs['achieved_goal'][0] or \
-                       obs['desired_goal'][0] > env.pos_wall[0] > obs['observation'][6] > obs['achieved_goal'][0]):
-                break
+            while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or \
+                       obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
+                if not hard_test:
+                    break
                 obs = env.reset()
         else:
             obs = env.reset()
         img = env.render(mode='rgb_array')
         episode_reward = 0.0
         images = []
-        for _ in range(500):
+        frame_idx = 0
+        episode_idx = 0
+        for _ in range(250):
             images.append(img)
             action, _ = model.predict(obs)
             print('action', action)
             obs, reward, done, _ = env.step(action)
             episode_reward += reward
+            frame_idx += 1
             ax.cla()
             img = env.render(mode='rgb_array')
             ax.imshow(img)
+            ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx))
             plt.pause(0.05)
             if done:
                 if env_name in ['FetchPushWall-v1']:
@@ -181,14 +188,17 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
                         obs = env.reset()
                 elif env_name in ['FetchPushWallObstacle-v1']:
                     obs = env.reset()
-                    while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['observation'][6] < obs['achieved_goal'][0] or \
-                               obs['desired_goal'][0] > env.pos_wall[0] > obs['observation'][6] > obs['achieved_goal'][0]):
-                        break
+                    while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or \
+                               obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
+                        if not hard_test:
+                            break
                         obs = env.reset()
                 else:
                     obs = env.reset()
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
+                frame_idx = 0
+                episode_idx += 1
         imageio.mimsave(env_name + '.gif', images)
 
 if __name__ == '__main__':

@@ -20,7 +20,7 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
             'robot0:slide0': 0.405,
             'robot0:slide1': 0.48,
             'robot0:slide2': 0.0,
-            'object0:joint': [1.25, 0.53, 0.4, 1., 0., 0., 0.],
+            'object0:joint': [1.2, 0.53, 0.4, 1., 0., 0., 0.],
             'object1:joint': [1.35, 0.75, 0.4, 1., 0., 0., 0.],
         }
         self.n_object = sum([('object' in item) for item in initial_qpos.keys()])
@@ -117,8 +117,8 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
                     object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
                     stick_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             else:
-                object_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range / 4 * 3, self.obj_range / 2])
-                stick_xpos = np.asarray([self.pos_wall[0] + self.size_wall[0] + self.size_obstacle[0], 0.75])
+                object_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range * 0.9, self.obj_range / 2])
+                stick_xpos = np.asarray([self.pos_wall[0] + self.size_wall[0] + self.size_obstacle[0], self.initial_gripper_xpos[1]])
                 # stick_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range / 4, 0])
             object_qpos = self.sim.data.get_joint_qpos('object0:joint')
             stick_qpos = self.sim.data.get_joint_qpos('object1:joint')
