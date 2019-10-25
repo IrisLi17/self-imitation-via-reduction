@@ -6,4 +6,5 @@ logs/*
 model/*
 *.png
 *.gif
+MUJOCO_LOG.TXT
 
