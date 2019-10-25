@@ -12,7 +12,7 @@ MODEL_XML_PATH2 = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'pu
 
 class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
     def __init__(self, reward_type='sparse', penaltize_height=False, heavy_obstacle=False, random_box=True, 
-                 random_ratio=1.0, hack_obstacle=False):
+                 random_ratio=1.0, hack_obstacle=False, random_gripper=False):
         if heavy_obstacle:
             XML_PATH = MODEL_XML_PATH2
         else:
@@ -29,6 +29,7 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         self.random_box = random_box
         self.random_ratio = random_ratio
         self.hack_obstacle = hack_obstacle
+        self.random_gripper = random_gripper
         fetch_env.FetchEnv.__init__(
             self, XML_PATH, has_object=True, block_gripper=True, n_substeps=20,
             gripper_extra_height=0.0, target_in_the_air=False, target_offset=0.0,
@@ -108,6 +109,14 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
     
     def _reset_sim(self):
         self.sim.set_state(self.initial_state)
+        # TODO: randomize mocap_pos
+        if self.random_gripper:
+            mocap_pos = np.concatenate([self.np_random.uniform([1.19, 0.6], [1.49, 0.9]),
+                                        self.sim.data.get_mocap_pos('robot0:mocap')[-1:]])
+            self.sim.data.set_mocap_pos('robot0:mocap', mocap_pos)
+            for _ in range(10):
+                self.sim.step()
+            self._step_callback()
 
         # Randomize start position of object.
         if self.has_object:

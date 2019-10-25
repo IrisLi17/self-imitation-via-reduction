@@ -27,7 +27,7 @@ ENTRY_POINT = {'FetchPushWallObstacle-v1': FetchPushWallObstacleEnv,
                }
 
 hard_test = True
-hack_obstacle = True
+hack_obstacle = False
 
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -40,6 +40,7 @@ def arg_parse():
     parser.add_argument('--determine_box', action="store_true", default=False)
     parser.add_argument('--heavy_obstacle', action="store_true", default=False)
     parser.add_argument('--random_ratio', type=float, default=1.0)
+    parser.add_argument('--random_gripper', action="store_true", default=False)
     args = parser.parse_args()
     return args
 
@@ -52,7 +53,7 @@ def configure_logger(log_path, **kwargs):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box, heavy_obstacle,
-         random_ratio, hack_obstacle):
+         random_ratio, hack_obstacle, random_gripper):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -78,8 +79,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
         if env_name in ['FetchPushWallObstacle-v1']:
             kwargs['random_ratio'] = random_ratio
             kwargs['hack_obstacle'] = hack_obstacle
+            kwargs['random_gripper'] = random_gripper
             print('random_ratio =', kwargs['random_ratio'])
             print('hack_obstacle =', kwargs['hack_obstacle'])
+            print('random_gripper =', kwargs['random_gripper'])
         gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=kwargs)
         env = gym.make(env_name)
     else:
@@ -139,10 +142,14 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
             print('policy_kwargs', policy_kwargs)
         # Wrap the model
         if not hack_obstacle:
-            model = HER('MlpPolicy', env, model_class, n_sampled_goal=4, goal_selection_strategy=goal_selection_strategy,
-                        policy_kwargs=policy_kwargs,
-                        verbose=1,
-                        **train_kwargs)
+            if load_path is None:
+                model = HER('MlpPolicy', env, model_class, n_sampled_goal=4, goal_selection_strategy=goal_selection_strategy,
+                            policy_kwargs=policy_kwargs,
+                            verbose=1,
+                            **train_kwargs)
+            else:
+                # I want to continue training here.
+                model = HER.load(load_path, env=env)
         else:
             model = HER_HACK('MlpPolicy', env, model_class, n_sampled_goal=4, goal_selection_strategy=goal_selection_strategy,
                         policy_kwargs=policy_kwargs,
@@ -224,4 +231,5 @@ if __name__ == '__main__':
     args = arg_parse()
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
          log_path=args.log_path, load_path=args.load_path, play=args.play, determine_box=args.determine_box,
-         heavy_obstacle=args.heavy_obstacle, random_ratio=args.random_ratio, hack_obstacle=hack_obstacle)
+         heavy_obstacle=args.heavy_obstacle, random_ratio=args.random_ratio, hack_obstacle=hack_obstacle,
+         random_gripper=args.random_gripper)
