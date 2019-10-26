@@ -111,8 +111,7 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         self.sim.set_state(self.initial_state)
         # TODO: randomize mocap_pos
         if self.random_gripper:
-            mocap_pos = np.concatenate([self.np_random.uniform([1.19, 0.6], [1.49, 0.9]),
-                                        self.sim.data.get_mocap_pos('robot0:mocap')[-1:]])
+            mocap_pos = np.concatenate([self.np_random.uniform([1.19, 0.6], [1.49, 0.9]), [0.355]])
             self.sim.data.set_mocap_pos('robot0:mocap', mocap_pos)
             for _ in range(10):
                 self.sim.step()
