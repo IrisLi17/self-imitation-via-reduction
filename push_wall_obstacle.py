@@ -154,9 +154,9 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
                 self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
             if not hasattr(self, 'pos_wall'):
                 self.pos_wall = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
-            while (abs(goal[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_object[0]):
-                goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
-                goal[2] = self.height_offset
+            # while (abs(goal[0] - self.pos_wall[0]) < self.size_wall[0]):
+            #     goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+            #     goal[2] = self.height_offset
             if self.target_in_the_air and self.np_random.uniform() < 0.5:
                 goal[2] += self.np_random.uniform(0, 0.45)
         else:
@@ -181,8 +181,8 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
             'is_success': self._is_success(obs['achieved_goal'], self.goal),
             'is_blocked': obs['observation'][7] + self.size_obstacle[1] * np.cos(obs['observation'][22]) > 0.85
                           and obs['observation'][7] - self.size_obstacle[1] * np.cos(obs['observation'][22]) < 0.65
-                          and obs['observation'][6] - self.pos_wall[0] < self.size_wall[0] + self.size_obstacle[0] + self.size_object[0]
-                          and (obs['achieved_goal'][1] - self.pos_wall[1]) * (obs['desired_goal'][1] - self.pos_wall[1]) < 0
+                          and abs(obs['observation'][6] - self.pos_wall[0]) < self.size_wall[0] + self.size_obstacle[0] + self.size_object[0]
+                          and (obs['achieved_goal'][0] - self.pos_wall[0]) * (obs['desired_goal'][0] - self.pos_wall[0]) < 0
 
         }
         reward = self.compute_reward(obs['achieved_goal'], self.goal, info)

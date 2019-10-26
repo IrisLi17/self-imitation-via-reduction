@@ -177,9 +177,9 @@ class HindsightExperienceReplayWrapper(object):
                     'is_blocked': next_obs_dict['observation'][7] + self.env.env.size_obstacle[1] * np.cos(next_obs_dict['observation'][22]) > 0.85
                                   and next_obs_dict['observation'][7] - self.env.env.size_obstacle[1] * np.cos(
                         next_obs_dict['observation'][22]) < 0.65
-                                  and next_obs_dict['observation'][6] - self.env.env.pos_wall[0] < self.env.env.size_wall[0] + self.env.env.size_obstacle[
+                                  and abs(next_obs_dict['observation'][6] - self.env.env.pos_wall[0]) < self.env.env.size_wall[0] + self.env.env.size_obstacle[
                         0] + self.env.env.size_object[0]
-                                  and (next_obs_dict['achieved_goal'][1] - self.env.env.pos_wall[1]) * (next_obs_dict['desired_goal'][1] - self.env.env.pos_wall[1]) < 0
+                                  and (next_obs_dict['achieved_goal'][0] - self.env.env.pos_wall[0]) * (next_obs_dict['desired_goal'][0] - self.env.env.pos_wall[0]) < 0
 
                 }
                 reward = self.env.compute_reward(goal, next_obs_dict['achieved_goal'], info)
