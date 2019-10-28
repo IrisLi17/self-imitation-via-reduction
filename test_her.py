@@ -187,6 +187,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
                 obs = env.reset()
         else:
             obs = env.reset()
+        print('gripper_pos', obs['observation'][0:3])
         img = env.render(mode='rgb_array')
         episode_reward = 0.0
         images = []
@@ -196,7 +197,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
             images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
-            print('obstacle euler', obs['observation'][20:23])
+            # print('obstacle euler', obs['observation'][20:23])
             obs, reward, done, _ = env.step(action)
             episode_reward += reward
             frame_idx += 1
@@ -221,6 +222,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
                         obs = env.reset()
                 else:
                     obs = env.reset()
+                print('gripper_pos', obs['observation'][0:3])
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
                 frame_idx = 0
