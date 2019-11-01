@@ -2,7 +2,7 @@ from stable_baselines import HER, DQN, SAC, DDPG, TD3
 from baselines import HER_HACK
 from stable_baselines.her import GoalSelectionStrategy, HERGoalEnvWrapper
 from stable_baselines.common.policies import MlpPolicy
-from push_wall_obstacle import FetchPushWallObstacleEnv
+from push_wall_obstacle import FetchPushWallObstacleEnv, FetchPushWallObstacleEnv_v2
 from push_wall import FetchPushWallEnv
 from push_box import  FetchPushBoxEnv
 from push_obstacle import FetchPushObstacleEnv
@@ -24,6 +24,7 @@ ENTRY_POINT = {'FetchPushWallObstacle-v1': FetchPushWallObstacleEnv,
                'FetchPushWall-v1': FetchPushWallEnv,
                'FetchPushBox-v1': FetchPushBoxEnv,
                'FetchPushObstacle-v1': FetchPushObstacleEnv,
+               'FetchPushWallObstacle-v2': FetchPushWallObstacleEnv_v2,
                }
 
 hard_test = True
@@ -70,13 +71,13 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
         env = gym.make(env_name)
     elif env_name in ENTRY_POINT.keys():
         kwargs = dict(penaltize_height=False)
-        if env_name in ['FetchPushBox-v1', 'FetchPushWall-v1', 'FetchPushWallObstacle-v1']:
+        if env_name in ['FetchPushBox-v1', 'FetchPushWall-v1', 'FetchPushWallObstacle-v1', 'FetchPushWallObstacle-v2']:
             kwargs['random_box'] = not determine_box
             print('random_box =', kwargs['random_box'])
-        if env_name in ['FetchPushWallObstacle-v1']:
+        if env_name in ['FetchPushWallObstacle-v1', 'FetchPushWallObstacle-v2']:
             kwargs['heavy_obstacle'] = heavy_obstacle
             print('heavy_obstacle =', kwargs['heavy_obstacle'])
-        if env_name in ['FetchPushWallObstacle-v1']:
+        if env_name in ['FetchPushWallObstacle-v1', 'FetchPushWallObstacle-v2']:
             kwargs['random_ratio'] = random_ratio
             kwargs['hack_obstacle'] = hack_obstacle
             kwargs['random_gripper'] = random_gripper
