@@ -42,6 +42,7 @@ def arg_parse():
     parser.add_argument('--heavy_obstacle', action="store_true", default=False)
     parser.add_argument('--random_ratio', type=float, default=1.0)
     parser.add_argument('--random_gripper', action="store_true", default=False)
+    parser.add_argument('--reward_offset', type=float, default=1.0)
     args = parser.parse_args()
     return args
 
@@ -54,7 +55,7 @@ def configure_logger(log_path, **kwargs):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box, heavy_obstacle,
-         random_ratio, hack_obstacle, random_gripper):
+         random_ratio, hack_obstacle, random_gripper, reward_offset):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -121,7 +122,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
         elif model_class is SAC:
             # wrap env
             from utils.wrapper import DoneOnSuccessWrapper
-            env = DoneOnSuccessWrapper(env)
+            env = DoneOnSuccessWrapper(env, reward_offset=reward_offset)
             env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=True)
             train_kwargs = dict(buffer_size=int(1e6),
                                 ent_coef="auto",
@@ -235,4 +236,4 @@ if __name__ == '__main__':
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
          log_path=args.log_path, load_path=args.load_path, play=args.play, determine_box=args.determine_box,
          heavy_obstacle=args.heavy_obstacle, random_ratio=args.random_ratio, hack_obstacle=hack_obstacle,
-         random_gripper=args.random_gripper)
+         random_gripper=args.random_gripper, reward_offset=args.reward_offset)

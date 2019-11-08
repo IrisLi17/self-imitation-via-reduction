@@ -15,7 +15,8 @@ env = ENTRY_POINT[env_name](**kwargs)
 
 # Pick a load_path.
 load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom/her_sac'
-model = HER.load(os.path.join(load_path, 'model_89.zip'), env=env)
+load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom_offset0/her_sac'
+model = HER.load(os.path.join(load_path, 'model_42.zip'), env=env)
 
 obs = env.reset()
 env.goal[0] = 1.2
@@ -53,8 +54,8 @@ for i in range(50):
     obs, _, _, _ = env.step(action)
     img = env.render(mode='rgb_array')
     imgs.append(img)
-    plt.imshow(img)
-    plt.pause(0.1)
+    # plt.imshow(img)
+    # plt.pause(0.1)
 batch_obs = np.asarray(batch_obs)
 
 sac_model = model.model
@@ -68,7 +69,7 @@ ax2 = fig.add_subplot(122)
 values = sac_model.sess.run(sac_model.step_ops[6], feed_dict)
 for i in range(values.shape[0]):
     print(i, values[i, :])
-exit()
+# exit()
 os.makedirs('temp')
 for i in range(values.shape[0]):
     ax.cla()
@@ -86,5 +87,5 @@ gif_imgs = []
 for i in range(values.shape[0]):
     img = plt.imread(os.path.join('temp', str(i) + '.png'))
     gif_imgs.append(img)
-imageio.mimsave('greedy.gif', gif_imgs)
+imageio.mimsave('greedy_offset0.gif', gif_imgs)
 shutil.rmtree('temp')

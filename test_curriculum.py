@@ -127,6 +127,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, heavy_obstacl
         assert load_path is not None
         model = HER.load(load_path, env=env)
 
+        env.env.hard_case_ratio = 1.0
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
         while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or \
