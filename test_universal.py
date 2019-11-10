@@ -9,6 +9,7 @@ from stable_baselines import logger
 import os, time
 import imageio
 import argparse
+import numpy as np
 
 try:
     from mpi4py import MPI
@@ -138,7 +139,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, heavy_obstacl
             ax.cla()
             img = env.render(mode='rgb_array')
             ax.imshow(img)
-            ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx))
+            ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
+                         ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
             plt.pause(0.05)
             if done:
                 obs = env.reset()

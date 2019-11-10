@@ -753,11 +753,11 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
         done = False
         info = {
             'is_success': self._is_success(obs['achieved_goal'][0:3], self.goal[0:3]),
-            'is_blocked': obs['observation'][7] + self.size_obstacle[1] * np.cos(obs['observation'][22]) > 0.85
-                          and obs['observation'][7] - self.size_obstacle[1] * np.cos(obs['observation'][22]) < 0.65
-                          and abs(obs['observation'][6] - self.pos_wall[0]) < self.size_wall[0] + self.size_obstacle[
-                0] + self.size_object[0]
-            # and (obs['achieved_goal'][0] - self.pos_wall[0]) * (obs['desired_goal'][0] - self.pos_wall[0]) < 0
+            # 'is_blocked': obs['observation'][7] + self.size_obstacle[1] * np.cos(obs['observation'][22]) > 0.85
+            #               and obs['observation'][7] - self.size_obstacle[1] * np.cos(obs['observation'][22]) < 0.65
+            #               and abs(obs['observation'][6] - self.pos_wall[0]) < self.size_wall[0] + self.size_obstacle[
+            #     0] + self.size_object[0]
+            # # and (obs['achieved_goal'][0] - self.pos_wall[0]) * (obs['desired_goal'][0] - self.pos_wall[0]) < 0
 
         }
         reward = self.compute_reward(obs['observation'], self.goal, info)
