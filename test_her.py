@@ -43,6 +43,7 @@ def arg_parse():
     parser.add_argument('--random_ratio', type=float, default=1.0)
     parser.add_argument('--random_gripper', action="store_true", default=False)
     parser.add_argument('--reward_offset', type=float, default=1.0)
+    parser.add_argument('--hide_velocity', action="store_true", default=False)
     args = parser.parse_args()
     return args
 
@@ -55,7 +56,7 @@ def configure_logger(log_path, **kwargs):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box, heavy_obstacle,
-         random_ratio, hack_obstacle, random_gripper, reward_offset):
+         random_ratio, hack_obstacle, random_gripper, reward_offset, hide_velocity):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -85,6 +86,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
             print('random_ratio =', kwargs['random_ratio'])
             print('hack_obstacle =', kwargs['hack_obstacle'])
             print('random_gripper =', kwargs['random_gripper'])
+        if env_name in ['FetchPushWallObstacle-v1']:
+            kwargs['hide_velocity'] = hide_velocity
+            print('hide_velocity =', kwargs['hide_velocity'])
         gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=kwargs)
         env = gym.make(env_name)
     else:
@@ -236,4 +240,4 @@ if __name__ == '__main__':
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
          log_path=args.log_path, load_path=args.load_path, play=args.play, determine_box=args.determine_box,
          heavy_obstacle=args.heavy_obstacle, random_ratio=args.random_ratio, hack_obstacle=hack_obstacle,
-         random_gripper=args.random_gripper, reward_offset=args.reward_offset)
+         random_gripper=args.random_gripper, reward_offset=args.reward_offset, hide_velocity=args.hide_velocity)

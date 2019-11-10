@@ -172,17 +172,31 @@ class HindsightExperienceReplayWrapper(object):
                 obs_dict['desired_goal'] = goal
                 next_obs_dict['desired_goal'] = goal
 
-                # Update the reward according to the new desired goal
-                info = {
-                    'is_blocked': next_obs_dict['observation'][7] + self.env.env.size_obstacle[1] * np.cos(next_obs_dict['observation'][22]) > 0.85
-                                  and next_obs_dict['observation'][7] - self.env.env.size_obstacle[1] * np.cos(
-                        next_obs_dict['observation'][22]) < 0.65
-                                  and abs(next_obs_dict['observation'][6] - self.env.env.pos_wall[0]) < self.env.env.size_wall[0] + self.env.env.size_obstacle[
-                        0] + self.env.env.size_object[0]
-                                  and (next_obs_dict['achieved_goal'][0] - self.env.env.pos_wall[0]) * (next_obs_dict['desired_goal'][0] - self.env.env.pos_wall[0]) < 0
+                assert len(goal) == 3 or len(goal) == 5
+                if len(goal) == 5:
+                    # modify dict, note that desired_goal is already modified, only need to modify achieved goal
+                    one_hot = goal[3:]
+                    idx = np.argmax(one_hot)
+                    obs_dict['achieved_goal'][3:] = one_hot
+                    obs_dict['achieved_goal'][0:3] = obs_dict['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
+                    next_obs_dict['achieved_goal'][3:] = one_hot
+                    next_obs_dict['achieved_goal'][0:3] = next_obs_dict['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
 
-                }
-                reward = self.env.compute_reward(goal, next_obs_dict['achieved_goal'], info)
+                # Update the reward according to the new desired goal
+                # info = {
+                #     'is_blocked': next_obs_dict['observation'][7] + self.env.env.size_obstacle[1] * np.cos(next_obs_dict['observation'][22]) > 0.85
+                #                   and next_obs_dict['observation'][7] - self.env.env.size_obstacle[1] * np.cos(
+                #         next_obs_dict['observation'][22]) < 0.65
+                #                   and abs(next_obs_dict['observation'][6] - self.env.env.pos_wall[0]) < self.env.env.size_wall[0] + self.env.env.size_obstacle[
+                #         0] + self.env.env.size_object[0]
+                #                   and (next_obs_dict['achieved_goal'][0] - self.env.env.pos_wall[0]) * (next_obs_dict['desired_goal'][0] - self.env.env.pos_wall[0]) < 0
+                #
+                # }
+                info = None
+                if len(goal) == 3:
+                    reward = self.env.compute_reward(goal, next_obs_dict['achieved_goal'], info)
+                else:
+                    reward = self.env.compute_reward(self.env.convert_dict_to_obs(next_obs_dict), goal, info)
                 # Can we use achieved_goal == desired_goal?
                 done = False
 
