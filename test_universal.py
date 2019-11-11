@@ -1,4 +1,6 @@
 from stable_baselines import SAC
+from stable_baselines.sac.policies import FeedForwardPolicy as SACPolicy
+from stable_baselines.common.policies import register_policy
 from baselines import HER_HACK
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 import gym
@@ -27,10 +29,12 @@ def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', default='FetchPushWallObstacle-v4')
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--policy', type=str, default='MlpPolicy')
     parser.add_argument('--num_timesteps', type=float, default=3e6)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--heavy_obstacle', action="store_true", default=False)
     parser.add_argument('--random_gripper', action="store_true", default=False)
     args = parser.parse_args()
@@ -44,7 +48,7 @@ def configure_logger(log_path, **kwargs):
         logger.configure(**kwargs)
 
 
-def main(env_name, seed, num_timesteps, log_path, load_path, play, heavy_obstacle, random_gripper):
+def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path, play, heavy_obstacle, random_gripper):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -81,7 +85,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, heavy_obstacl
                                 ent_coef="auto",
                                 gamma=0.95,
                                 learning_starts=1000,
-                                train_freq=1, )
+                                train_freq=1,
+                                batch_size=batch_size,
+                                )
             policy_kwargs = {}
 
             def callback(_locals, _globals):
@@ -93,11 +99,21 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, heavy_obstacl
             train_kwargs = {}
             policy_kwargs = {}
             callback = None
+        class CustomSACPolicy(SACPolicy):
+            def __init__(self, *args, **kwargs):
+                super(CustomSACPolicy, self).__init__(*args, **kwargs,
+                                                    layers=[256, 256],
+                                                    feature_extraction="mlp")
+        register_policy('CustomSACPolicy', CustomSACPolicy)
+        # if layer_norm:
+        #     policy = 'LnMlpPolicy'
+        # else:
+        #     policy = 'MlpPolicy'
         if rank == 0:
             print('train_kwargs', train_kwargs)
             print('policy_kwargs', policy_kwargs)
         # Wrap the model
-        model = HER_HACK('MlpPolicy', env, model_class, n_sampled_goal=4,
+        model = HER_HACK(policy, env, model_class, n_sampled_goal=4,
                          goal_selection_strategy=goal_selection_strategy,
                          policy_kwargs=policy_kwargs,
                          verbose=1,
@@ -161,4 +177,5 @@ if __name__ == '__main__':
     args = arg_parse()
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps),
          log_path=args.log_path, load_path=args.load_path, play=args.play,
-         heavy_obstacle=args.heavy_obstacle, random_gripper=args.random_gripper)
+         heavy_obstacle=args.heavy_obstacle, random_gripper=args.random_gripper,
+         policy=args.policy, batch_size=args.batch_size)
