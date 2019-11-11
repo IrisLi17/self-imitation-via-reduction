@@ -10,24 +10,40 @@ This file aims to see the value fn along a hand-tuned trajectory.
 '''
 # Reset the environment to hard configuration.
 env_name = 'FetchPushWallObstacle-v1'
-kwargs = dict(random_box=False, heavy_obstacle=True)
+kwargs = dict(random_box=False, heavy_obstacle=True, hide_velocity=True)
 env = ENTRY_POINT[env_name](**kwargs)
 
 # Pick a load_path.
 load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom/her_sac'
 load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom_offset0/her_sac'
-model = HER.load(os.path.join(load_path, 'model_42.zip'), env=env)
+load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom_hidev/her_sac'
+model = HER.load(os.path.join(load_path, 'model_89.zip'), env=env)
 
+#####
+obs_array = np.load('free_hidev_obs.npy')[20, :]
+print(obs_array)
+from visualize_obstacle import plot_value_obstaclepos
+plot_value_obstaclepos(obs_array, model.model, load_path)
+exit()
+#####
+
+free = True
+greedy = True
 obs = env.reset()
 env.goal[0] = 1.2
-env.goal[1] = obs['achieved_goal'][1]
+if not free:
+    env.goal[1] = obs['achieved_goal'][1]
+else:
+    env.goal[1] = 0.75 # hidev89 can push the obstacle with box
+    env.goal[1] = 0.85
 obs['desired_goal'] = env.goal
 # Design action sequence. First, push the obstacle away; then, push the box to the goal
 batch_obs = []
 imgs = []
-greedy = True
 for i in range(50):
-    if not greedy:
+    if free:
+        action, _ = model.predict(obs)
+    elif not greedy:
         if i <= 6:
             action = obs['observation'][6:9] - np.asarray([0, 0.2, 0]) - obs['observation'][0:3]
         elif i <= 20:
@@ -48,8 +64,9 @@ for i in range(50):
         else:
             action = np.asarray([-1.0, 0.0, 0.0])
     print(i, action)
-    action /= np.max(np.abs(action))
-    action = np.concatenate((action, [0.]))
+    if not free:
+        action /= np.max(np.abs(action))
+        action = np.concatenate((action, [0.]))
     batch_obs.append(np.concatenate([obs[key] for key in KEY_ORDER]))
     obs, _, _, _ = env.step(action)
     img = env.render(mode='rgb_array')
@@ -57,6 +74,7 @@ for i in range(50):
     # plt.imshow(img)
     # plt.pause(0.1)
 batch_obs = np.asarray(batch_obs)
+np.save('free_hidev_obs.npy', batch_obs)
 
 sac_model = model.model
 feed_dict = {
@@ -67,6 +85,7 @@ fig = plt.figure(figsize=(10, 5))
 ax = fig.add_subplot(121)
 ax2 = fig.add_subplot(122)
 values = sac_model.sess.run(sac_model.step_ops[6], feed_dict)
+np.save('free_hidev_value.npy', values)
 for i in range(values.shape[0]):
     print(i, values[i, :])
 # exit()
@@ -87,5 +106,5 @@ gif_imgs = []
 for i in range(values.shape[0]):
     img = plt.imread(os.path.join('temp', str(i) + '.png'))
     gif_imgs.append(img)
-imageio.mimsave('greedy_offset0.gif', gif_imgs)
+imageio.mimsave('free_hidev.gif', gif_imgs)
 shutil.rmtree('temp')
