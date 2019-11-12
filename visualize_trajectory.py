@@ -10,22 +10,27 @@ This file aims to see the value fn along a hand-tuned trajectory.
 '''
 # Reset the environment to hard configuration.
 env_name = 'FetchPushWallObstacle-v1'
-kwargs = dict(random_box=False, heavy_obstacle=True, hide_velocity=True)
+kwargs = dict(random_box=False, heavy_obstacle=True, hide_velocity=False)
 env = ENTRY_POINT[env_name](**kwargs)
 
 # Pick a load_path.
 load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom/her_sac'
-load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom_offset0/her_sac'
-load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom_hidev/her_sac'
+# load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom_offset0/her_sac'
+# load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom_hidev/her_sac'
 model = HER.load(os.path.join(load_path, 'model_89.zip'), env=env)
 
+
 #####
-obs_array = np.load('free_hidev_obs.npy')[20, :]
+if load_path == 'logs/FetchPushWallObstacle-v1_heavy_purerandom_hidev/her_sac':
+    obs_array = np.load('free_hidev_obs.npy')[20, :]
+elif load_path == 'logs/FetchPushWallObstacle-v1_heavy_purerandom/her_sac':
+    obs_array = np.load('free_heavypurerandom_obs.npy')[35, :]
 print(obs_array)
 from visualize_obstacle import plot_value_obstaclepos
 plot_value_obstaclepos(obs_array, model.model, load_path)
 exit()
 #####
+
 
 free = True
 greedy = True
@@ -35,7 +40,11 @@ if not free:
     env.goal[1] = obs['achieved_goal'][1]
 else:
     env.goal[1] = 0.75 # hidev89 can push the obstacle with box
-    env.goal[1] = 0.85
+    if load_path == 'logs/FetchPushWallObstacle-v1_heavy_purerandom_hidev/her_sac':
+        env.goal[1] = 0.85
+    elif load_path == 'logs/FetchPushWallObstacle-v1_heavy_purerandom/her_sac':
+        env.goal[1] = 0.8
+        env.goal[0] = 1.17
 obs['desired_goal'] = env.goal
 # Design action sequence. First, push the obstacle away; then, push the box to the goal
 batch_obs = []
@@ -71,10 +80,11 @@ for i in range(50):
     obs, _, _, _ = env.step(action)
     img = env.render(mode='rgb_array')
     imgs.append(img)
-    # plt.imshow(img)
-    # plt.pause(0.1)
+    plt.imshow(img)
+    plt.pause(0.1)
 batch_obs = np.asarray(batch_obs)
-np.save('free_hidev_obs.npy', batch_obs)
+np.save('free_heavypurerandom_obs.npy', batch_obs)
+np.save('free_heavypurerandom_img.npy', imgs)
 
 sac_model = model.model
 feed_dict = {
@@ -85,7 +95,7 @@ fig = plt.figure(figsize=(10, 5))
 ax = fig.add_subplot(121)
 ax2 = fig.add_subplot(122)
 values = sac_model.sess.run(sac_model.step_ops[6], feed_dict)
-np.save('free_hidev_value.npy', values)
+np.save('free_heavypurerandom_value.npy', values)
 for i in range(values.shape[0]):
     print(i, values[i, :])
 # exit()
@@ -106,5 +116,5 @@ gif_imgs = []
 for i in range(values.shape[0]):
     img = plt.imread(os.path.join('temp', str(i) + '.png'))
     gif_imgs.append(img)
-imageio.mimsave('free_hidev.gif', gif_imgs)
+imageio.mimsave('free_heavypurerandom.gif', gif_imgs)
 shutil.rmtree('temp')
