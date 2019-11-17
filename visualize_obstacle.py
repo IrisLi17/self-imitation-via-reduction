@@ -40,14 +40,14 @@ def plot_value_obstaclepos(obs, sac_model, load_path):
     fig = plt.figure(figsize=(6, 6))
     # ax1 = fig.add_subplot(111, projection='3d')
     ax1 = fig.add_subplot(111)
-    for f_idx in range(90):
+    for f_idx in range(50, 90):
         sac_model.load_parameters(os.path.join(load_path, 'model_' + str(f_idx) + '.zip'))
         values = sac_model.sess.run(sac_model.step_ops[6], feed_dict)
         grid_values = np.reshape(values, grid_shape)
         print(np.max(values))
         ax1.cla()
         # surf = ax1.plot_surface(obstacle_xpos, obstacle_ypos, grid_values, cmap=cm.coolwarm)
-        ax1.contourf(obstacle_xpos, obstacle_ypos, grid_values, cmap=cm.coolwarm)
+        surf = ax1.contourf(obstacle_xpos, obstacle_ypos, grid_values, cmap=cm.coolwarm)
         ax1.set_xlim(1.0, 1.6)
         ax1.set_ylim(0.4, 1.1)
         ax1.set_xlabel('obstacle xpos')
@@ -57,7 +57,8 @@ def plot_value_obstaclepos(obs, sac_model, load_path):
         # ax1.view_init(elev=60, azim=135)
         ax1.set_title('model_' + str(f_idx))
 
-        # fig.colorbar(surf)
+        if f_idx == 89:
+            fig.colorbar(surf, ax=ax1)
         plt.pause(0.1)
     plt.show()
 

@@ -22,7 +22,7 @@ ENTRY_POINT = {
                'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
                }
 
-hard_test = True
+hard_test = False
 
 
 def arg_parse():
@@ -144,8 +144,8 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
         images = []
         frame_idx = 0
         episode_idx = 0
-        for _ in range(250):
-            images.append(img)
+        for i in range(300):
+            # images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
@@ -157,6 +157,7 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
             ax.imshow(img)
             ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
                          ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
+            plt.savefig('tempimg' + str(i) + '.png') 
             plt.pause(0.05)
             if done:
                 obs = env.reset()
@@ -170,6 +171,9 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
                 episode_reward = 0.0
                 frame_idx = 0
                 episode_idx += 1
+        for i in range(300):
+            images.append(plt.imread('tempimg' + str(i) + '.png'))
+            os.remove('tempimg' + str(i) + '.png')
         imageio.mimsave(env_name + '.gif', images)
 
 

@@ -34,6 +34,7 @@ def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', default='FetchReach-v1')
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_timesteps', type=float, default=3e6)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
@@ -55,7 +56,7 @@ def configure_logger(log_path, **kwargs):
         logger.configure(**kwargs)
 
 
-def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box, heavy_obstacle,
+def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play, determine_box, heavy_obstacle,
          random_ratio, hack_obstacle, random_gripper, reward_offset, hide_velocity):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
@@ -129,6 +130,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
             env = DoneOnSuccessWrapper(env, reward_offset=reward_offset)
             env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=True)
             train_kwargs = dict(buffer_size=int(1e6),
+                                batch_size=batch_size,
                                 ent_coef="auto",
                                 gamma=0.95,
                                 learning_starts=1000,
@@ -237,7 +239,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, determine_box
 
 if __name__ == '__main__':
     args = arg_parse()
-    main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
+    main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), batch_size=args.batch_size,
          log_path=args.log_path, load_path=args.load_path, play=args.play, determine_box=args.determine_box,
          heavy_obstacle=args.heavy_obstacle, random_ratio=args.random_ratio, hack_obstacle=hack_obstacle,
          random_gripper=args.random_gripper, reward_offset=args.reward_offset, hide_velocity=args.hide_velocity)
