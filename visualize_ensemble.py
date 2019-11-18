@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, shutil, imageio
 import numpy as np
 import matplotlib.pyplot as plt
 from test_ensemble import make_env
@@ -57,8 +57,12 @@ def generate_trajectory(env, obs, model, free=False, greedy=True):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print('Usage: python visualize_ensemble.py [load_path] [greedy 0|1]')
+        exit()
     env_name = 'FetchPushWallObstacle-v1'
     load_path = sys.argv[1]
+    greedy = int(sys.argv[2]) == 1
     env_kwargs = dict(random_box=False,
                       heavy_obstacle=True,
                       random_ratio=1.0,
@@ -67,7 +71,7 @@ if __name__ == '__main__':
     model = HER.load(load_path, env=env)
     obs = reset_goal(env)
     print(env.goal, obs['achieved_goal'], obs['desired_goal'])
-    batch_obs, batch_imgs = generate_trajectory(env, obs, model, free=False, greedy=False)
+    batch_obs, batch_imgs = generate_trajectory(env, obs, model, free=False, greedy=greedy)
 
     sac_model = model.model
     value_ensemble_op = sac_model.step_ops[-1]
@@ -95,3 +99,9 @@ if __name__ == '__main__':
         plt.savefig(os.path.join('temp', str(i) + '.png'))
         plt.pause(0.1)
     gif_imgs = []
+    for i in range(values.shape[1]):
+        img = plt.imread(os.path.join('temp', str(i) + '.png'))
+        gif_imgs.append(img)
+    gif_name = 'greedy_ensemble.gif' if greedy else 'hand_tune_ensemble.gif'
+    imageio.mimsave(gif_name, gif_imgs)
+    shutil.rmtree('temp')
