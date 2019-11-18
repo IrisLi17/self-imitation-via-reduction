@@ -257,11 +257,12 @@ class EnsembleSAC(OffPolicyRLModel):
                     # reduce overestimation bias from function approximation error.
                     v_backup = tf.stop_gradient(min_qf_pi - self.ent_coef * logp_pi)
                     value_loss = 0.5 * tf.reduce_mean((value_fn - v_backup) ** 2)
-                    # Add value loss from ensemble
-                    for i in range(1, len(value_ensemble)):
-                        value_loss += 0.5 * tf.reduce_mean((value_ensemble[i] - v_backup) ** 2)
-
                     values_losses = qf1_loss + qf2_loss + value_loss
+
+                    # Add value loss from ensemble
+                    value_ensemble_loss = []
+                    for i in range(1, len(value_ensemble)):
+                        value_ensemble_loss.append(0.5 * tf.reduce_mean((value_ensemble[i] - v_backup) ** 2))
 
                     # Policy train op
                     # (has to be separate from value train op, because min_qf_pi appears in policy_loss)
@@ -290,6 +291,10 @@ class EnsembleSAC(OffPolicyRLModel):
                     # and we first need to compute the policy action before computing q values losses
                     with tf.control_dependencies([policy_train_op]):
                         train_values_op = value_optimizer.minimize(values_losses, var_list=values_params)
+                        self.train_values_ensemble_op = []
+                        for i in range(len(value_ensemble_loss)):
+                            params = get_vars('model/values_fn/vf_' + str(i + 1))
+                            self.train_values_ensemble_op.append(value_optimizer.minimize(value_ensemble_loss[i], var_list=params))
 
                         self.infos_names = ['policy_loss', 'qf1_loss', 'qf2_loss', 'value_loss', 'entropy']
                         # All ops to call during one training step
@@ -356,6 +361,13 @@ class EnsembleSAC(OffPolicyRLModel):
             writer.add_summary(summary, step)
         else:
             out = self.sess.run(self.step_ops, feed_dict)
+        for i in range(len(self.train_values_ensemble_op)):
+            batch_obs, _, _, _, _ = self.replay_buffer.sample(self.batch_size)
+            feed_dict = {
+                self.observations_ph: batch_obs,
+                self.learning_rate_ph: learning_rate,
+            }
+            self.sess.run(self.train_values_ensemble_op[i], feed_dict)
 
         # Unpack to monitor losses and entropy
         policy_loss, qf1_loss, qf2_loss, value_loss, *values = out

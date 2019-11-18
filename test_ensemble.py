@@ -30,6 +30,7 @@ def arg_parse():
     parser.add_argument('--env', default='FetchPushWallObstacle-v1')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--buffer_size', type=float, default=1e6)
     parser.add_argument('--num_timesteps', type=float, default=3e6)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
@@ -41,7 +42,8 @@ def arg_parse():
     parser.add_argument('--reward_offset', type=float, default=1.0)
     parser.add_argument('--hide_velocity', action="store_true", default=False)
     args = parser.parse_args()
-    return args
+    dict_args = vars(args)
+    return dict_args
 
 
 def configure_logger(log_path, **kwargs):
@@ -51,8 +53,8 @@ def configure_logger(log_path, **kwargs):
         logger.configure(**kwargs)
 
 
-def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play, determine_box, heavy_obstacle,
-         random_ratio, random_gripper, reward_offset, hide_velocity):
+def main(seed, num_timesteps, batch_size, log_path, load_path, play, heavy_obstacle,
+         random_gripper, reward_offset, buffer_size, **args):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -64,6 +66,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play, d
     set_global_seeds(seed)
 
     model_class = EnsembleSAC  # works also with SAC, DDPG and TD3
+
+    env_name = args['env']
 
     if env_name in ['FetchReach-v1', 'FetchPush-v1']:
         env = gym.make(env_name)
@@ -90,7 +94,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play, d
             from utils.wrapper import DoneOnSuccessWrapper
             env = DoneOnSuccessWrapper(env, reward_offset=reward_offset)
             env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=True)
-            train_kwargs = dict(buffer_size=int(1e6),
+            train_kwargs = dict(buffer_size=int(buffer_size),
                                 batch_size=batch_size,
                                 ent_coef="auto",
                                 gamma=0.95,
@@ -122,7 +126,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play, d
             model = HER.load(load_path, env=env)
 
         # Train the model
-        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=20)
+        model.learn(int(num_timesteps), seed=seed, callback=callback, log_interval=20)
 
         if rank == 0:
             model.save(os.path.join(log_dir, 'final'))
@@ -163,7 +167,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play, d
             action, _ = model.predict(obs)
             values = model.model.sess.run(value_ensemble_op,
                                           {model.model.observations_ph: np.expand_dims(np.concatenate([obs[key] for key in KEY_ORDER]), axis=0)})
-            print(values)
+            # print(values)
             values_ensemble.append(values)
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
@@ -219,7 +223,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play, d
 
 if __name__ == '__main__':
     args = arg_parse()
-    main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), batch_size=args.batch_size,
-         log_path=args.log_path, load_path=args.load_path, play=args.play, determine_box=args.determine_box,
-         heavy_obstacle=args.heavy_obstacle, random_ratio=args.random_ratio,
-         random_gripper=args.random_gripper, reward_offset=args.reward_offset, hide_velocity=args.hide_velocity)
+    # main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), batch_size=args.batch_size,
+    #      log_path=args.log_path, load_path=args.load_path, play=args.play, determine_box=args.determine_box,
+    #      heavy_obstacle=args.heavy_obstacle, random_ratio=args.random_ratio,
+    #      random_gripper=args.random_gripper, reward_offset=args.reward_offset, hide_velocity=args.hide_velocity,
+    #      buffer_size=args.buffer_size)
+    main(**args)
