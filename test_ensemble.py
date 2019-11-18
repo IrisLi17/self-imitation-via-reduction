@@ -133,9 +133,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play, d
         from stable_baselines.her.utils import KEY_ORDER
         assert load_path is not None
         model = HER.load(load_path, env=env)
-        value_ensemble = model.model.step_ops[-1]
+        value_ensemble_op = model.model.step_ops[-1]
 
-        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        fig, ax = plt.subplots(1, 2, figsize=(12, 6))
         if env_name in ['FetchPushWall-v1']:
             obs = env.reset()
             while (obs['achieved_goal'][0] - env.pos_wall[0]) * (obs['desired_goal'][0] - env.pos_wall[0]) > 0 \
@@ -157,21 +157,37 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play, d
         images = []
         frame_idx = 0
         episode_idx = 0
-        for _ in range(250):
-            images.append(img)
+        values_ensemble = []
+        for i in range(200):
+            # images.append(img)
             action, _ = model.predict(obs)
-            values = model.model.sess.run(value_ensemble,
+            values = model.model.sess.run(value_ensemble_op,
                                           {model.model.observations_ph: np.expand_dims(np.concatenate([obs[key] for key in KEY_ORDER]), axis=0)})
             print(values)
+            values_ensemble.append(values)
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
             obs, reward, done, _ = env.step(action)
             episode_reward += reward
             frame_idx += 1
-            ax.cla()
+            ax[0].cla()
+            ax[1].cla()
             img = env.render(mode='rgb_array')
-            ax.imshow(img)
-            ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx))
+            ax[0].imshow(img)
+            ax[0].set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx))
+            np_values = np.squeeze(np.asarray(values_ensemble), axis=(-2, -1))
+            # np_values = np.asarray(values_ensemble)
+            # print(np_values.shape)
+            # exit()
+            mean_values = np.mean(np_values, axis=-1)
+            std_values = np.std(np_values, axis=-1)
+            # print(mean_values.shape)
+            # print(std_values.shape)
+            ax[1].set_xlim(0, 50)
+            ax[1].set_ylim(-5, 20)
+            ax[1].plot(np.arange(len(values_ensemble)), mean_values, 'tab:blue')
+            ax[1].fill_between(np.arange(len(values_ensemble)), mean_values - std_values, mean_values + std_values, alpha=0.2)
+            plt.savefig('tempimg' + str(i) + '.png')
             plt.pause(0.05)
             if done:
                 if env_name in ['FetchPushWall-v1']:
@@ -194,6 +210,10 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play, d
                 episode_reward = 0.0
                 frame_idx = 0
                 episode_idx += 1
+                values_ensemble = []
+        for i in range(200):
+            images.append(plt.imread('tempimg' + str(i) + '.png'))
+            os.remove('tempimg' + str(i) + '.png')
         imageio.mimsave(env_name + '.gif', images)
 
 
