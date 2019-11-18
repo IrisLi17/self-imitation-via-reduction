@@ -53,6 +53,22 @@ def configure_logger(log_path, **kwargs):
         logger.configure(**kwargs)
 
 
+def make_env(env_name, **kwargs ):
+    if env_name in ['FetchReach-v1', 'FetchPush-v1']:
+        env = gym.make(env_name)
+    elif env_name in ENTRY_POINT.keys():
+        # kwargs = dict(penaltize_height=False,
+        #               random_box=not args['determine_box'],
+        #               heavy_obstacle=args['heavy_obstacle'],
+        #               random_ratio=args['random_ratio'],
+        #               random_gripper=args['random_gripper'],)
+        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=kwargs)
+        env = gym.make(env_name)
+    else:
+        raise NotImplementedError("%s not implemented" % env_name)
+    return env
+
+
 def main(seed, num_timesteps, batch_size, log_path, load_path, play, heavy_obstacle,
          random_gripper, reward_offset, buffer_size, **args):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
@@ -68,19 +84,11 @@ def main(seed, num_timesteps, batch_size, log_path, load_path, play, heavy_obsta
     model_class = EnsembleSAC  # works also with SAC, DDPG and TD3
 
     env_name = args['env']
-
-    if env_name in ['FetchReach-v1', 'FetchPush-v1']:
-        env = gym.make(env_name)
-    elif env_name in ENTRY_POINT.keys():
-        kwargs = dict(penaltize_height=False,
-                      random_box=True,
+    env_kwargs = dict(random_box=not args['determine_box'],
                       heavy_obstacle=heavy_obstacle,
-                      random_ratio=1.0,
-                      random_gripper=random_gripper,)
-        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=kwargs)
-        env = gym.make(env_name)
-    else:
-        raise NotImplementedError("%s not implemented" % env_name)
+                      random_ratio=args['random_ratio'],
+                      random_gripper=random_gripper)
+    env = make_env(env_name, **env_kwargs)
 
     if not play:
         os.makedirs(log_dir, exist_ok=True)
@@ -137,6 +145,7 @@ def main(seed, num_timesteps, batch_size, log_path, load_path, play, heavy_obsta
         from stable_baselines.her.utils import KEY_ORDER
         assert load_path is not None
         model = HER.load(load_path, env=env)
+        print(model.get_parameter_list())
         value_ensemble_op = model.model.step_ops[-1]
 
         fig, ax = plt.subplots(1, 2, figsize=(12, 6))
@@ -189,8 +198,10 @@ def main(seed, num_timesteps, batch_size, log_path, load_path, play, heavy_obsta
             # print(std_values.shape)
             ax[1].set_xlim(0, 50)
             ax[1].set_ylim(-5, 20)
-            ax[1].plot(np.arange(len(values_ensemble)), mean_values, 'tab:blue')
-            ax[1].fill_between(np.arange(len(values_ensemble)), mean_values - std_values, mean_values + std_values, alpha=0.2)
+            for j in range(np_values.shape[-1]):
+                ax[1].plot(np.arange(len(values_ensemble)), np_values[:, j], 'tab:blue', alpha=0.2)
+            # ax[1].plot(np.arange(len(values_ensemble)), mean_values, 'tab:blue')
+            # ax[1].fill_between(np.arange(len(values_ensemble)), mean_values - std_values, mean_values + std_values, alpha=0.2)
             plt.savefig('tempimg' + str(i) + '.png')
             plt.pause(0.05)
             if done:
