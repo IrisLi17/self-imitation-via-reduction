@@ -7,7 +7,7 @@ class EnsembleFeedForwardPolicy(FeedForwardPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, layers=None,
                  cnn_extractor=nature_cnn, feature_extraction="cnn", reg_weight=0.0,
                  layer_norm=False, act_fun=tf.nn.relu, **kwargs):
-        super(EnsembleFeedForwardPolicy, self).__init__(sess, ob_space, ac_space, n_env=n_env, n_steps=n_steps, n_batch=n_batch, reuse=False, layers=None,
+        super(EnsembleFeedForwardPolicy, self).__init__(sess, ob_space, ac_space, n_env=n_env, n_steps=n_steps, n_batch=n_batch, reuse=reuse, layers=layers,
                  cnn_extractor=cnn_extractor, feature_extraction=feature_extraction, reg_weight=reg_weight,
                  layer_norm=layer_norm, act_fun=act_fun, **kwargs)
 

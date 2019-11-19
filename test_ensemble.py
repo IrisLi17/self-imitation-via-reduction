@@ -1,8 +1,9 @@
 from stable_baselines import HER, SAC
-from baselines import EnsembleSAC
-from baselines.sac.ensemble_value import EnsembleMlpPolicy, EnsembleLnMlpPolicy
+from baselines import EnsembleSAC, HER_HACK
+from baselines.sac.ensemble_value import EnsembleMlpPolicy, EnsembleLnMlpPolicy, EnsembleFeedForwardPolicy
+from stable_baselines.common.policies import register_policy
 from stable_baselines.her import GoalSelectionStrategy, HERGoalEnvWrapper
-from push_wall_obstacle import FetchPushWallObstacleEnv
+from push_wall_obstacle import FetchPushWallObstacleEnv,FetchPushWallObstacleEnv_v4
 import gym
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,6 +22,7 @@ except ImportError:
 
 
 ENTRY_POINT = {'FetchPushWallObstacle-v1': FetchPushWallObstacleEnv,
+               'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
                }
 
 hard_test = True
@@ -29,6 +31,7 @@ def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', default='FetchPushWallObstacle-v1')
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--policy', type=str, default='EnsembleMlpPolicy')
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--buffer_size', type=float, default=1e6)
     parser.add_argument('--num_timesteps', type=float, default=3e6)
@@ -95,6 +98,7 @@ def main(seed, num_timesteps, batch_size, log_path, load_path, play, heavy_obsta
 
     # Available strategies (cf paper): future, final, episode, random
     goal_selection_strategy = 'future'  # equivalent to GoalSelectionStrategy.FUTURE
+    her_class = HER_HACK if env_name == 'FetchPushWallObstacle-v4' else HER
 
     if not play:
         if model_class is EnsembleSAC:
@@ -122,16 +126,19 @@ def main(seed, num_timesteps, batch_size, log_path, load_path, play, heavy_obsta
         if rank == 0:
             print('train_kwargs', train_kwargs)
             print('policy_kwargs', policy_kwargs)
+
+        class EnsembleCustomSACPolicy(EnsembleFeedForwardPolicy):
+            def __init__(self, *args, **kwargs):
+                super(EnsembleCustomSACPolicy, self).__init__(*args, **kwargs,
+                                                              layers=[256, 256],
+                                                              feature_extraction="mlp")
+        policy_class = EnsembleCustomSACPolicy if args['policy'] == 'EnsembleCustomSACPolicy' else EnsembleMlpPolicy
         # Wrap the model
-        if load_path is None:
-            model = HER(EnsembleMlpPolicy, env, model_class, n_sampled_goal=4,
-                        goal_selection_strategy=goal_selection_strategy,
-                        policy_kwargs=policy_kwargs,
-                        verbose=1,
-                        **train_kwargs)
-        else:
-            # I want to continue training here.
-            model = HER.load(load_path, env=env)
+        model = her_class(policy_class, env, model_class, n_sampled_goal=4,
+                          goal_selection_strategy=goal_selection_strategy,
+                          policy_kwargs=policy_kwargs,
+                          verbose=1,
+                          **train_kwargs)
 
         # Train the model
         model.learn(int(num_timesteps), seed=seed, callback=callback, log_interval=20)
@@ -144,7 +151,7 @@ def main(seed, num_timesteps, batch_size, log_path, load_path, play, heavy_obsta
     if play and rank == 0:
         from stable_baselines.her.utils import KEY_ORDER
         assert load_path is not None
-        model = HER.load(load_path, env=env)
+        model = her_class.load(load_path, env=env)
         print(model.get_parameter_list())
         value_ensemble_op = model.model.step_ops[-1]
 
