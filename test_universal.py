@@ -64,7 +64,8 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
     if env_name in ENTRY_POINT.keys():
         kwargs = dict(penaltize_height=False, heavy_obstacle=heavy_obstacle, random_gripper=random_gripper)
         print(kwargs)
-        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=kwargs)
+        max_episode_steps = 100 if env_name == 'FetchPushWallObstacle-v4' else 50
+        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=max_episode_steps, kwargs=kwargs)
         env = gym.make(env_name)
     else:
         raise NotImplementedError("%s not implemented" % env_name)

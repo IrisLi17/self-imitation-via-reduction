@@ -4,6 +4,7 @@ from baselines.sac.ensemble_value import EnsembleMlpPolicy, EnsembleLnMlpPolicy,
 from stable_baselines.common.policies import register_policy
 from stable_baselines.her import GoalSelectionStrategy, HERGoalEnvWrapper
 from push_wall_obstacle import FetchPushWallObstacleEnv,FetchPushWallObstacleEnv_v4
+from stable_baselines.common.vec_env import DummyVecEnv
 import gym
 import numpy as np
 import matplotlib.pyplot as plt
@@ -65,7 +66,8 @@ def make_env(env_name, **kwargs ):
         #               heavy_obstacle=args['heavy_obstacle'],
         #               random_ratio=args['random_ratio'],
         #               random_gripper=args['random_gripper'],)
-        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=50, kwargs=kwargs)
+        max_episode_steps = 100 if env_name == 'FetchPushWallObstacle-v4' else 50
+        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=max_episode_steps, kwargs=kwargs)
         env = gym.make(env_name)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
