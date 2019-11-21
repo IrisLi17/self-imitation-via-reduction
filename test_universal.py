@@ -37,6 +37,7 @@ def arg_parse():
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--heavy_obstacle', action="store_true", default=False)
     parser.add_argument('--random_gripper', action="store_true", default=False)
+    parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
     return args
 
@@ -48,7 +49,8 @@ def configure_logger(log_path, **kwargs):
         logger.configure(**kwargs)
 
 
-def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path, play, heavy_obstacle, random_gripper):
+def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path, play, heavy_obstacle, random_gripper,
+         export_gif):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -145,7 +147,7 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
         images = []
         frame_idx = 0
         episode_idx = 0
-        for i in range(300):
+        for i in range(max_episode_steps * 6):
             # images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
@@ -158,8 +160,9 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
             ax.imshow(img)
             ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
                          ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
-            plt.savefig('tempimg' + str(i) + '.png') 
-            plt.pause(0.05)
+            if export_gif:
+                plt.savefig('tempimg' + str(i) + '.png')
+            plt.pause(0.02)
             if done:
                 obs = env.reset()
                 while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
@@ -172,10 +175,11 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
                 episode_reward = 0.0
                 frame_idx = 0
                 episode_idx += 1
-        for i in range(300):
-            images.append(plt.imread('tempimg' + str(i) + '.png'))
-            os.remove('tempimg' + str(i) + '.png')
-        imageio.mimsave(env_name + '.gif', images)
+        if export_gif:
+            for i in range(max_episode_steps * 6):
+                images.append(plt.imread('tempimg' + str(i) + '.png'))
+                os.remove('tempimg' + str(i) + '.png')
+            imageio.mimsave(env_name + '.gif', images)
 
 
 if __name__ == '__main__':
@@ -183,4 +187,4 @@ if __name__ == '__main__':
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps),
          log_path=args.log_path, load_path=args.load_path, play=args.play,
          heavy_obstacle=args.heavy_obstacle, random_gripper=args.random_gripper,
-         policy=args.policy, batch_size=args.batch_size)
+         policy=args.policy, batch_size=args.batch_size, export_gif=args.export_gif)
