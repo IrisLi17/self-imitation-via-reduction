@@ -1,6 +1,7 @@
 import sys, os, shutil, imageio
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cm
 from test_ensemble import make_env
 from stable_baselines import HER
 from baselines import HER_HACK
@@ -25,6 +26,9 @@ def reset_goal(env):
 def generate_trajectory(env, obs, model, free=False, greedy=True):
     batch_obs = []
     imgs = []
+    fig = plt.figure(figsize=(12, 6))
+    ax1 = fig.add_subplot(121)
+    ax2 = fig.add_subplot(122)
     for i in range(50):
         if free:
             action, _ = model.predict(obs)
@@ -56,10 +60,20 @@ def generate_trajectory(env, obs, model, free=False, greedy=True):
         obs, _, _, _ = env.step(action)
         img = env.render(mode='rgb_array')
         imgs.append(img)
-        plt.imshow(img)
+        ax1.imshow(img)
+        plot_value_obstaclepos(obs, model.model, ax2, fig)
+        plt.savefig('temp' + str(i) + '.png')
         plt.pause(0.1)
     batch_obs = np.asarray(batch_obs)
     batch_imgs = np.asarray(imgs)
+    imgs = []
+    for i in range(50):
+        try:
+            imgs.append(plt.imread('temp' + str(i) + '.png'))
+            os.remove('temp' + str(i) + '.png')
+        except:
+            pass
+    imageio.mimsave('contour_obstacle.gif', imgs, duration=0.5)
     return batch_obs, batch_imgs
 
 
@@ -70,8 +84,8 @@ def hack_trajectory(env, obs, model, free=True, greedy=False):
     flag = True
     box_goal = obs['desired_goal'].copy()
     print('box goal', box_goal)
-    for i in range(50):
-        if flag and np.argmax(obs['desired_goal'][3:]) == 0:
+    for i in range(100):
+        if flag and np.argmax(obs['desired_goal'][3:]) == 0 and obs['observation'][3] < 1.37:
             # Switch the target to move obstacle
             print(str(i), 'switch target to obstacle')
             env.goal[3:] = np.array([0, 1.])
@@ -101,6 +115,44 @@ def hack_trajectory(env, obs, model, free=True, greedy=False):
     return batch_obs, batch_imgs
 
 
+# See the value fn at different configuration
+def plot_value_obstaclepos(obs, sac_model, ax, fig):
+    ax.cla()
+    if isinstance(obs, dict):
+        obs = np.concatenate([obs[key] for key in KEY_ORDER])
+    # Obstacle pos.
+    obstacle_xpos, obstacle_ypos = np.meshgrid(np.linspace(1.0, 1.6, 21), np.linspace(0.4, 1.1, 21))
+    grid_shape = obstacle_xpos.shape
+    _obstacle_xpos = np.reshape(obstacle_xpos, (-1, 1))
+    _obstacle_ypos = np.reshape(obstacle_ypos, (-1, 1))
+    batch_obs = np.tile(obs, (_obstacle_xpos.shape[0], 1))
+    batch_obs[:, 6] = _obstacle_xpos[:, 0]
+    batch_obs[:, 7] = _obstacle_ypos[:, 0]
+    batch_obs[:, 12] = batch_obs[:, 6] - batch_obs[:, 0]
+    batch_obs[:, 13] = batch_obs[:, 7] - batch_obs[:, 1]
+
+    # sac_model = model.model
+    feed_dict = {
+                sac_model.observations_ph: batch_obs,
+    }
+
+    values = sac_model.sess.run(sac_model.step_ops[6], feed_dict)
+    grid_values = np.reshape(values, grid_shape)
+    # surf = ax1.plot_surface(obstacle_xpos, obstacle_ypos, grid_values, cmap=cm.coolwarm)
+    surf = ax.contour(obstacle_xpos, obstacle_ypos, grid_values, 20, cmap=cm.coolwarm)
+    ax.clabel(surf, surf.levels, inline=True)
+    ax.scatter(obs[6], obs[7])
+    ax.set_xlim(1.6, 1.0)
+    ax.set_ylim(0.4, 1.1)
+    ax.set_xlabel('obstacle xpos')
+    ax.set_ylabel('obstacle ypos')
+    # ax1.set_zlim(0, 8)
+    # ax1.set_zlabel('value fn')
+    # ax1.view_init(elev=60, azim=135)
+
+    # plt.pause(0.1)
+
+
 # python visualize_ensemble.py FetchPushWallObstacle-v4 logs/FetchPushWallObstacle-v4_heavy_purerandom/her_sac/custom/model_70.zip 1 0
 if __name__ == '__main__':
     if len(sys.argv) < 5:
@@ -123,7 +175,7 @@ if __name__ == '__main__':
     # HACK goal
     # batch_obs, batch_imgs = hack_trajectory(env, obs, model, free=free, greedy=greedy)
     # imageio.mimsave('free_universe_hackgoal.gif', batch_imgs)
-    # exit()
+    exit()
     sac_model = model.model
     value_ensemble_op = sac_model.step_ops[-1]
     feed_dict = {
@@ -141,7 +193,7 @@ if __name__ == '__main__':
         ax.cla()
         ax2.cla()
         for j in range(values.shape[0]):
-            ax.plot(values[j, :i], 'tab:blue', alpha=0.2)
+            ax.plot(values[j, :i], alpha=0.5)
         ax.set_xlim(0, values.shape[1] - 1)
         ax.set_ylim(np.min(values), np.max(values))
         ax.set_xlabel('steps')
