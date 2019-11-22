@@ -6,6 +6,7 @@ from test_ensemble import make_env
 from stable_baselines import HER
 from baselines import HER_HACK
 from stable_baselines.her.utils import KEY_ORDER
+from collections import OrderedDict
 
 
 def reset_goal(env):
@@ -207,7 +208,14 @@ if __name__ == '__main__':
     print(values.shape)
     print(values)
 
+    obs = OrderedDict([
+        ('observation', batch_obs[-1][:40]),
+        ('achieved_goal', batch_obs[-1][40:45]),
+        ('desired_goal', batch_obs[-1][45:]),
+    ])
+    print('current distance', np.linalg.norm(obs['achieved_goal'][0:3] - obs['desired_goal'][0:3]))
     if np.linalg.norm(obs['achieved_goal'][0:3] - obs['desired_goal'][0:3]) < env.distance_threshold:
+        imageio.mimsave('testtime_select_subgoal.gif', batch_imgs)
         exit()
     # Here we assume the policy gets stuck. Perturb the obstacle, select the most promising one and perform subgoal.
     imgs = []
@@ -258,7 +266,9 @@ if __name__ == '__main__':
         ax.imshow(img)
         plt.pause(0.1)
         if step_so_far >= 100:
-            break
+            batch_imgs = np.concatenate([batch_imgs, np.array(imgs)], axis=0)
+            imageio.mimsave('testtime_select_subgoal.gif', batch_imgs)
+            exit()
     env.goal[:] = ultimate_goal
     obs['desired_goal'] = ultimate_goal
     obs['achieved_goal'][0:3] = obs['observation'][3:6]
