@@ -22,8 +22,10 @@
 		<geom name="wall0" pos="1.25 0.975 0.45" size="0.02 0.125 0.05" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
         <geom name="wall1" pos="1.25 0.525 0.45" size="0.02 0.125 0.05" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
 			
-		<body name="object0" pos="0.025 0.025 0.025">
-			<joint name="object0:joint" type="free" damping="0.01"></joint>
+		<body name="object0" pos="0 0 0.425">
+			<!--joint name="object0:joint" type="free" damping="0.01"></joint!-->
+			<joint axis="1 0 0" name="object0:slidex" type="slide" damping="0.01"></joint>
+			<joint axis="0 1 0" name="object0:slidey" type="slide" damping="0.01"></joint>
 			<geom size="0.025 0.025 0.025" type="box" condim="3" name="object0" material="block_mat" mass="2"></geom>
 			<!--geom size="0.025 0.025 0.025" type="sphere" condim="6" name="object0" material="block_mat" mass="2"></geom!-->
 			<site name="object0" pos="0 0 0" size="0.02 0.02 0.02" rgba="1 0 0 1" type="sphere"></site>

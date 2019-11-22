@@ -8,6 +8,7 @@ import numpy as np
 # Ensure we get the path separator correct on windows
 MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'push_wall_obstacle.xml')
 MODEL_XML_PATH2 = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'push_wall_heavy_obstacle.xml')
+MODEL_XML_PATH3 = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'push_wall_heavy_obstacle_v2.xml')
 
 
 class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
@@ -214,12 +215,10 @@ class FetchPushWallObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         return obs.copy()
 
 class FetchPushWallObstacleEnv_v2(fetch_env.FetchEnv, utils.EzPickle):
-    def __init__(self, reward_type='sparse', penaltize_height=False, heavy_obstacle=False, random_box=True,
-                 random_ratio=1.0, hack_obstacle=False, random_gripper=False):
-        if heavy_obstacle:
-            XML_PATH = MODEL_XML_PATH2
-        else:
-            XML_PATH = MODEL_XML_PATH
+    def __init__(self, reward_type='sparse', penaltize_height=False, heavy_obstacle=True, random_box=True,
+                 random_ratio=1.0, random_gripper=False):
+        assert heavy_obstacle
+        XML_PATH = MODEL_XML_PATH3
         initial_qpos = {
             'robot0:slide0': 0.405,
             'robot0:slide1': 0.48,
@@ -231,12 +230,11 @@ class FetchPushWallObstacleEnv_v2(fetch_env.FetchEnv, utils.EzPickle):
         self.penaltize_height = penaltize_height
         self.random_box = random_box
         self.random_ratio = random_ratio
-        self.hack_obstacle = hack_obstacle
         self.random_gripper = random_gripper
         fetch_env.FetchEnv.__init__(
             self, XML_PATH, has_object=True, block_gripper=True, n_substeps=20,
             gripper_extra_height=0.0, target_in_the_air=False, target_offset=0.0,
-            obj_range=0.15, target_range=0.15, distance_threshold=0.05,
+            obj_range=0.15, target_range=0.15, distance_threshold=0.07,
             initial_qpos=initial_qpos, reward_type=reward_type)
         utils.EzPickle.__init__(self)
         self.pos_wall = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
@@ -276,9 +274,9 @@ class FetchPushWallObstacleEnv_v2(fetch_env.FetchEnv, utils.EzPickle):
         if not self.has_object:
             achieved_goal = grip_pos.copy()
         else:
-            # achieved_goal = np.squeeze(object_pos.copy())
+            achieved_goal = np.squeeze(object_pos.copy())
             # achieved_goal = self.sim.data.get_site_xpos('object0').copy()
-            achieved_goal = self.sim.data.get_site_xpos('object1').copy()
+            # achieved_goal = self.sim.data.get_site_xpos('object1').copy()
         obs = np.concatenate([
             grip_pos, object_pos.ravel(), object_rel_pos.ravel(), gripper_state, object_rot.ravel(),
             object_velp.ravel(), object_velr.ravel(), grip_velp, gripper_vel,
@@ -344,15 +342,15 @@ class FetchPushWallObstacleEnv_v2(fetch_env.FetchEnv, utils.EzPickle):
 
     def _sample_goal(self):
         if self.has_object:
-            # goal = np.concatenate([self.initial_gripper_xpos[:3] + self.target_offset +
-            #                    self.np_random.uniform(-self.target_range, self.target_range, size=3) for _ in range(self.n_object)])
-            # goal[2] = self.height_offset
-            # goal[5] = self.sim.data.get_site_xpos('object1')[2]
+            goal = np.concatenate([self.initial_gripper_xpos[:3] + self.target_offset +
+                                   self.np_random.uniform(-self.target_range, self.target_range, size=3) for _ in range(self.n_object)])
+            goal[2] = self.sim.data.get_site_xpos('object0')[2]
+            goal[5] = self.sim.data.get_site_xpos('object1')[2]
 
             # goal = np.concatenate(([1.40], self.initial_gripper_xpos[1:3])) + np.array(
             #     [2 / 3, 1.0, 1.0]) * self.np_random.uniform(-self.target_range, self.target_range, size=3)
-            goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
-            goal[2] = self.sim.data.get_site_xpos('object1')[2]
+            # goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+            # goal[2] = self.sim.data.get_site_xpos('object1')[2]
             if not hasattr(self, 'size_wall'):
                 self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
             if not hasattr(self, 'size_object'):
@@ -365,13 +363,6 @@ class FetchPushWallObstacleEnv_v2(fetch_env.FetchEnv, utils.EzPickle):
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-0.15, 0.15, size=3)
         return goal.copy()
 
-    def compute_reward(self, achieved_goal, goal, info):
-        # r = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal, info)
-        r = fetch_env.FetchEnv.compute_reward(self, achieved_goal[0:3], goal[0:3], info)
-        if self.hack_obstacle:
-            r += -1 * info['is_blocked']
-        return r
-
     def step(self, action):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         self._set_action(action)
@@ -381,13 +372,7 @@ class FetchPushWallObstacleEnv_v2(fetch_env.FetchEnv, utils.EzPickle):
 
         done = False
         info = {
-            'is_success': self._is_success(obs['achieved_goal'][0:3], self.goal[0:3]),
-            'is_blocked': obs['observation'][7] + self.size_obstacle[1] * np.cos(obs['observation'][22]) > 0.85
-                          and obs['observation'][7] - self.size_obstacle[1] * np.cos(obs['observation'][22]) < 0.65
-                          and abs(obs['observation'][6] - self.pos_wall[0]) < self.size_wall[0] + self.size_obstacle[
-                0] + self.size_object[0]
-            # and (obs['achieved_goal'][0] - self.pos_wall[0]) * (obs['desired_goal'][0] - self.pos_wall[0]) < 0
-
+            'is_success': self._is_success(obs['achieved_goal'], self.goal),
         }
         reward = self.compute_reward(obs['achieved_goal'], self.goal, info)
         return obs, reward, done, info
@@ -397,6 +382,8 @@ class FetchPushWallObstacleEnv_v2(fetch_env.FetchEnv, utils.EzPickle):
         sites_offset = (self.sim.data.site_xpos - self.sim.model.site_pos).copy()
         site_id = self.sim.model.site_name2id('target0')
         self.sim.model.site_pos[site_id] = self.goal[:3] - sites_offset[0]
+        site_id = self.sim.model.site_name2id('target1')
+        self.sim.model.site_pos[site_id] = self.goal[3:6] - sites_offset[1]
         self.sim.forward()
 
 class FetchPushWallObstacleEnv_curricula(fetch_env.FetchEnv, utils.EzPickle):
@@ -585,10 +572,12 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
             'robot0:slide0': 0.405,
             'robot0:slide1': 0.48,
             'robot0:slide2': 0.0,
-            'object0:joint': [1.2, 0.53, 0.4, 1., 0., 0., 0.],
+            # 'object0:joint': [1.2, 0.53, 0.4, 1., 0., 0., 0.],
+            'object0:slidex': 0.0,
+            'object0:slidey': 0.0,
             'object1:joint': [1.35, 0.75, 0.4, 1., 0., 0., 0.],
         }
-        self.n_object = sum([('object' in item) for item in initial_qpos.keys()])
+        self.n_object = 2
         self.penaltize_height = penaltize_height
         self.random_box = random_box
         self.random_ratio = random_ratio
@@ -691,13 +680,17 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
                 stick_xpos = np.asarray(
                     [self.pos_wall[0] + self.size_wall[0] + self.size_obstacle[0], self.initial_gripper_xpos[1]])
                 # stick_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range / 4, 0])
-            object_qpos = self.sim.data.get_joint_qpos('object0:joint')
+            # Set the position of box. (two slide joints)
+            sim_state = self.sim.get_state()
+            box_jointx_i = self.sim.model.get_joint_qpos_addr("object0:slidex")
+            box_jointy_i = self.sim.model.get_joint_qpos_addr("object0:slidey")
+            sim_state.qpos[box_jointx_i] = object_xpos[0]
+            sim_state.qpos[box_jointy_i] = object_xpos[1]
+            self.sim.set_state(sim_state)
+            # Set the position of obstacle. (free joint)
             stick_qpos = self.sim.data.get_joint_qpos('object1:joint')
-            assert object_qpos.shape == (7,)
             assert stick_qpos.shape == (7,)
-            object_qpos[:2] = object_xpos
             stick_qpos[:2] = stick_xpos
-            self.sim.data.set_joint_qpos('object0:joint', object_qpos)
             self.sim.data.set_joint_qpos('object1:joint', stick_qpos)
 
         self.sim.forward()
