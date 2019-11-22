@@ -3,7 +3,7 @@ from baselines import EnsembleSAC, HER_HACK
 from baselines.sac.ensemble_value import EnsembleMlpPolicy, EnsembleLnMlpPolicy, EnsembleFeedForwardPolicy
 from stable_baselines.common.policies import register_policy
 from stable_baselines.her import GoalSelectionStrategy, HERGoalEnvWrapper
-from push_wall_obstacle import FetchPushWallObstacleEnv,FetchPushWallObstacleEnv_v4
+from push_wall_obstacle import FetchPushWallObstacleEnv,FetchPushWallObstacleEnv_v4, FetchPushWallObstacleEnv_v2
 from stable_baselines.common.vec_env import DummyVecEnv
 import gym
 import numpy as np
@@ -23,6 +23,7 @@ except ImportError:
 
 
 ENTRY_POINT = {'FetchPushWallObstacle-v1': FetchPushWallObstacleEnv,
+               'FetchPushWallObstacle-v2': FetchPushWallObstacleEnv_v2,
                'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
                }
 
@@ -66,7 +67,11 @@ def make_env(env_name, **kwargs ):
         #               heavy_obstacle=args['heavy_obstacle'],
         #               random_ratio=args['random_ratio'],
         #               random_gripper=args['random_gripper'],)
-        max_episode_steps = 100 if env_name == 'FetchPushWallObstacle-v4' else 50
+        if 'max_episode_steps' in kwargs:
+            max_episode_steps = kwargs['max_episode_steps']
+            del kwargs['max_episode_steps']
+        else:
+            max_episode_steps = 100 if env_name == 'FetchPushWallObstacle-v4' else 50
         gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=max_episode_steps, kwargs=kwargs)
         env = gym.make(env_name)
     else:
