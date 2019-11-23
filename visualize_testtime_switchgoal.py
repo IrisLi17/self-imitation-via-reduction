@@ -51,9 +51,9 @@ def generate_trajectory(env, obs, model, free=False, greedy=True):
             if obs['observation'][0] < obs['achieved_goal'][0] and i <= 4:
                 action = obs['achieved_goal'][:3] + np.array([0.0, 0, 0.1]) - obs['observation'][0:3]
             elif i <= 9:
-                action = obs['achieved_goal'][:3] + np.array([0.15, 0, -0.05]) - obs['observation'][0:3]
+                action = obs['achieved_goal'][:3] + np.array([0.17, 0, -0.1]) - obs['observation'][0:3]
             else:
-                action = np.asarray([-1.0, 0.0, 0.0])
+                action = np.asarray([-1.0, 0.0, -0.05])
         if not free:
             action /= np.max(np.abs(action))
             action = np.concatenate((action, [0.]))
@@ -284,6 +284,7 @@ if __name__ == '__main__':
         plt.pause(0.1)
         if step_so_far >= 100:
             break
+    print('current distance', np.linalg.norm(obs['achieved_goal'][0:3] - obs['desired_goal'][0:3]))
     batch_imgs = np.concatenate([batch_imgs, np.array(imgs)], axis=0)
     imageio.mimsave('testtime_select_subgoal.gif', batch_imgs)
     exit()

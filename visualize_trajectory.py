@@ -14,6 +14,8 @@ load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom/her_sac2'
 # load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom_offset0/her_sac'
 # load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom_hidev/her_sac'
 # load_path = 'logs/FetchPushWallObstacle-v4_heavy_purerandom/her_sac/custom'
+# load_path = 'logs/FetchPushWallObstacle-v1_heavy_purerandom_largebatch/her_sac'
+load_path = 'logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac'
 
 # Reset the environment to hard configuration.
 if 'FetchPushWallObstacle-v4' in load_path:
@@ -27,7 +29,7 @@ if not 'FetchPushWallObstacle-v4' in load_path:
     kwargs['hide_velocity'] = ('hidev' in load_path)
 env = ENTRY_POINT[env_name](**kwargs)
 
-model = HER.load(os.path.join(load_path, 'model_89.zip'), env=env)
+model = HER.load(os.path.join(load_path, 'model_54.zip'), env=env)
 
 '''
 #####
@@ -43,13 +45,14 @@ exit()
 '''
 
 free = False
-greedy = True
+greedy = False
 obs = env.reset()
 env.goal[0] = 1.2
 if not free:
     env.goal[1] = obs['achieved_goal'][1]
 else:
     env.goal[1] = 0.75 # hidev89 can push the obstacle with box
+    env.goal[1] = obs['observation'][4]
     if load_path == 'logs/FetchPushWallObstacle-v1_heavy_purerandom_hidev/her_sac':
         env.goal[1] = 0.85
     elif load_path == 'logs/FetchPushWallObstacle-v1_heavy_purerandom/her_sac':
@@ -70,21 +73,21 @@ for i in range(50):
             action = obs['observation'][6:9] - np.asarray([0, 0.2, 0]) - obs['observation'][0:3]
         elif i <= 20:
             action = np.asarray([0.0, 1.0, 0.0])
-        elif obs['observation'][0] < obs['achieved_goal'][0] + 0.1 and i <= 27:
-            action = obs['observation'][3:6] + np.asarray([0.1, 0.0, 0.1]) - obs['observation'][0:3]
+        elif obs['observation'][0] < obs['achieved_goal'][0] + 0.15 and i <= 27:
+            action = obs['observation'][3:6] + np.asarray([0.05, 0.0, 0.15]) - obs['observation'][0:3]
         elif i <= 32:
-            action = obs['observation'][3:6] + np.asarray([0.15, 0, -0.05]) - obs['observation'][0:3]
+            action = obs['observation'][3:6] + np.asarray([0.17, 0, -0.1]) - obs['observation'][0:3]
         elif obs['observation'][3] - obs['desired_goal'][0] > 0.05:
-            action = np.asarray([-1.0, 0.0, 0.0])
+            action = np.asarray([-1.0, 0.0, -0.05])
         else:
             action = np.asarray([1., 0, 1.])
     else:
         if obs['observation'][0] < obs['achieved_goal'][0] and i <= 4:
             action = obs['achieved_goal'][:3] + np.array([0.0, 0, 0.1]) - obs['observation'][0:3]
         elif i <= 9:
-            action = obs['achieved_goal'][:3] + np.array([0.15, 0, -0.05]) - obs['observation'][0:3]
+            action = obs['achieved_goal'][:3] + np.array([0.17, 0, -0.1]) - obs['observation'][0:3]
         else:
-            action = np.asarray([-1.0, 0.0, 0.0])
+            action = np.asarray([-1.0, 0.0, -0.05])
     print(i, action)
     if not free:
         action /= np.max(np.abs(action))
@@ -93,8 +96,8 @@ for i in range(50):
     obs, _, _, _ = env.step(action)
     img = env.render(mode='rgb_array')
     imgs.append(img)
-    plt.imshow(img)
-    plt.pause(0.1)
+    # plt.imshow(img)
+    # plt.pause(0.1)
 batch_obs = np.asarray(batch_obs)
 # np.save('free_universe_obs.npy', batch_obs)
 # np.save('free_universe_img.npy', imgs)
@@ -107,18 +110,23 @@ feed_dict = {
 fig = plt.figure(figsize=(10, 5))
 ax = fig.add_subplot(121)
 ax2 = fig.add_subplot(122)
+# values = []
+# for i in range(4):
+#     sac_model.load_parameters('logs/FetchPushWallObstacle-v1_heavy_purerandom/her_sac' + str(i + 1) + '/model_89.zip')
+#     values.append(sac_model.sess.run(sac_model.step_ops[6], feed_dict))
+# values = np.array(values)
 values = sac_model.sess.run(sac_model.step_ops[6], feed_dict)
 # np.save('free_universe_value.npy', values)
-for i in range(values.shape[0]):
-    print(i, values[i, :])
-# exit()
-os.makedirs('temp')
-for i in range(values.shape[0]):
+
+os.makedirs('temp', exist_ok=True)
+for i in range(values.shape[-2]):
     ax.cla()
     ax2.cla()
+    # for j in range(values.shape[0]):
+    #     ax.plot(values[j, :i, 0], alpha=0.5)
     ax.plot(values[:i, 0])
-    ax.set_xlim(0, values.shape[0] - 1)
-    ax.set_ylim(min(values), max(values))
+    ax.set_xlim(0, values.shape[-2] - 1)
+    ax.set_ylim(np.min(values), np.max(values))
     ax.set_xlabel('steps')
     ax.set_ylabel('value fn')
     ax2.imshow(imgs[i])
@@ -126,7 +134,7 @@ for i in range(values.shape[0]):
     plt.pause(0.1)
 plt.show()
 gif_imgs = []
-for i in range(values.shape[0]):
+for i in range(values.shape[-2]):
     img = plt.imread(os.path.join('temp', str(i) + '.png'))
     gif_imgs.append(img)
 # imageio.mimsave('greedy_universe.gif', gif_imgs)
