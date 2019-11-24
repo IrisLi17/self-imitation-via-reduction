@@ -3,6 +3,7 @@ from stable_baselines.sac.policies import FeedForwardPolicy as SACPolicy
 from stable_baselines.common.policies import register_policy
 from baselines import HER_HACK
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
+from test_ensemble import make_env
 import gym
 import matplotlib.pyplot as plt
 from stable_baselines.bench import Monitor
@@ -63,14 +64,20 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
 
     model_class = SAC  # works also with SAC, DDPG and TD3
 
-    if env_name in ENTRY_POINT.keys():
-        kwargs = dict(penaltize_height=False, heavy_obstacle=heavy_obstacle, random_gripper=random_gripper)
-        print(kwargs)
-        max_episode_steps = 100 if env_name == 'FetchPushWallObstacle-v4' else 50
-        gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=max_episode_steps, kwargs=kwargs)
-        env = gym.make(env_name)
-    else:
-        raise NotImplementedError("%s not implemented" % env_name)
+    # if env_name in ENTRY_POINT.keys():
+    #     kwargs = dict(penaltize_height=False, heavy_obstacle=heavy_obstacle, random_gripper=random_gripper)
+    #     print(kwargs)
+    #     max_episode_steps = 100 if env_name == 'FetchPushWallObstacle-v4' else 50
+    #     gym.register(env_name, entry_point=ENTRY_POINT[env_name], max_episode_steps=max_episode_steps, kwargs=kwargs)
+    #     env = gym.make(env_name)
+    # else:
+    #     raise NotImplementedError("%s not implemented" % env_name)
+    env_kwargs = dict(random_box=True,
+                      heavy_obstacle=heavy_obstacle,
+                      random_ratio=1.0,
+                      random_gripper=random_gripper,
+                      max_episode_steps=100, )
+    env = make_env(env_name, **env_kwargs)
 
     if not play:
         os.makedirs(log_dir, exist_ok=True)
@@ -136,6 +143,8 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
+        # sim_state = env.sim.get_state()
+        # print(sim_state)
         while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
                     obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
             if not hard_test:
@@ -147,7 +156,7 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
         images = []
         frame_idx = 0
         episode_idx = 0
-        for i in range(max_episode_steps * 6):
+        for i in range(env.spec.max_episode_steps * 6):
             # images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
@@ -176,7 +185,7 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
                 frame_idx = 0
                 episode_idx += 1
         if export_gif:
-            for i in range(max_episode_steps * 6):
+            for i in range(env.spec.max_episode_steps * 6):
                 images.append(plt.imread('tempimg' + str(i) + '.png'))
                 os.remove('tempimg' + str(i) + '.png')
             imageio.mimsave(env_name + '.gif', images)
