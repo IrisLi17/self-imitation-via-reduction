@@ -223,10 +223,12 @@ class FetchPushWallObstacleEnv_v2(fetch_env.FetchEnv, utils.EzPickle):
             'robot0:slide0': 0.405,
             'robot0:slide1': 0.48,
             'robot0:slide2': 0.0,
-            'object0:joint': [1.2, 0.53, 0.4, 1., 0., 0., 0.],
+            # 'object0:joint': [1.2, 0.53, 0.4, 1., 0., 0., 0.],
+            'object0:slidex': 0.0,
+            'object0:slidey': 0.0,
             'object1:joint': [1.35, 0.75, 0.4, 1., 0., 0., 0.],
         }
-        self.n_object = sum([('object' in item) for item in initial_qpos.keys()])
+        self.n_object = 2
         self.penaltize_height = penaltize_height
         self.random_box = random_box
         self.random_ratio = random_ratio
@@ -328,13 +330,17 @@ class FetchPushWallObstacleEnv_v2(fetch_env.FetchEnv, utils.EzPickle):
                 stick_xpos = np.asarray(
                     [self.pos_wall[0] + self.size_wall[0] + self.size_obstacle[0], self.initial_gripper_xpos[1]])
                 # stick_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range / 4, 0])
-            object_qpos = self.sim.data.get_joint_qpos('object0:joint')
+            # Set the position of box. (two slide joints)
+            sim_state = self.sim.get_state()
+            box_jointx_i = self.sim.model.get_joint_qpos_addr("object0:slidex")
+            box_jointy_i = self.sim.model.get_joint_qpos_addr("object0:slidey")
+            sim_state.qpos[box_jointx_i] = object_xpos[0]
+            sim_state.qpos[box_jointy_i] = object_xpos[1]
+            self.sim.set_state(sim_state)
+            # Set the position of obstacle. (free joint)
             stick_qpos = self.sim.data.get_joint_qpos('object1:joint')
-            assert object_qpos.shape == (7,)
             assert stick_qpos.shape == (7,)
-            object_qpos[:2] = object_xpos
             stick_qpos[:2] = stick_xpos
-            self.sim.data.set_joint_qpos('object0:joint', object_qpos)
             self.sim.data.set_joint_qpos('object1:joint', stick_qpos)
 
         self.sim.forward()
