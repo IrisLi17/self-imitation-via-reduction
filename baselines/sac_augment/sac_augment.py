@@ -443,7 +443,7 @@ class SAC_augment(OffPolicyRLModel):
                                                                       ep_done, writer, self.num_timesteps)
 
                 # Yunfei: episode augmentation
-                if done and (not info['is_success']) and np.argmax(self.env.env.goal[3:]) == 0:
+                if done and (not info['is_success']):
                     num_augment_episode = 0
                     # Store state and goal for recovering later.
                     recover_state = self.env.env.sim.get_state()
@@ -458,11 +458,13 @@ class SAC_augment(OffPolicyRLModel):
                     assert isinstance(obs_buf[0], np.ndarray)
                     perturb_obs = obs_buf[perturb_t]
                     noise = np.random.uniform(low=-0.10, high=0.10, size=(1024, 2))
-                    noise = np.sign(noise) * 0.05 + noise
+                    noise = np.sign(noise) * 0.00 + noise
                     perturb_obs[:, 6:8] += noise
                     perturb_obs[:, 12:14] = perturb_obs[:, 6:8] - perturb_obs[:, 0:2]
                     perturbed_obstacle_pos = perturb_obs[:, 6:8]
                     # TODO: if the goal is designed for obstacle, should we change other dimensions
+                    if np.argmax(self.env.env.goal[3:]) == 1:
+                        perturb_obs[:, -10:-8] = perturb_obs[:, 6:8]
 
                     subgoal_obs = obs_buf[perturb_t]
                     subgoal_obs[:, 40:43] = subgoal_obs[:, 6:9]
@@ -487,7 +489,7 @@ class SAC_augment(OffPolicyRLModel):
                         ind = np.argsort(criterion)
                         return ind[:k]
 
-                    selected_idx = criterion_topk_idx(perturb_values, subgoal_values, 10)
+                    selected_idx = criterion_topk_idx(perturb_values, subgoal_values, 20)
                     selected_restart_t = perturb_t[selected_idx]
                     # print('selected restart t', selected_restart_t)
                     selected_restart_state = [restart_state[_idx] for _idx in selected_idx]
@@ -553,18 +555,19 @@ class SAC_augment(OffPolicyRLModel):
                                 if augment_done or augment_info['is_success']:
                                     break
                             # print('after targetting ultimate', len(augment_episode_buffer))
-                            if True:
-                            # if augment_info['is_success']:
+                            # if True:
+                            if augment_info['is_success']:
                                 # store temp episode into replay buffer
                                 num_augment_episode += 1
                                 for item in augment_episode_buffer:
                                     self.replay_buffer.add(*item)
-                                # import pickle
-                                # with open('tmp_augment_episode_buffer.pkl', 'wb') as f:
-                                #     pickle.dump(augment_episode_buffer, f)
-                                # exit()
+                                # if np.argmax(recover_goal[3:]) == 1:
+                                #     import pickle
+                                #     with open('tmp_augment_episode_buffer.pkl', 'wb') as f:
+                                #         pickle.dump(augment_episode_buffer, f)
+                                #     exit()
 
-                    print('num_augment episode', num_augment_episode)
+                    print('num_augment episode', num_augment_episode, 'idx', np.argmax(recover_goal[3:]))
                     num_augment_ep_buf.append(num_augment_episode)
                     # Revert the environment to its original state
                     self.env.env.sim.set_state(recover_state)
