@@ -18,7 +18,7 @@ try:
 except ImportError:
     MPI = None
 
-hard_test = False
+hard_test = True
 
 
 def arg_parse():
@@ -130,7 +130,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                          verbose=1,
                          **train_kwargs)
         # TODO: this is a hack
-        model.model.load_parameters('logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac/model_30.zip')
+        # model.model.load_parameters('logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac/model_30.zip')
 
         # Train the model
         model.learn(int(num_timesteps), seed=seed, callback=callback, log_interval=20)

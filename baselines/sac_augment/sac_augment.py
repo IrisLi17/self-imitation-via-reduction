@@ -66,7 +66,7 @@ class SAC_augment(OffPolicyRLModel):
         Note: this has no effect on SAC logging for now
     """
 
-    def __init__(self, policy, env, trained_sac_model, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
+    def __init__(self, policy, env, trained_sac_model=None, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
@@ -559,6 +559,10 @@ class SAC_augment(OffPolicyRLModel):
                                 num_augment_episode += 1
                                 for item in augment_episode_buffer:
                                     self.replay_buffer.add(*item)
+                                # import pickle
+                                # with open('tmp_augment_episode_buffer.pkl', 'wb') as f:
+                                #     pickle.dump(augment_episode_buffer, f)
+                                # exit()
 
                     print('num_augment episode', num_augment_episode)
                     num_augment_ep_buf.append(num_augment_episode)
