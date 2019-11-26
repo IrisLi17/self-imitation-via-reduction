@@ -9,10 +9,15 @@ from stable_baselines.her.utils import KEY_ORDER
 from collections import OrderedDict
 
 
-def reset_goal(env):
+def reset_goal(env, random_goal=False):
     obs = env.reset()
-    env.goal[0] = 1.2
-    env.goal[1] = obs['observation'][4]
+    if not random_goal:
+        env.goal[0] = 1.2
+        env.goal[1] = obs['observation'][4]
+    else:
+        while not (env.goal[0] < env.pos_wall[0] < obs['observation'][3] or
+                    obs['observation'][3] > env.pos_wall[0] > env.goal[0]):
+            obs = env.reset()
     # env.goal[1] = 0.75
     if len(env.goal) == 5:
         env.goal[3:] = np.array([1., 0])
@@ -185,7 +190,7 @@ if __name__ == '__main__':
                       )
     env = make_env(env_name, **env_kwargs)
     model = her_class.load(load_path, env=env)
-    obs = reset_goal(env)
+    obs = reset_goal(env, random_goal=True)
     print(env.goal, obs['achieved_goal'], obs['desired_goal'])
     batch_obs, batch_imgs = generate_trajectory(env, obs, model, free=free, greedy=greedy)
     # HACK goal
@@ -219,7 +224,7 @@ if __name__ == '__main__':
         exit()
     # Here we assume the policy gets stuck. Perturb the obstacle, select the most promising one and perform subgoal.
     imgs = []
-    step_so_far = 30
+    step_so_far = batch_obs.shape[0]
     fig = plt.figure(figsize=(6, 6))
     ax = fig.add_subplot(111)
     ultimate_goal = obs['desired_goal'].copy()
@@ -265,7 +270,7 @@ if __name__ == '__main__':
         imgs.append(img)
         ax.imshow(img)
         plt.pause(0.1)
-        if step_so_far >= 100:
+        if step_so_far >= env.spec.max_episode_steps:
             batch_imgs = np.concatenate([batch_imgs, np.array(imgs)], axis=0)
             imageio.mimsave('testtime_select_subgoal.gif', batch_imgs)
             exit()
@@ -273,7 +278,7 @@ if __name__ == '__main__':
     obs['desired_goal'] = ultimate_goal
     obs['achieved_goal'][0:3] = obs['observation'][3:6]
     obs['achieved_goal'][3:] = np.array([1., 0.])
-    for i in range(70):
+    for i in range(env.spec.max_episode_steps - batch_obs.shape[0]):
         action , _ = model.predict(obs)
         print(step_so_far, action)
         obs, _, _, _ = env.step(action)
@@ -282,33 +287,33 @@ if __name__ == '__main__':
         imgs.append(img)
         ax.imshow(img)
         plt.pause(0.1)
-        if step_so_far >= 100:
+        if step_so_far >= env.spec.max_episode_steps:
             break
     print('current distance', np.linalg.norm(obs['achieved_goal'][0:3] - obs['desired_goal'][0:3]))
     batch_imgs = np.concatenate([batch_imgs, np.array(imgs)], axis=0)
     imageio.mimsave('testtime_select_subgoal.gif', batch_imgs)
     exit()
 
-    fig = plt.figure(figsize=(10, 5))
-    ax = fig.add_subplot(121)
-    ax2 = fig.add_subplot(122)
-    os.makedirs('temp', exist_ok=True)
-    for i in range(values.shape[1]):
-        ax.cla()
-        ax2.cla()
-        for j in range(values.shape[0]):
-            ax.plot(values[j, :i], alpha=0.5)
-        ax.set_xlim(0, values.shape[1] - 1)
-        ax.set_ylim(np.min(values), np.max(values))
-        ax.set_xlabel('steps')
-        ax.set_ylabel('value fn')
-        ax2.imshow(batch_imgs[i])
-        plt.savefig(os.path.join('temp', str(i) + '.png'))
-        plt.pause(0.1)
-    gif_imgs = []
-    for i in range(values.shape[1]):
-        img = plt.imread(os.path.join('temp', str(i) + '.png'))
-        gif_imgs.append(img)
-    gif_name = 'greedy_ensemble.gif' if greedy else 'hand_tune_ensemble.gif'
-    imageio.mimsave(gif_name, gif_imgs)
-    shutil.rmtree('temp')
+    # fig = plt.figure(figsize=(10, 5))
+    # ax = fig.add_subplot(121)
+    # ax2 = fig.add_subplot(122)
+    # os.makedirs('temp', exist_ok=True)
+    # for i in range(values.shape[1]):
+    #     ax.cla()
+    #     ax2.cla()
+    #     for j in range(values.shape[0]):
+    #         ax.plot(values[j, :i], alpha=0.5)
+    #     ax.set_xlim(0, values.shape[1] - 1)
+    #     ax.set_ylim(np.min(values), np.max(values))
+    #     ax.set_xlabel('steps')
+    #     ax.set_ylabel('value fn')
+    #     ax2.imshow(batch_imgs[i])
+    #     plt.savefig(os.path.join('temp', str(i) + '.png'))
+    #     plt.pause(0.1)
+    # gif_imgs = []
+    # for i in range(values.shape[1]):
+    #     img = plt.imread(os.path.join('temp', str(i) + '.png'))
+    #     gif_imgs.append(img)
+    # gif_name = 'greedy_ensemble.gif' if greedy else 'hand_tune_ensemble.gif'
+    # imageio.mimsave(gif_name, gif_imgs)
+    # shutil.rmtree('temp')
