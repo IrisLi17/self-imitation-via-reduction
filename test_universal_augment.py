@@ -31,6 +31,7 @@ def arg_parse():
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
+    parser.add_argument('--buffer_size', type=float, default=1e6)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--heavy_obstacle', action="store_true", default=False)
     parser.add_argument('--random_gripper', action="store_true", default=False)
@@ -91,13 +92,14 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
             # TODO: make monitor work with our hacky step
             # env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=True)
             sac_model = HER_HACK.load(args['trained_model']).model
-            train_kwargs = dict(buffer_size=int(1e6),
+            train_kwargs = dict(buffer_size=int(args['buffer_size']),
                                 ent_coef="auto",
                                 gamma=0.95,
                                 learning_starts=1000,
                                 train_freq=1,
                                 batch_size=batch_size,
                                 trained_sac_model=sac_model,
+                                n_subgoal=4,
                                 )
             policy_kwargs = {}
 

@@ -70,7 +70,7 @@ class SAC_augment(OffPolicyRLModel):
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
-                 random_exploration=0.0, verbose=0, tensorboard_log=None,
+                 random_exploration=0.0, n_subgoal=4, verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
         super(SAC_augment, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
@@ -95,6 +95,7 @@ class SAC_augment(OffPolicyRLModel):
         self.gamma = gamma
         self.action_noise = action_noise
         self.random_exploration = random_exploration
+        self.n_subgoal = n_subgoal
 
         self.value_fn = None
         self.graph = None
@@ -395,6 +396,17 @@ class SAC_augment(OffPolicyRLModel):
             transition_buf = []
             num_augment_ep_buf = deque(maxlen=100)
 
+            # Select top-K perturbed_obstacle_pos
+            def criterion_topk_idx(perturb_values, subgoal_values, k):
+                assert perturb_values.shape == subgoal_values.shape
+                assert k <= perturb_values.shape[0]
+                criterion = (perturb_values - np.min(perturb_values)) / (
+                np.max(perturb_values) - np.min(perturb_values)) * \
+                            (subgoal_values - np.min(subgoal_values)) / (
+                            np.max(subgoal_values) - np.min(subgoal_values))
+                ind = np.argsort(criterion)
+                return ind[:k]
+
             for step in range(total_timesteps):
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards
@@ -458,7 +470,7 @@ class SAC_augment(OffPolicyRLModel):
                     assert isinstance(obs_buf[0], np.ndarray)
                     perturb_obs = obs_buf[perturb_t]
                     noise = np.random.uniform(low=-0.10, high=0.10, size=(1024, 2))
-                    noise = np.sign(noise) * 0.00 + noise
+                    noise = np.sign(noise) * 0.0 + noise
                     perturb_obs[:, 6:8] += noise
                     perturb_obs[:, 12:14] = perturb_obs[:, 6:8] - perturb_obs[:, 0:2]
                     perturbed_obstacle_pos = perturb_obs[:, 6:8]
@@ -480,16 +492,7 @@ class SAC_augment(OffPolicyRLModel):
                     feed_dict = {self.trained_sac_model.observations_ph: subgoal_obs}
                     subgoal_values = np.squeeze(self.trained_sac_model.sess.run(self.trained_sac_model.step_ops[6], feed_dict), axis=-1)
 
-                    # Select top-K perturbed_obstacle_pos
-                    def criterion_topk_idx(perturb_values, subgoal_values, k):
-                        assert perturb_values.shape == subgoal_values.shape
-                        assert k <= perturb_values.shape[0]
-                        criterion = (perturb_values - np.min(perturb_values)) / (np.max(perturb_values) - np.min(perturb_values)) * \
-                                    (subgoal_values - np.min(subgoal_values)) / (np.max(subgoal_values) - np.min(subgoal_values))
-                        ind = np.argsort(criterion)
-                        return ind[:k]
-
-                    selected_idx = criterion_topk_idx(perturb_values, subgoal_values, 20)
+                    selected_idx = criterion_topk_idx(perturb_values, subgoal_values, self.n_subgoal)
                     selected_restart_t = perturb_t[selected_idx]
                     # print('selected restart t', selected_restart_t)
                     selected_restart_state = [restart_state[_idx] for _idx in selected_idx]
@@ -547,7 +550,8 @@ class SAC_augment(OffPolicyRLModel):
                                 augment_rescaled_action = augment_action * np.abs(self.action_space.low)
                                 augment_new_obs, augment_reward, _, augment_info = \
                                     self.env.step(augment_rescaled_action)
-                                augment_done = len(augment_episode_buffer) >= self.env.env.spec.max_episode_steps - 1
+                                augment_done = len(augment_episode_buffer) >= self.env.env.spec.max_episode_steps - 1 \
+                                               or augment_info['is_success']
                                 # store
                                 augment_episode_buffer.append((augment_obs, augment_action, augment_reward,
                                                                augment_new_obs, float(augment_done)))
@@ -556,16 +560,23 @@ class SAC_augment(OffPolicyRLModel):
                                     break
                             # print('after targetting ultimate', len(augment_episode_buffer))
                             # if True:
-                            if augment_info['is_success']:
-                                # store temp episode into replay buffer
-                                num_augment_episode += 1
-                                for item in augment_episode_buffer:
-                                    self.replay_buffer.add(*item)
-                                # if np.argmax(recover_goal[3:]) == 1:
-                                #     import pickle
-                                #     with open('tmp_augment_episode_buffer.pkl', 'wb') as f:
-                                #         pickle.dump(augment_episode_buffer, f)
-                                #     exit()
+                            # if augment_info['is_success']:
+                            #     # store temp episode into replay buffer
+                            #     # Check done.
+                            #     assert abs(np.sum([item[-1] for item in augment_episode_buffer]) - 1) < 1e-4
+                            #     assert abs(augment_episode_buffer[-1][-1] - 1) < 1e-4
+                            #     num_augment_episode += 1
+                            #     for item in augment_episode_buffer:
+                            #         self.replay_buffer.add(*item)
+
+                        if True:
+                            # store temp episode into replay buffer
+                            # Check done.
+                            assert abs(np.sum([item[-1] for item in augment_episode_buffer]) - 1) < 1e-4
+                            assert abs(augment_episode_buffer[-1][-1] - 1) < 1e-4
+                            num_augment_episode += 1
+                            for item in augment_episode_buffer:
+                                self.replay_buffer.add(*item)
 
                     print('num_augment episode', num_augment_episode, 'idx', np.argmax(recover_goal[3:]))
                     num_augment_ep_buf.append(num_augment_episode)
