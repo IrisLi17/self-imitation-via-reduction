@@ -7,7 +7,8 @@ CUDA_VISIBLE_DEVICES=2 python test_universal.py --env FetchPushWallObstacle-v4 -
 # fix z, augment
 CUDA_VISIBLE_DEVICES=0 python test_universal_augment.py --env FetchPushWallObstacle-v4 --policy CustomSACPolicy --trained_model logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac/final.zip --heavy_obstacle --random_gripper --num_timesteps 1e7 --log_path logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac_augment
 # fix z, augment no filter
-CUDA_VISIBLE_DEVICES=0 python test_universal_augment.py --env FetchPushWallObstacle-v4 --policy CustomSACPolicy --trained_model logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac/final.zip --heavy_obstacle --random_gripper --num_timesteps 1e7 --buffer_size 5e6 --log_path logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac_augment_scratch/nofilter
+CUDA_VISIBLE_DEVICES=0 python test_universal_augment.py --env FetchPushWallObstacle-v4 --policy CustomSACPolicy --trained_model logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac/final.zip --heavy_obstacle --random_gripper --num_timesteps 1e7 --buffer_size 3e6 --log_path logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac_augment_scratch/nofilter
+CUDA_VISIBLE_DEVICES=0 python test_universal_augment.py --env FetchPushWallObstacle-v4 --policy CustomSACPolicy --trained_model logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac/final.zip --heavy_obstacle --random_gripper --num_timesteps 1e7 --buffer_size 3e6 --n_subgoal 2 --log_path logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac_augment_scratch/nofilter_2
 # ensemble
 CUDA_VISIBLE_DEVICES=2 python test_ensemble.py --env FetchPushWallObstacle-v4 --policy EnsembleCustomSACPolicy --batch_size 128 --buffer_size 2e6 --heavy_obstacle --random_gripper --num_timesteps 1e7 --log_path logs/FetchPushWallObstacle-v4_heavy_purerandom/her_sac_ensemble
 

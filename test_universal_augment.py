@@ -18,7 +18,7 @@ try:
 except ImportError:
     MPI = None
 
-hard_test = True
+hard_test = False
 
 
 def arg_parse():
@@ -28,6 +28,7 @@ def arg_parse():
     parser.add_argument('--policy', type=str, default='MlpPolicy')
     parser.add_argument('--num_timesteps', type=float, default=3e6)
     parser.add_argument('--trained_model', default=None, type=str)
+    parser.add_argument('--n_subgoal', type=int, default=4)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
@@ -99,7 +100,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                                 train_freq=1,
                                 batch_size=batch_size,
                                 trained_sac_model=sac_model,
-                                n_subgoal=4,
+                                n_subgoal=args['n_subgoal'],
                                 )
             policy_kwargs = {}
 
