@@ -470,7 +470,7 @@ class SAC_augment(OffPolicyRLModel):
                     assert isinstance(obs_buf[0], np.ndarray)
                     perturb_obs = obs_buf[perturb_t]
                     noise = np.random.uniform(low=-0.10, high=0.10, size=(1024, 2))
-                    noise = np.sign(noise) * 0.0 + noise
+                    noise = np.sign(noise) * 0.05 + noise
                     perturb_obs[:, 6:8] += noise
                     perturb_obs[:, 12:14] = perturb_obs[:, 6:8] - perturb_obs[:, 0:2]
                     perturbed_obstacle_pos = perturb_obs[:, 6:8]

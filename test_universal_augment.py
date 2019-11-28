@@ -18,7 +18,7 @@ try:
 except ImportError:
     MPI = None
 
-hard_test = False
+hard_test = True
 
 
 def arg_parse():
@@ -34,6 +34,7 @@ def arg_parse():
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--buffer_size', type=float, default=1e6)
     parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--random_ratio', type=float, default=1.0)
     parser.add_argument('--heavy_obstacle', action="store_true", default=False)
     parser.add_argument('--random_gripper', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
@@ -74,7 +75,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
     env_name = args['env']
     env_kwargs = dict(random_box=True,
                       heavy_obstacle=heavy_obstacle,
-                      random_ratio=1.0,
+                      random_ratio=args['random_ratio'],
                       random_gripper=random_gripper,
                       max_episode_steps=100, )
     env = make_env(env_name, **env_kwargs)

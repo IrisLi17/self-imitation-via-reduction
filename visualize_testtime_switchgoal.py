@@ -219,8 +219,13 @@ if __name__ == '__main__':
         ('desired_goal', batch_obs[-1][45:]),
     ])
     print('current distance', np.linalg.norm(obs['achieved_goal'][0:3] - obs['desired_goal'][0:3]))
+    _gif_idx = 0
+    gif_name = 'testtime_select_subgoal_'
+    while os.path.exists(gif_name + str(_gif_idx) + '.gif'):
+        _gif_idx += 1
+    gif_name = gif_name + str(_gif_idx) + '.gif'
     if np.linalg.norm(obs['achieved_goal'][0:3] - obs['desired_goal'][0:3]) < env.distance_threshold:
-        imageio.mimsave('testtime_select_subgoal.gif', batch_imgs)
+        imageio.mimsave(gif_name, batch_imgs)
         exit()
     # Here we assume the policy gets stuck. Perturb the obstacle, select the most promising one and perform subgoal.
     imgs = []
@@ -272,7 +277,7 @@ if __name__ == '__main__':
         plt.pause(0.1)
         if step_so_far >= env.spec.max_episode_steps:
             batch_imgs = np.concatenate([batch_imgs, np.array(imgs)], axis=0)
-            imageio.mimsave('testtime_select_subgoal.gif', batch_imgs)
+            imageio.mimsave(gif_name, batch_imgs)
             exit()
     env.goal[:] = ultimate_goal
     obs['desired_goal'] = ultimate_goal
@@ -291,7 +296,7 @@ if __name__ == '__main__':
             break
     print('current distance', np.linalg.norm(obs['achieved_goal'][0:3] - obs['desired_goal'][0:3]))
     batch_imgs = np.concatenate([batch_imgs, np.array(imgs)], axis=0)
-    imageio.mimsave('testtime_select_subgoal.gif', batch_imgs)
+    imageio.mimsave(gif_name, batch_imgs)
     exit()
 
     # fig = plt.figure(figsize=(10, 5))
