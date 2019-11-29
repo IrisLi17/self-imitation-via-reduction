@@ -29,6 +29,7 @@ def arg_parse():
     parser.add_argument('--num_timesteps', type=float, default=3e6)
     parser.add_argument('--trained_model', default=None, type=str)
     parser.add_argument('--n_subgoal', type=int, default=4)
+    parser.add_argument('--augment_when_success', action="store_true", default=False)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
@@ -102,6 +103,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                                 batch_size=batch_size,
                                 trained_sac_model=sac_model,
                                 n_subgoal=args['n_subgoal'],
+                                augment_when_success=args['augment_when_success'],
                                 )
             policy_kwargs = {}
 

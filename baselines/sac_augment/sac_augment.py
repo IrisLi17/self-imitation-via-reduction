@@ -70,7 +70,8 @@ class SAC_augment(OffPolicyRLModel):
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
-                 random_exploration=0.0, n_subgoal=4, verbose=0, tensorboard_log=None,
+                 random_exploration=0.0, n_subgoal=4, augment_when_success=True,
+                 verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
         super(SAC_augment, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
@@ -96,6 +97,7 @@ class SAC_augment(OffPolicyRLModel):
         self.action_noise = action_noise
         self.random_exploration = random_exploration
         self.n_subgoal = n_subgoal
+        self.augment_when_success = augment_when_success
 
         self.value_fn = None
         self.graph = None
@@ -455,7 +457,7 @@ class SAC_augment(OffPolicyRLModel):
                                                                       ep_done, writer, self.num_timesteps)
 
                 # Yunfei: episode augmentation
-                if done and (not info['is_success']):
+                if done and (not info['is_success']) and np.argmax(self.env.env.goal[3:]) == 0:
                     num_augment_episode = 0
                     # Store state and goal for recovering later.
                     recover_state = self.env.env.sim.get_state()
@@ -560,16 +562,16 @@ class SAC_augment(OffPolicyRLModel):
                                     break
                             # print('after targetting ultimate', len(augment_episode_buffer))
                             # if True:
-                            # if augment_info['is_success']:
-                            #     # store temp episode into replay buffer
-                            #     # Check done.
-                            #     assert abs(np.sum([item[-1] for item in augment_episode_buffer]) - 1) < 1e-4
-                            #     assert abs(augment_episode_buffer[-1][-1] - 1) < 1e-4
-                            #     num_augment_episode += 1
-                            #     for item in augment_episode_buffer:
-                            #         self.replay_buffer.add(*item)
+                            if self.augment_when_success and augment_info['is_success']:
+                                # store temp episode into replay buffer
+                                # Check done.
+                                assert abs(np.sum([item[-1] for item in augment_episode_buffer]) - 1) < 1e-4
+                                assert abs(augment_episode_buffer[-1][-1] - 1) < 1e-4
+                                num_augment_episode += 1
+                                for item in augment_episode_buffer:
+                                    self.replay_buffer.add(*item)
 
-                        if True:
+                        if not self.augment_when_success:
                             # store temp episode into replay buffer
                             # Check done.
                             assert abs(np.sum([item[-1] for item in augment_episode_buffer]) - 1) < 1e-4
