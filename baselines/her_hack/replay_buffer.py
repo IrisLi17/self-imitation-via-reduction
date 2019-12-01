@@ -172,8 +172,8 @@ class HindsightExperienceReplayWrapper(object):
                 obs_dict['desired_goal'] = goal
                 next_obs_dict['desired_goal'] = goal
 
-                assert len(goal) == 3 or len(goal) == 5
-                if len(goal) == 5:
+                assert len(goal) == 3 or len(goal) == 5 or len(goal) == 6
+                if len(goal) > 3:
                     # modify dict, note that desired_goal is already modified, only need to modify achieved goal
                     one_hot = goal[3:]
                     idx = np.argmax(one_hot)

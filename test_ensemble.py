@@ -4,6 +4,7 @@ from baselines.sac.ensemble_value import EnsembleMlpPolicy, EnsembleLnMlpPolicy,
 from stable_baselines.common.policies import register_policy
 from stable_baselines.her import GoalSelectionStrategy, HERGoalEnvWrapper
 from push_wall_obstacle import FetchPushWallObstacleEnv,FetchPushWallObstacleEnv_v4, FetchPushWallObstacleEnv_v2, FetchPushWallObstacleEnv_v5
+from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from stable_baselines.common.vec_env import DummyVecEnv
 import gym
 import numpy as np
@@ -26,6 +27,7 @@ ENTRY_POINT = {'FetchPushWallObstacle-v1': FetchPushWallObstacleEnv,
                'FetchPushWallObstacle-v2': FetchPushWallObstacleEnv_v2,
                'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
                'FetchPushWallObstacle-v5': FetchPushWallObstacleEnv_v5,
+               'FetchPushWallDoubleObstacle-v1': FetchPushWallDoubleObstacleEnv,
                }
 
 hard_test = True
