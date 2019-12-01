@@ -567,6 +567,7 @@ class SAC_augment(OffPolicyRLModel):
                                 # Check done.
                                 assert abs(np.sum([item[-1] for item in augment_episode_buffer]) - 1) < 1e-4
                                 assert abs(augment_episode_buffer[-1][-1] - 1) < 1e-4
+                                assert abs(np.sum([item[2] for item in augment_episode_buffer]) - 2) < 1e-4
                                 num_augment_episode += 1
                                 for item in augment_episode_buffer:
                                     self.replay_buffer.add(*item)

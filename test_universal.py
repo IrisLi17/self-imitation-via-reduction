@@ -36,6 +36,7 @@ def arg_parse():
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--gamma', type=float, default=0.95)
     parser.add_argument('--heavy_obstacle', action="store_true", default=False)
     parser.add_argument('--random_gripper', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
@@ -51,7 +52,7 @@ def configure_logger(log_path, **kwargs):
 
 
 def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path, play, heavy_obstacle, random_gripper,
-         export_gif):
+         export_gif, gamma):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -93,7 +94,7 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
             env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=True)
             train_kwargs = dict(buffer_size=int(1e6),
                                 ent_coef="auto",
-                                gamma=0.95,
+                                gamma=gamma,
                                 learning_starts=1000,
                                 train_freq=1,
                                 batch_size=batch_size,
@@ -145,11 +146,11 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
         obs = env.reset()
         # sim_state = env.sim.get_state()
         # print(sim_state)
-        while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
-                    obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
-            if not hard_test:
-                break
-            obs = env.reset()
+        # while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
+        #             obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
+        #     if not hard_test:
+        #         break
+        #     obs = env.reset()
         print('gripper_pos', obs['observation'][0:3])
         img = env.render(mode='rgb_array')
         episode_reward = 0.0
@@ -174,11 +175,11 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
             plt.pause(0.02)
             if done:
                 obs = env.reset()
-                while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
-                            obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
-                    if not hard_test:
-                        break
-                    obs = env.reset()
+                # while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
+                #             obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
+                #     if not hard_test:
+                #         break
+                #     obs = env.reset()
                 print('gripper_pos', obs['observation'][0:3])
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
@@ -196,4 +197,5 @@ if __name__ == '__main__':
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps),
          log_path=args.log_path, load_path=args.load_path, play=args.play,
          heavy_obstacle=args.heavy_obstacle, random_gripper=args.random_gripper,
-         policy=args.policy, batch_size=args.batch_size, export_gif=args.export_gif)
+         policy=args.policy, batch_size=args.batch_size, export_gif=args.export_gif,
+         gamma=args.gamma)
