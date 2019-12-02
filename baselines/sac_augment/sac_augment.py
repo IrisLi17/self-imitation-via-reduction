@@ -416,13 +416,13 @@ class SAC_augment(OffPolicyRLModel):
                         csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
                         title = ['gripper_x', 'gripper_y', 'gripper_z', 'box_x', 'box_y', 'box_z',
                                  'obstacle_x', 'obstacle_y', 'obstacle_z',
-                                 'goal_0', 'goal_1', 'goal_2', 'goal_3', 'goal_4']
+                                 'goal_0', 'goal_1', 'goal_2', 'goal_3', 'goal_4', 'done']
                         csvwriter.writerow(title)
                 with open(os.path.join(logger.get_dir(), 'success_traj.csv'), 'a', newline='') as csvfile:
                     csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
                     for item in augment_episode_buffer:
                         log_obs = item[0]
-                        data = [log_obs[i] for i in range(9)] + [log_obs[i] for i in range(45, 50)]
+                        data = [log_obs[i] for i in range(9)] + [log_obs[i] for i in range(45, 50)] + [item[4]]
                         csvwriter.writerow(data)
 
             for step in range(total_timesteps):
