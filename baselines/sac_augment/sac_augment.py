@@ -1,4 +1,4 @@
-import sys
+import sys, os, csv
 import time
 import multiprocessing
 from collections import deque
@@ -397,6 +397,7 @@ class SAC_augment(OffPolicyRLModel):
             obs_buf = []
             transition_buf = []
             num_augment_ep_buf = deque(maxlen=100)
+            num_success_augment_ep_buf = deque(maxlen=100)
 
             # Select top-K perturbed_obstacle_pos
             def criterion_topk_idx(perturb_values, subgoal_values, k):
@@ -408,6 +409,21 @@ class SAC_augment(OffPolicyRLModel):
                             np.max(subgoal_values) - np.min(subgoal_values))
                 ind = np.argsort(criterion)
                 return ind[:k]
+
+            def log_traj(augment_episode_buffer):
+                if not os.path.exists(os.path.join(logger.get_dir(), 'success_traj.csv')):
+                    with open(os.path.join(logger.get_dir(), 'success_traj.csv'), 'a', newline='') as csvfile:
+                        csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
+                        title = ['gripper_x', 'gripper_y', 'gripper_z', 'box_x', 'box_y', 'box_z',
+                                 'obstacle_x', 'obstacle_y', 'obstacle_z',
+                                 'goal_0', 'goal_1', 'goal_2', 'goal_3', 'goal_4']
+                        csvwriter.writerow(title)
+                with open(os.path.join(logger.get_dir(), 'success_traj.csv'), 'a', newline='') as csvfile:
+                    csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
+                    for item in augment_episode_buffer:
+                        log_obs = item[0]
+                        data = [log_obs[i] for i in range(9)] + [log_obs[i] for i in range(45, 50)]
+                        csvwriter.writerow(data)
 
             for step in range(total_timesteps):
                 if callback is not None:
@@ -459,6 +475,7 @@ class SAC_augment(OffPolicyRLModel):
                 # Yunfei: episode augmentation
                 if done and (not info['is_success']) and np.argmax(self.env.env.goal[3:]) == 0:
                     num_augment_episode = 0
+                    num_success_augment_episode = 0
                     # Store state and goal for recovering later.
                     recover_state = self.env.env.sim.get_state()
                     recover_goal = self.env.env.goal.copy()
@@ -569,6 +586,8 @@ class SAC_augment(OffPolicyRLModel):
                                 assert abs(augment_episode_buffer[-1][-1] - 1) < 1e-4
                                 assert abs(np.sum([item[2] for item in augment_episode_buffer]) - 2) < 1e-4
                                 num_augment_episode += 1
+                                num_success_augment_episode += 1
+                                log_traj(augment_episode_buffer)
                                 for item in augment_episode_buffer:
                                     self.replay_buffer.add(*item)
 
@@ -578,11 +597,16 @@ class SAC_augment(OffPolicyRLModel):
                             assert abs(np.sum([item[-1] for item in augment_episode_buffer]) - 1) < 1e-4
                             assert abs(augment_episode_buffer[-1][-1] - 1) < 1e-4
                             num_augment_episode += 1
+                            num_success_augment_episode += int(augment_info['is_success'])
+                            # Log success traj to csv
+                            if augment_info['is_success']:
+                                log_traj(augment_episode_buffer)
                             for item in augment_episode_buffer:
                                 self.replay_buffer.add(*item)
 
-                    print('num_augment episode', num_augment_episode, 'idx', np.argmax(recover_goal[3:]))
+                    print('#augment episode', num_augment_episode, '#success episode', num_success_augment_episode, 'idx', np.argmax(recover_goal[3:]))
                     num_augment_ep_buf.append(num_augment_episode)
+                    num_success_augment_ep_buf.append(num_success_augment_episode)
                     # Revert the environment to its original state
                     self.env.env.sim.set_state(recover_state)
                     self.env.env.goal[:] = recover_goal
@@ -653,6 +677,7 @@ class SAC_augment(OffPolicyRLModel):
                             logger.logkv(name, val)
                     if len(num_augment_ep_buf) > 0:
                         logger.logkv('mean_num_augment_ep', safe_mean(num_augment_ep_buf))
+                        logger.logkv('mean_success_augment_ep', safe_mean(num_success_augment_ep_buf))
                     logger.logkv("total timesteps", self.num_timesteps)
                     logger.dumpkvs()
                     # Reset infos:
