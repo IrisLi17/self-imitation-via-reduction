@@ -70,7 +70,7 @@ class SAC_augment(OffPolicyRLModel):
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
-                 random_exploration=0.0, n_subgoal=4, augment_when_success=True,
+                 random_exploration=0.0, n_subgoal=4, augment_when_success=True, hack_augment_time=False,
                  verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -98,6 +98,7 @@ class SAC_augment(OffPolicyRLModel):
         self.random_exploration = random_exploration
         self.n_subgoal = n_subgoal
         self.augment_when_success = augment_when_success
+        self.hack_augment_time = hack_augment_time
 
         self.value_fn = None
         self.graph = None
@@ -473,7 +474,8 @@ class SAC_augment(OffPolicyRLModel):
                                                                       ep_done, writer, self.num_timesteps)
 
                 # Yunfei: episode augmentation
-                if done and (not info['is_success']) and np.argmax(self.env.env.goal[3:]) == 0:
+                if ((not self.hack_augment_time) or (self.hack_augment_time and step > int(1.5e6))) \
+                        and done and (not info['is_success']) and np.argmax(self.env.env.goal[3:]) == 0:
                     num_augment_episode = 0
                     num_success_augment_episode = 0
                     # Store state and goal for recovering later.
@@ -482,7 +484,10 @@ class SAC_augment(OffPolicyRLModel):
                     # Sample \hat t and \hat s
                     # state_buf = np.asarray(state_buf)
                     obs_buf = np.asarray(obs_buf)
-                    perturb_t = np.random.randint(0, len(state_buf), 1024)
+                    if not self.hack_augment_time:
+                        perturb_t = np.random.randint(0, len(state_buf), 1024)
+                    else:
+                        perturb_t = np.random.randint(30, 40, 1024)
                     # restart_state = state_buf[perturb_t]
                     restart_state = [state_buf[_t] for _t in perturb_t]
                     restart_obs = obs_buf[perturb_t]
@@ -597,9 +602,10 @@ class SAC_augment(OffPolicyRLModel):
                             assert abs(np.sum([item[-1] for item in augment_episode_buffer]) - 1) < 1e-4
                             assert abs(augment_episode_buffer[-1][-1] - 1) < 1e-4
                             num_augment_episode += 1
-                            num_success_augment_episode += int(augment_info['is_success'])
+                            num_success_augment_episode += (int(augment_info['is_success']) and
+                                                            np.argmax(augment_episode_buffer[-1][0][-2:]) == 0)
                             # Log success traj to csv
-                            if augment_info['is_success']:
+                            if augment_info['is_success'] and np.argmax(augment_episode_buffer[-1][0][-2:]) == 0:
                                 log_traj(augment_episode_buffer)
                             for item in augment_episode_buffer:
                                 self.replay_buffer.add(*item)
@@ -675,9 +681,9 @@ class SAC_augment(OffPolicyRLModel):
                     if len(infos_values) > 0:
                         for (name, val) in zip(self.infos_names, infos_values):
                             logger.logkv(name, val)
-                    if len(num_augment_ep_buf) > 0:
-                        logger.logkv('mean_num_augment_ep', safe_mean(num_augment_ep_buf))
-                        logger.logkv('mean_success_augment_ep', safe_mean(num_success_augment_ep_buf))
+                    # if len(num_augment_ep_buf) > 0:
+                    logger.logkv('mean_num_augment_ep', safe_mean(num_augment_ep_buf))
+                    logger.logkv('mean_success_augment_ep', safe_mean(num_success_augment_ep_buf))
                     logger.logkv("total timesteps", self.num_timesteps)
                     logger.dumpkvs()
                     # Reset infos:
