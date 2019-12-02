@@ -46,7 +46,7 @@
 			<!--joint name="object2:joint" type="free" damping="0.01"></joint!-->
 			<joint axis="1 0 0" name="object2:slidex" type="slide" damping="0.01"></joint>
 			<joint axis="0 1 0" name="object2:slidey" type="slide" damping="0.01"></joint>
-			<geom size="0.13 0.03 0.03" type="box" condim="3" name="object2" material="stick_mat" mass="20" friction="1 0.005 0.0001"></geom>
+			<geom size="0.13 0.03 0.03" type="box" condim="3" name="object2" material="stick_mat" rgba="1 0 1 0.5" mass="20" friction="1 0.005 0.0001"></geom>
 			<site name="object2" pos="0 0 0" size="0.02 0.02 0.02" rgba="0.5 0.2 0 0" type="sphere"></site>
 		</body>
 
