@@ -71,6 +71,7 @@ class SAC_augment(OffPolicyRLModel):
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
                  random_exploration=0.0, n_subgoal=4, augment_when_success=True, hack_augment_time=False,
+                 hack_augment_policy=False,
                  verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -99,6 +100,7 @@ class SAC_augment(OffPolicyRLModel):
         self.n_subgoal = n_subgoal
         self.augment_when_success = augment_when_success
         self.hack_augment_time = hack_augment_time
+        self.hack_augment_policy = hack_augment_policy
 
         self.value_fn = None
         self.graph = None
@@ -409,7 +411,7 @@ class SAC_augment(OffPolicyRLModel):
                             (subgoal_values - np.min(subgoal_values)) / (
                             np.max(subgoal_values) - np.min(subgoal_values))
                 ind = np.argsort(criterion)
-                return ind[:k]
+                return ind[-k:]
 
             def log_traj(augment_episode_buffer):
                 if not os.path.exists(os.path.join(logger.get_dir(), 'success_traj.csv')):
@@ -484,16 +486,13 @@ class SAC_augment(OffPolicyRLModel):
                     # Sample \hat t and \hat s
                     # state_buf = np.asarray(state_buf)
                     obs_buf = np.asarray(obs_buf)
-                    if not self.hack_augment_time:
-                        perturb_t = np.random.randint(0, len(state_buf), 1024)
-                    else:
-                        perturb_t = np.random.randint(30, 40, 1024)
+                    perturb_t = np.random.randint(0, len(state_buf), 1024*4)
                     # restart_state = state_buf[perturb_t]
                     restart_state = [state_buf[_t] for _t in perturb_t]
                     restart_obs = obs_buf[perturb_t]
                     assert isinstance(obs_buf[0], np.ndarray)
                     perturb_obs = obs_buf[perturb_t]
-                    noise = np.random.uniform(low=-0.10, high=0.10, size=(1024, 2))
+                    noise = np.random.uniform(low=-0.10, high=0.10, size=(1024*4, 2))
                     noise = np.sign(noise) * 0.05 + noise
                     perturb_obs[:, 6:8] += noise
                     perturb_obs[:, 12:14] = perturb_obs[:, 6:8] - perturb_obs[:, 0:2]
@@ -537,9 +536,14 @@ class SAC_augment(OffPolicyRLModel):
                         # print('subgoal is', self.env.env.goal)
                         # Achieved goal and desired goal should be set correctly now.
                         augment_obs = self.env.convert_dict_to_obs(self.env.env.get_obs())
+                        # print('restart box', augment_obs[3:6])
                         while len(augment_episode_buffer) < self.env.env.spec.max_episode_steps:
-                            # Use the scratch model to take action.
-                            augment_action = self.policy_tf.step(augment_obs[None], deterministic=False).flatten()
+                            if not self.hack_augment_policy:
+                                # Use the scratch model to take action.
+                                augment_action = self.policy_tf.step(augment_obs[None], deterministic=False).flatten()
+                            else:
+                                # Use trained model to take action.
+                                augment_action = self.trained_sac_model.policy_tf.step(augment_obs[None], deterministic=False).flatten()
                             # Add noise to the action (improve exploration,
                             # not needed in general)
                             if self.action_noise is not None:
@@ -555,6 +559,8 @@ class SAC_augment(OffPolicyRLModel):
                             augment_obs = augment_new_obs
                             # deal with timelimit wrapper. done is always true
                             if augment_done or augment_info['is_success']:
+                                # if not augment_info['is_success']:
+                                #     print('fail to achieve subgoal', self.env.env.goal)
                                 break
                         # print('after targetting subgoal', len(augment_episode_buffer))
                         # Successfully get to subgoal, now it should target at original goal
@@ -565,7 +571,10 @@ class SAC_augment(OffPolicyRLModel):
                             # print('ultimate goal is', self.env.env.goal)
                             augment_obs = self.env.convert_dict_to_obs(self.env.env.get_obs())
                             while len(augment_episode_buffer) < self.env.env.spec.max_episode_steps:
-                                augment_action = self.policy_tf.step(augment_obs[None], deterministic=False).flatten()
+                                if not self.hack_augment_policy:
+                                    augment_action = self.policy_tf.step(augment_obs[None], deterministic=False).flatten()
+                                else:
+                                    augment_action = self.trained_sac_model.policy_tf.step(augment_obs[None], deterministic=False).flatten()
                                 # Add noise to the action (improve exploration,
                                 # not needed in general)
                                 if self.action_noise is not None:
@@ -581,6 +590,8 @@ class SAC_augment(OffPolicyRLModel):
                                                                augment_new_obs, float(augment_done)))
                                 augment_obs = augment_new_obs
                                 if augment_done or augment_info['is_success']:
+                                    # if not augment_info['is_success']:
+                                    #     print('fail to achieve ultimate goal', self.env.env.goal)
                                     break
                             # print('after targetting ultimate', len(augment_episode_buffer))
                             # if True:

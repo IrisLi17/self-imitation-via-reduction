@@ -36,6 +36,7 @@ def arg_parse():
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--random_ratio', type=float, default=1.0)
     parser.add_argument('--gamma', type=float, default=0.95)
     parser.add_argument('--heavy_obstacle', action="store_true", default=False)
     parser.add_argument('--random_gripper', action="store_true", default=False)
@@ -52,7 +53,7 @@ def configure_logger(log_path, **kwargs):
 
 
 def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path, play, heavy_obstacle, random_gripper,
-         export_gif, gamma):
+         export_gif, gamma, random_ratio):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -75,7 +76,7 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
     #     raise NotImplementedError("%s not implemented" % env_name)
     env_kwargs = dict(random_box=True,
                       heavy_obstacle=heavy_obstacle,
-                      random_ratio=1.0,
+                      random_ratio=random_ratio,
                       random_gripper=random_gripper,
                       max_episode_steps=100, )
     env = make_env(env_name, **env_kwargs)
@@ -198,4 +199,4 @@ if __name__ == '__main__':
          log_path=args.log_path, load_path=args.load_path, play=args.play,
          heavy_obstacle=args.heavy_obstacle, random_gripper=args.random_gripper,
          policy=args.policy, batch_size=args.batch_size, export_gif=args.export_gif,
-         gamma=args.gamma)
+         gamma=args.gamma, random_ratio=args.random_ratio)

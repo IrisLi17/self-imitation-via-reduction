@@ -31,6 +31,7 @@ def arg_parse():
     parser.add_argument('--n_subgoal', type=int, default=4)
     parser.add_argument('--augment_when_success', action="store_true", default=False)
     parser.add_argument('--hack_augment_time', action="store_true", default=False)
+    parser.add_argument('--hack_augment_policy', action="store_true", default=False)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
@@ -106,6 +107,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                                 n_subgoal=args['n_subgoal'],
                                 augment_when_success=args['augment_when_success'],
                                 hack_augment_time=args['hack_augment_time'],
+                                hack_augment_policy=args['hack_augment_policy'],
                                 )
             policy_kwargs = {}
 
@@ -138,7 +140,9 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                          verbose=1,
                          **train_kwargs)
         # TODO: this is a hack
-        # model.model.load_parameters('logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/her_sac/model_30.zip')
+        if load_path is not None:
+            print('Start training from', load_path)
+            model.model.load_parameters(load_path)
 
         # Train the model
         model.learn(int(num_timesteps), seed=seed, callback=callback, log_interval=20)
@@ -167,7 +171,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
         images = []
         frame_idx = 0
         episode_idx = 0
-        for i in range(env.spec.max_episode_steps * 6):
+        for i in range(env.spec.max_episode_steps * 4):
             # images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
@@ -196,7 +200,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                 frame_idx = 0
                 episode_idx += 1
         if export_gif:
-            for i in range(env.spec.max_episode_steps * 6):
+            for i in range(env.spec.max_episode_steps * 4):
                 images.append(plt.imread('tempimg' + str(i) + '.png'))
                 os.remove('tempimg' + str(i) + '.png')
             imageio.mimsave(env_name + '.gif', images)
