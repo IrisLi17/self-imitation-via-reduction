@@ -1,4 +1,4 @@
-import sys, pandas
+import sys, pandas, os, imageio
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -28,13 +28,20 @@ if __name__ == '__main__':
         goals.append(get_item(fname, 'goal_' + str(i)))
     goals = np.asarray(goals)
     goals = np.swapaxes(goals, 0, 1)
+    end_points = np.where(dones > 0.5)[0]
+    print('#episodes', len(end_points))
+    for i in end_points:
+        assert np.argmax(goals[i][3:]) == 0
+        # print(goals[i])
+
+    # print(goals[:, 3:])
 
     ep_idx = 0
     step = 0
     has_switch = False
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    for i in range(dones.shape[0]):
+    for i in range(end_points[-3] + 1, dones.shape[0]):
         ax.cla()
         ax.set_xlim(1.0, 1.6)
         ax.set_ylim(0.4, 1.1)
@@ -46,6 +53,7 @@ if __name__ == '__main__':
         ax.scatter(obstacle_xs[i], obstacle_ys[i], c='tab:brown')
         if not has_switch and np.argmax(goals[i][3:]) == 1:
             print('episode %d switch step %d' % (ep_idx, step))
+            print('restart box', box_xs[i], box_ys[i], 'subgoal', goals[i])
             has_switch = True
         if np.argmax(goals[i][3:]) == 0:
             marker = '*'
@@ -55,7 +63,15 @@ if __name__ == '__main__':
         ax.set_title('episode %d step %d' % (ep_idx, step))
         step += 1
         if dones[i] > 0.5:
+            assert np.argmax(goals[i][3:]) == 0
+            print('ultimate goal', goals[i])
             ep_idx += 1
             step = 0
             has_switch = False
+        # plt.savefig('tempimg' + str(i) + '.png')
         plt.pause(0.1)
+    # images = []
+    # for i in range(end_points[-3] + 1, dones.shape[0]):
+    #     images.append(plt.imread('tempimg' + str(i) + '.png'))
+    #     os.remove('tempimg' + str(i) + '.png')
+    # imageio.mimsave('augment_data.gif', images)

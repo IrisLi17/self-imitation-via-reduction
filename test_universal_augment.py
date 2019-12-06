@@ -18,7 +18,7 @@ try:
 except ImportError:
     MPI = None
 
-hard_test = True
+hard_test = False
 
 
 def arg_parse():
