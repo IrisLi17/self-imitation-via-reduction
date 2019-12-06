@@ -525,7 +525,7 @@ class SAC_augment(OffPolicyRLModel):
                     for augment_idx in range(len(selected_idx)):
                         augment_episode_buffer = transition_buf[:selected_restart_t[augment_idx]] # TODO: check
                         self.env.env.env.env._elapsed_steps = selected_restart_t[augment_idx]
-                        # print('from restart:', len(augment_episode_buffer))
+                        print('from restart:', len(augment_episode_buffer))
                         assert len(augment_episode_buffer) == selected_restart_t[augment_idx]
                         self.env.env.sim.set_state(selected_restart_state[augment_idx])
                         self.env.env.sim.forward()
@@ -536,7 +536,7 @@ class SAC_augment(OffPolicyRLModel):
                         # print('subgoal is', self.env.env.goal)
                         # Achieved goal and desired goal should be set correctly now.
                         augment_obs = self.env.convert_dict_to_obs(self.env.env.get_obs())
-                        # print('restart box', augment_obs[3:6])
+                        print('restart box', augment_obs[3:6])
                         while len(augment_episode_buffer) < self.env.env.spec.max_episode_steps:
                             if not self.hack_augment_policy:
                                 # Use the scratch model to take action.
@@ -554,13 +554,24 @@ class SAC_augment(OffPolicyRLModel):
                                 self.env.step(augment_rescaled_action)
                             augment_done = len(augment_episode_buffer) >= self.env.env.spec.max_episode_steps - 1
                             # store in a temp buffer
+                            # _store_obs = augment_obs.copy()
+                            # _store_obs[40:43] = _store_obs[3:6]
+                            # _store_obs[43:45] = recover_goal[3:5]
+                            # _store_obs[45:50] = recover_goal[:]
+                            # _store_new_obs = augment_new_obs.copy()
+                            # _store_new_obs[40:43] = _store_new_obs[3:6]
+                            # _store_new_obs[43:45] = recover_goal[3:5]
+                            # _store_new_obs[45:50] = recover_goal[:]
+                            # _store_reward = self.env.compute_reward(_store_new_obs, recover_goal, None)
+                            # augment_episode_buffer.append((_store_obs, augment_action, _store_reward,
+                            #                                _store_new_obs, float(augment_done)))
                             augment_episode_buffer.append((augment_obs, augment_action, augment_reward,
                                                            augment_new_obs, float(augment_done)))
                             augment_obs = augment_new_obs
                             # deal with timelimit wrapper. done is always true
                             if augment_done or augment_info['is_success']:
-                                # if not augment_info['is_success']:
-                                #     print('fail to achieve subgoal', self.env.env.goal)
+                                if not augment_info['is_success']:
+                                    print('fail to achieve subgoal', self.env.env.goal)
                                 break
                         # print('after targetting subgoal', len(augment_episode_buffer))
                         # Successfully get to subgoal, now it should target at original goal
@@ -590,8 +601,8 @@ class SAC_augment(OffPolicyRLModel):
                                                                augment_new_obs, float(augment_done)))
                                 augment_obs = augment_new_obs
                                 if augment_done or augment_info['is_success']:
-                                    # if not augment_info['is_success']:
-                                    #     print('fail to achieve ultimate goal', self.env.env.goal)
+                                    if not augment_info['is_success']:
+                                        print('fail to achieve ultimate goal', self.env.env.goal)
                                     break
                             # print('after targetting ultimate', len(augment_episode_buffer))
                             # if True:
