@@ -71,7 +71,7 @@ class SAC_augment(OffPolicyRLModel):
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
                  random_exploration=0.0, n_subgoal=4, augment_when_success=True, hack_augment_time=False,
-                 hack_augment_policy=False,
+                 hack_augment_policy=False, double_buffer=False,
                  verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -101,10 +101,13 @@ class SAC_augment(OffPolicyRLModel):
         self.augment_when_success = augment_when_success
         self.hack_augment_time = hack_augment_time
         self.hack_augment_policy = hack_augment_policy
+        self.double_buffer = double_buffer
 
         self.value_fn = None
         self.graph = None
         self.replay_buffer = None
+        if self.double_buffer:
+            self.augment_replay_buffer = None
         self.episode_reward = None
         self.sess = None
         self.tensorboard_log = tensorboard_log
@@ -153,6 +156,8 @@ class SAC_augment(OffPolicyRLModel):
                 self.sess = tf_util.make_session(num_cpu=n_cpu, graph=self.graph)
 
                 self.replay_buffer = ReplayBuffer(self.buffer_size)
+                if self.double_buffer:
+                    self.augment_replay_buffer = ReplayBuffer(self.buffer_size)
 
                 with tf.variable_scope("input", reuse=False):
                     # Create policy and target TF objects
@@ -332,8 +337,18 @@ class SAC_augment(OffPolicyRLModel):
 
     def _train_step(self, step, writer, learning_rate):
         # Sample a batch from the replay buffer
-        batch = self.replay_buffer.sample(self.batch_size)
-        batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
+        if self.double_buffer and self.augment_replay_buffer.can_sample(self.batch_size // 2):
+            batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones = self.replay_buffer.sample(self.batch_size // 2)
+            batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones = self.augment_replay_buffer.sample(self.batch_size // 2)
+            batch_obs = np.concatenate([batch1_obs, batch2_obs])
+            batch_actions = np.concatenate([batch1_actions, batch2_actions])
+            batch_rewards = np.concatenate([batch1_rewards, batch2_rewards])
+            batch_next_obs = np.concatenate([batch1_next_obs, batch2_next_obs])
+            batch_dones = np.concatenate([batch1_dones, batch2_dones])
+            # print(batch_obs.shape, batch_actions.shape, batch_rewards.shape)
+        else:
+            batch = self.replay_buffer.sample(self.batch_size)
+            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
 
         feed_dict = {
             self.observations_ph: batch_obs,
@@ -375,6 +390,8 @@ class SAC_augment(OffPolicyRLModel):
 
         if replay_wrapper is not None:
             self.replay_buffer = replay_wrapper(self.replay_buffer)
+            if self.double_buffer:
+                self.augment_replay_buffer = replay_wrapper(self.augment_replay_buffer)
 
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
@@ -401,6 +418,10 @@ class SAC_augment(OffPolicyRLModel):
             transition_buf = []
             num_augment_ep_buf = deque(maxlen=100)
             num_success_augment_ep_buf = deque(maxlen=100)
+
+            if os.path.exists(os.path.join(logger.get_dir(), 'success_traj.csv')):
+                os.remove(os.path.join(logger.get_dir(), 'success_traj.csv'))
+                print('Remove existing success_traj.csv')
 
             # Select top-K perturbed_obstacle_pos
             def criterion_topk_idx(perturb_values, subgoal_values, k):
@@ -616,7 +637,10 @@ class SAC_augment(OffPolicyRLModel):
                                 num_success_augment_episode += 1
                                 log_traj(augment_episode_buffer)
                                 for item in augment_episode_buffer:
-                                    self.replay_buffer.add(*item)
+                                    if not self.double_buffer:
+                                        self.replay_buffer.add(*item)
+                                    else:
+                                        self.augment_replay_buffer.add(*item)
 
                         if not self.augment_when_success:
                             # store temp episode into replay buffer
@@ -630,7 +654,10 @@ class SAC_augment(OffPolicyRLModel):
                             if augment_info['is_success'] and np.argmax(augment_episode_buffer[-1][0][-2:]) == 0:
                                 log_traj(augment_episode_buffer)
                             for item in augment_episode_buffer:
-                                self.replay_buffer.add(*item)
+                                if not self.double_buffer:
+                                    self.replay_buffer.add(*item)
+                                else:
+                                    self.augment_replay_buffer.add(*item)
 
                     print('#augment episode', num_augment_episode, '#success episode', num_success_augment_episode, 'idx', np.argmax(recover_goal[3:]))
                     num_augment_ep_buf.append(num_augment_episode)

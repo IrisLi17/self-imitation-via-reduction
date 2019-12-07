@@ -32,6 +32,7 @@ def arg_parse():
     parser.add_argument('--augment_when_success', action="store_true", default=False)
     parser.add_argument('--hack_augment_time', action="store_true", default=False)
     parser.add_argument('--hack_augment_policy', action="store_true", default=False)
+    parser.add_argument('--double_buffer', action="store_true", default=False)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
@@ -108,6 +109,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                                 augment_when_success=args['augment_when_success'],
                                 hack_augment_time=args['hack_augment_time'],
                                 hack_augment_policy=args['hack_augment_policy'],
+                                double_buffer=args['double_buffer'],
                                 )
             policy_kwargs = {}
 
