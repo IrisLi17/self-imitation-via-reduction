@@ -890,6 +890,7 @@ class FetchPushWallObstacleEnv_v5(fetch_env.FetchEnv, utils.EzPickle):
         # Randomize start position of object.
         if self.has_object:
             if self.random_box and self.np_random.uniform() < self.random_ratio:
+                self.sample_hard = False
                 object_xpos = self.initial_gripper_xpos[:2]
                 stick_xpos = object_xpos.copy()
                 while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1
@@ -904,9 +905,17 @@ class FetchPushWallObstacleEnv_v5(fetch_env.FetchEnv, utils.EzPickle):
                     # stick_xpos = np.concatenate(([1.40], self.initial_gripper_xpos[1:2])) + \
                     #              np.array([2 / 3, 1.0]) * self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             else:
-                object_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range * 0.9, self.obj_range / 2])
+                self.sample_hard = True
+                # object_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range * 0.9, self.obj_range / 2])
+                object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
                 stick_xpos = np.asarray(
                     [self.pos_wall[0] + self.size_wall[0] + self.size_obstacle[0], self.initial_gripper_xpos[1]])
+                while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1
+                       or abs(object_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_object[0] or abs(
+                        stick_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_obstacle[0]
+                       or (abs(object_xpos[0] - stick_xpos[0]) < self.size_object[0] + self.size_obstacle[0] and abs(
+                            object_xpos[1] - stick_xpos[1]) < self.size_object[1] + self.size_obstacle[1])):
+                    object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
                 # stick_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range / 4, 0])
             # Set the position of box and obstacle. (two slide joints)
             sim_state = self.sim.get_state()
@@ -929,6 +938,12 @@ class FetchPushWallObstacleEnv_v5(fetch_env.FetchEnv, utils.EzPickle):
         return True
 
     def _sample_goal(self):
+        if not hasattr(self, 'size_wall'):
+            self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
+        if not hasattr(self, 'size_object'):
+            self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
+        if not hasattr(self, 'pos_wall'):
+            self.pos_wall = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
         if self.has_object:
             # goal = np.concatenate([self.initial_gripper_xpos[:3] + self.target_offset +
             #                    self.np_random.uniform(-self.target_range, self.target_range, size=3) for _ in range(self.n_object)])
@@ -942,17 +957,14 @@ class FetchPushWallObstacleEnv_v5(fetch_env.FetchEnv, utils.EzPickle):
             one_hot = np.zeros(2)
             one_hot[g_idx] = 1
             goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+            if hasattr(self, 'sample_hard') and self.sample_hard and g_idx == 0:
+                while (goal[0] - self.pos_wall[0]) * (self.sim.data.get_site_xpos('object0')[0] - self.pos_wall[0]) > 0:
+                    goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
             if g_idx == 0:
                 goal[2] = self.sim.data.get_site_xpos('object0')[2]
             else:
                 goal[2] = self.sim.data.get_site_xpos('object1')[2]
             goal = np.concatenate([goal, one_hot])
-            if not hasattr(self, 'size_wall'):
-                self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
-            if not hasattr(self, 'size_object'):
-                self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
-            if not hasattr(self, 'pos_wall'):
-                self.pos_wall = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
             if self.target_in_the_air and self.np_random.uniform() < 0.5:
                 goal[2] += self.np_random.uniform(0, 0.45)
         else:
