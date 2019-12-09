@@ -21,10 +21,12 @@ class FetchPushWallDoubleObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
             # 'object0:joint': [1.2, 0.53, 0.4, 1., 0., 0., 0.],
             'object0:slidex': 0.0,
             'object0:slidey': 0.0,
-            'object1:slidex': 0.0,
-            'object1:slidey': 0.0,
-            'object2:slidex': 0.0,
-            'object2:slidey': 0.0,
+            'object1:joint': [1.4, 0.47, 0.4, 1., 0., 0., 0.],
+            # 'object1:slidex': 0.0,
+            # 'object1:slidey': 0.0,
+            'object2:joint': [1.4, 0.6, 0.4, 1., 0., 0., 0.],
+            # 'object2:slidex': 0.0,
+            # 'object2:slidey': 0.0,
         }
         self.n_object = 3
         self.penaltize_height = penaltize_height
@@ -137,22 +139,31 @@ class FetchPushWallDoubleObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
                     stick1_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
                     stick2_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             else:
-                pass
+                raise NotImplementedError
             # Set the position of box. (two slide joints)
             sim_state = self.sim.get_state()
             box_jointx_i = self.sim.model.get_joint_qpos_addr("object0:slidex")
             box_jointy_i = self.sim.model.get_joint_qpos_addr("object0:slidey")
-            obstacle1_jointx_i = self.sim.model.get_joint_qpos_addr("object1:slidex")
-            obstacle1_jointy_i = self.sim.model.get_joint_qpos_addr("object1:slidey")
-            obstacle2_jointx_i = self.sim.model.get_joint_qpos_addr("object2:slidex")
-            obstacle2_jointy_i = self.sim.model.get_joint_qpos_addr("object2:slidey")
+            # obstacle1_jointx_i = self.sim.model.get_joint_qpos_addr("object1:slidex")
+            # obstacle1_jointy_i = self.sim.model.get_joint_qpos_addr("object1:slidey")
+            # obstacle2_jointx_i = self.sim.model.get_joint_qpos_addr("object2:slidex")
+            # obstacle2_jointy_i = self.sim.model.get_joint_qpos_addr("object2:slidey")
             sim_state.qpos[box_jointx_i] = object_xpos[0]
             sim_state.qpos[box_jointy_i] = object_xpos[1]
-            sim_state.qpos[obstacle1_jointx_i] = stick1_xpos[0]
-            sim_state.qpos[obstacle1_jointy_i] = stick1_xpos[1]
-            sim_state.qpos[obstacle2_jointx_i] = stick2_xpos[0]
-            sim_state.qpos[obstacle2_jointy_i] = stick2_xpos[1]
+            # sim_state.qpos[obstacle1_jointx_i] = stick1_xpos[0]
+            # sim_state.qpos[obstacle1_jointy_i] = stick1_xpos[1]
+            # sim_state.qpos[obstacle2_jointx_i] = stick2_xpos[0]
+            # sim_state.qpos[obstacle2_jointy_i] = stick2_xpos[1]
             self.sim.set_state(sim_state)
+            # Set the position of obstacle. (free joint)
+            stick1_qpos = self.sim.data.get_joint_qpos('object1:joint')
+            stick2_qpos = self.sim.data.get_joint_qpos('object2:joint')
+            assert stick1_qpos.shape == (7,)
+            assert stick2_qpos.shape == (7,)
+            stick1_qpos[:2] = stick1_xpos
+            stick2_qpos[:2] = stick2_xpos
+            self.sim.data.set_joint_qpos('object1:joint', stick1_qpos)
+            self.sim.data.set_joint_qpos('object2:joint', stick2_qpos)
 
         self.sim.forward()
         return True
