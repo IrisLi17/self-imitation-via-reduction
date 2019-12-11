@@ -26,6 +26,7 @@ def arg_parse():
     parser.add_argument('--env', default='FetchPushWallObstacle-v4')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--policy', type=str, default='MlpPolicy')
+    parser.add_argument('--goal_selection_strategy', type=str, default='future')
     parser.add_argument('--n_sampled_goal', type=int, default=4)
     parser.add_argument('--num_timesteps', type=float, default=3e6)
     parser.add_argument('--trained_model', default=None, type=str)
@@ -89,7 +90,8 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
         os.makedirs(log_dir, exist_ok=True)
 
     # Available strategies (cf paper): future, final, episode, random
-    goal_selection_strategy = 'future'  # equivalent to GoalSelectionStrategy.FUTURE
+    # I add another strategy: future_and_final
+    goal_selection_strategy = args['goal_selection_strategy']  # equivalent to GoalSelectionStrategy.FUTURE
 
     if not play:
         if model_class is SAC_augment:

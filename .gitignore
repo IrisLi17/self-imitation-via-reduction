@@ -8,4 +8,5 @@ model/*
 *.gif
 MUJOCO_LOG.TXT
 *.npy
+*.zip
 
