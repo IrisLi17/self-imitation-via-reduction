@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from stable_baselines.bench import Monitor
 from stable_baselines.common import set_global_seeds
 from stable_baselines import logger
-import os, time
+import os, time, pickle
 import imageio
 import argparse
 import numpy as np
@@ -120,6 +120,8 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                 if _locals['step'] % int(1e5) == 0:
                     model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(1e5)))
                     model.save(model_path)
+                    with open(os.path.join(log_dir, 'augmented_startstate_' + str(_locals['step'] // int(1e5)) + '.pkl'), 'wb') as f:
+                        pickle.dump(_locals['augmented_startstate_buf'], f)
                 return True
         else:
             train_kwargs = {}

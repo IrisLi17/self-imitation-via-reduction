@@ -418,6 +418,7 @@ class SAC_augment(OffPolicyRLModel):
             transition_buf = []
             num_augment_ep_buf = deque(maxlen=100)
             num_success_augment_ep_buf = deque(maxlen=100)
+            augmented_startstate_buf = deque(maxlen=100)
 
             if os.path.exists(os.path.join(logger.get_dir(), 'success_traj.csv')):
                 os.remove(os.path.join(logger.get_dir(), 'success_traj.csv'))
@@ -635,6 +636,7 @@ class SAC_augment(OffPolicyRLModel):
                                 assert abs(np.sum([item[2] for item in augment_episode_buffer]) - 2) < 1e-4
                                 num_augment_episode += 1
                                 num_success_augment_episode += 1
+                                augmented_startstate_buf.append(state_buf[0])
                                 log_traj(augment_episode_buffer)
                                 for item in augment_episode_buffer:
                                     if not self.double_buffer:
@@ -650,6 +652,7 @@ class SAC_augment(OffPolicyRLModel):
                             num_augment_episode += 1
                             num_success_augment_episode += (int(augment_info['is_success']) and
                                                             np.argmax(augment_episode_buffer[-1][0][-2:]) == 0)
+                            augmented_startstate_buf.append(state_buf[0])
                             # Log success traj to csv
                             if augment_info['is_success'] and np.argmax(augment_episode_buffer[-1][0][-2:]) == 0:
                                 log_traj(augment_episode_buffer)
