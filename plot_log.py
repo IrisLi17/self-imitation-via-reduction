@@ -26,16 +26,25 @@ def main(args):
             return data[label].values
         success_rate = get_item(progress_file, 'success rate')
         total_timesteps = get_item(progress_file, 'total timesteps')
-        mean_num_augment_ep = get_item(progress_file, 'mean_num_augment_ep')
-        if args.yaxis == 'success_rate':
-            plt.plot(total_timesteps, success_rate)
-            plt.ylabel('success rate')
-        elif args.yaxis == 'mean_num_augment_ep':
-            plt.plot(total_timesteps, mean_num_augment_ep)
-            plt.ylabel('#augment ep')
-
-        plt.xlabel('timesteps')
-        plt.title(args.env)
+        mean_num_augment_ep = get_item(progress_file, 'mean_success_augment_ep')
+        fig = plt.figure(figsize=(10, 5))
+        ax1 = fig.add_subplot(121)
+        ax2 = fig.add_subplot(122)
+        ax1.plot(total_timesteps, success_rate)
+        ax1.set_ylabel('success rate')
+        ax1.set_xlabel('timesteps')
+        ax2.plot(total_timesteps, mean_num_augment_ep)
+        ax2.set_ylabel('#augmented successful ep')
+        ax2.set_xlabel('timesteps')
+        # if args.yaxis == 'success_rate':
+        #     plt.plot(total_timesteps, success_rate)
+        #     plt.ylabel('success rate')
+        # elif args.yaxis == 'mean_num_augment_ep':
+        #     plt.plot(total_timesteps, mean_num_augment_ep)
+        #     plt.ylabel('#augment ep')
+        #
+        # plt.xlabel('timesteps')
+        # plt.title(args.env)
     plt.show()
 
 if __name__ == '__main__':
