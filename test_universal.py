@@ -31,6 +31,7 @@ def arg_parse():
     parser.add_argument('--env', default='FetchPushWallObstacle-v4')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--policy', type=str, default='MlpPolicy')
+    parser.add_argument('--action_noise', type=str, default='none')
     parser.add_argument('--num_timesteps', type=float, default=3e6)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
@@ -53,7 +54,7 @@ def configure_logger(log_path, **kwargs):
 
 
 def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path, play, heavy_obstacle, random_gripper,
-         export_gif, gamma, random_ratio):
+         export_gif, gamma, random_ratio, action_noise):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -91,14 +92,25 @@ def main(env_name, seed, policy, num_timesteps, batch_size, log_path, load_path,
         if model_class is SAC:
             # wrap env
             from utils.wrapper import DoneOnSuccessWrapper
+            from stable_baselines.ddpg.noise import NormalActionNoise
             env = DoneOnSuccessWrapper(env)
             env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=True)
+            noise_type = action_noise.split('_')[0]
+            if noise_type == 'none':
+                parsed_action_noise = None
+            elif noise_type == 'normal':
+                sigma = float(action_noise.split('_')[1])
+                parsed_action_noise = NormalActionNoise(mean=np.zeros(env.action_space.shape),
+                                                        sigma=sigma * np.ones(env.action_space.shape))
+            else:
+                raise NotImplementedError
             train_kwargs = dict(buffer_size=int(1e6),
                                 ent_coef="auto",
                                 gamma=gamma,
                                 learning_starts=1000,
                                 train_freq=1,
                                 batch_size=batch_size,
+                                action_noise=parsed_action_noise,
                                 )
             policy_kwargs = {}
 
@@ -199,4 +211,4 @@ if __name__ == '__main__':
          log_path=args.log_path, load_path=args.load_path, play=args.play,
          heavy_obstacle=args.heavy_obstacle, random_gripper=args.random_gripper,
          policy=args.policy, batch_size=args.batch_size, export_gif=args.export_gif,
-         gamma=args.gamma, random_ratio=args.random_ratio)
+         gamma=args.gamma, random_ratio=args.random_ratio, action_noise=args.action_noise)

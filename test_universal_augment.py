@@ -26,6 +26,7 @@ def arg_parse():
     parser.add_argument('--env', default='FetchPushWallObstacle-v4')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--policy', type=str, default='MlpPolicy')
+    parser.add_argument('--n_sampled_goal', type=int, default=4)
     parser.add_argument('--num_timesteps', type=float, default=3e6)
     parser.add_argument('--trained_model', default=None, type=str)
     parser.add_argument('--n_subgoal', type=int, default=4)
@@ -136,7 +137,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
             print('train_kwargs', train_kwargs)
             print('policy_kwargs', policy_kwargs)
         # Wrap the model
-        model = HER_HACK(policy, env, model_class, n_sampled_goal=4,
+        model = HER_HACK(policy, env, model_class, n_sampled_goal=args['n_sampled_goal'],
                          goal_selection_strategy=goal_selection_strategy,
                          policy_kwargs=policy_kwargs,
                          verbose=1,
@@ -173,7 +174,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
         images = []
         frame_idx = 0
         episode_idx = 0
-        for i in range(env.spec.max_episode_steps * 4):
+        for i in range(env.spec.max_episode_steps * 6):
             # images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
@@ -202,7 +203,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                 frame_idx = 0
                 episode_idx += 1
         if export_gif:
-            for i in range(env.spec.max_episode_steps * 4):
+            for i in range(env.spec.max_episode_steps * 6):
                 images.append(plt.imread('tempimg' + str(i) + '.png'))
                 os.remove('tempimg' + str(i) + '.png')
             imageio.mimsave(env_name + '.gif', images)
