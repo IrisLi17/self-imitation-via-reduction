@@ -22,11 +22,13 @@ def main(args):
         progress_file = os.path.join(log_dir, 'progress.csv')
 
         def get_item(log_file, label):
-            data = pandas.read_csv(log_file, index_col=None, comment='#')
+            data = pandas.read_csv(log_file, index_col=None, comment='#', error_bad_lines=False)
             return data[label].values
         success_rate = get_item(progress_file, 'success rate')
         total_timesteps = get_item(progress_file, 'total timesteps')
         mean_num_augment_ep = get_item(progress_file, 'mean_success_augment_ep')
+        print('final success rate', np.mean(success_rate[-1000:]))
+        print('final augment ep', np.mean(mean_num_augment_ep[-1000:]))
         fig = plt.figure(figsize=(10, 5))
         ax1 = fig.add_subplot(121)
         ax2 = fig.add_subplot(122)
