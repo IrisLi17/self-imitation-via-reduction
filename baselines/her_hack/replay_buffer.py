@@ -138,7 +138,8 @@ class HindsightExperienceReplayWrapper(object):
         :return: (np.ndarray) an achieved goal
         """
         if self.goal_selection_strategy == GoalSelectionStrategy.FUTUREANDFINAL \
-                and len(episode_transitions) < self.env.env.spec.max_episode_steps:
+                and abs(np.sum([item[2] for item in episode_transitions]) - 2) < 1e-4:
+            # and len(episode_transitions) < self.env.env.spec.max_episode_steps:
             achieved_goals = []
             for i in range(self.n_sampled_goal - 1):
                 selected_idx = np.random.choice(np.arange(transition_idx + 1, len(episode_transitions)))
