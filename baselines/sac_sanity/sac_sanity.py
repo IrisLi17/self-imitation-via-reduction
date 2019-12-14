@@ -350,9 +350,11 @@ class SAC_sanity(OffPolicyRLModel):
                 csvwriter.writerow(data)
 
     def fill_augment_buffer(self):
-        random_ratio = self.env.env.env.random_ratio
+        print(self.env.env.unwrapped)
+        random_ratio = self.env.env.unwrapped.random_ratio
         print(random_ratio)
-        self.env.env.env.random_ratio = 0.0
+        self.env.env.unwrapped.random_ratio = 0.0
+        print(self.env.env.unwrapped.random_ratio)
         augment_episode = 0
         start_states = []
         while augment_episode < 5:
@@ -404,7 +406,7 @@ class SAC_sanity(OffPolicyRLModel):
                 obs[45:50] = self.env.env.goal
                 obs[40:43] = obs[6:9]
                 obs[43:45] = np.array([0., 1.])
-                print('Run towards subgoal', self.env.env.goal)
+                print('Run towards subgoal', self.env.env.goal, self.env.env.unwrapped.goal)
 
                 # Run towards subgoal
                 while len(augment_buf) < self.env.env.spec.max_episode_steps:
@@ -414,15 +416,16 @@ class SAC_sanity(OffPolicyRLModel):
                     done = len(augment_buf) >= self.env.env.spec.max_episode_steps - 1
                     augment_buf.append((obs, action, reward, next_obs, float(done)))
                     obs = next_obs
+                    assert np.argmax(obs[-2:]) == 1
                     step_so_far += 1
                     if done or info['is_success']:
                         break
                 if len(augment_buf) < self.env.env.spec.max_episode_steps:
-                    print('run towards ultimate goal', ultimate_goal)
                     self.env.env.goal[:] = ultimate_goal
                     obs[45:50] = ultimate_goal
                     obs[40:43] = obs[3:6]
                     obs[43:45] = np.array([1., 0.])
+                    print('run towards ultimate goal', self.env.env.goal, self.env.env.unwrapped.goal)
                     while len(augment_buf) < self.env.env.spec.max_episode_steps:
                         action = self.trained_sac_model.policy_tf.step(obs[None], deterministic=False).flatten()
                         rescaled_action = action * np.abs(self.action_space.low)
@@ -430,6 +433,7 @@ class SAC_sanity(OffPolicyRLModel):
                         done = len(augment_buf) >= self.env.env.spec.max_episode_steps - 1 or info['is_success']
                         augment_buf.append((obs, action, reward, next_obs, float(done)))
                         obs = next_obs
+                        assert np.argmax(obs[-2:]) == 0
                         step_so_far += 1
                         if info['is_success'] or done:
                             break
@@ -447,7 +451,7 @@ class SAC_sanity(OffPolicyRLModel):
         # TODO: store state in file
         with open(os.path.join(logger.get_dir(), 'start_states.pkl'), 'wb') as f:
             pickle.dump(start_states, f)
-        self.env.env.env.random_ratio = random_ratio
+        self.env.env.unwrapped.random_ratio = random_ratio
 
     def _train_step(self, step, writer, learning_rate):
         # Sample a batch from the replay buffer
