@@ -560,6 +560,7 @@ class SAC_augment(OffPolicyRLModel):
                         augment_obs = self.env.convert_dict_to_obs(self.env.env.get_obs())
                         print('restart box', augment_obs[3:6])
                         while len(augment_episode_buffer) < self.env.env.spec.max_episode_steps:
+                            assert np.argmax(augment_obs[-2:]) == 1
                             if not self.hack_augment_policy:
                                 # Use the scratch model to take action.
                                 augment_action = self.policy_tf.step(augment_obs[None], deterministic=False).flatten()
@@ -604,6 +605,7 @@ class SAC_augment(OffPolicyRLModel):
                             # print('ultimate goal is', self.env.env.goal)
                             augment_obs = self.env.convert_dict_to_obs(self.env.env.get_obs())
                             while len(augment_episode_buffer) < self.env.env.spec.max_episode_steps:
+                                assert np.argmax(augment_obs[-2:]) == 0
                                 if not self.hack_augment_policy:
                                     augment_action = self.policy_tf.step(augment_obs[None], deterministic=False).flatten()
                                 else:
