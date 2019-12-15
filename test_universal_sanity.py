@@ -12,6 +12,7 @@ import os, time, pickle, pandas
 import imageio
 import argparse
 import numpy as np
+from stable_baselines.her.utils import KEY_ORDER
 
 try:
     from mpi4py import MPI
@@ -161,7 +162,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
         assert load_path is not None
         model = HER_HACK.load(load_path, env=env)
 
-        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        fig, ax = plt.subplots(1, 2, figsize=(10, 5))
         with open(os.path.join(os.path.dirname(load_path), 'start_states.pkl'), 'rb') as f:
             start_states = pickle.load(f)
         # Parse csv
@@ -191,6 +192,8 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
         print(env.unwrapped.goal)
         episode_reward = 0.0
         images = []
+        states = []
+        values = []
         frame_idx = 0
         episode_idx = 0
         env.unwrapped.sim.set_state(start_states[0])
@@ -202,21 +205,31 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
         print(obs, env.goal)
         for i in range(env.spec.max_episode_steps * 5):
             # images.append(img)
+            states.append(env.unwrapped.sim.get_state())
+            feed_dict = {model.model.observations_ph: np.expand_dims(np.concatenate([obs[key] for key in KEY_ORDER]), axis=0)}
+            value = model.model.sess.run(model.model.step_ops[6], feed_dict)
+            values.append(np.squeeze(value))
             action, _ = model.predict(obs)
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
             obs, reward, done, _ = env.step(action)
             episode_reward += reward
             frame_idx += 1
-            ax.cla()
+            ax[0].cla()
             img = env.render(mode='rgb_array')
-            ax.imshow(img)
-            ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
+            ax[0].imshow(img)
+            ax[0].set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
                          ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
+            ax[1].cla()
+            ax[1].plot(values, 'tab:blue')
+            ax[1].set_xlim(0, 100)
+            ax[1].set_ylim(0, 10)
             if export_gif:
                 plt.savefig('tempimg' + str(i) + '.png')
-            plt.pause(0.02)
+            else:
+                plt.pause(0.02)
             if done and episode_idx < 4:
+                values = []
                 env.reset()
                 env.unwrapped.sim.set_state(start_states[episode_idx + 1])
                 env.unwrapped.goal = parsed_goals[episode_idx + 1]
@@ -233,11 +246,15 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                 episode_reward = 0.0
                 frame_idx = 0
                 episode_idx += 1
+        with open(os.path.join(os.path.dirname(load_path), 'states.pkl'), 'wb') as f:
+            pickle.dump(states, f)
         if export_gif:
+            os.system('ffmpeg -r 5 -start_number 0 -i tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
+                      os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
             for i in range(env.spec.max_episode_steps * 5):
-                images.append(plt.imread('tempimg' + str(i) + '.png'))
+                # images.append(plt.imread('tempimg' + str(i) + '.png'))
                 os.remove('tempimg' + str(i) + '.png')
-            imageio.mimsave(env_name + '.gif', images)
+            # imageio.mimsave(env_name + '.gif', images)
 
 
 if __name__ == '__main__':

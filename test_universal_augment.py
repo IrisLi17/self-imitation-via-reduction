@@ -193,7 +193,8 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                          ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
             if export_gif:
                 plt.savefig('tempimg' + str(i) + '.png')
-            plt.pause(0.02)
+            else:
+                plt.pause(0.02)
             if done:
                 obs = env.reset()
                 while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
@@ -207,10 +208,12 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                 frame_idx = 0
                 episode_idx += 1
         if export_gif:
+            os.system('ffmpeg -r 5 -start_number 0 -i tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
+                      os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
             for i in range(env.spec.max_episode_steps * 6):
-                images.append(plt.imread('tempimg' + str(i) + '.png'))
+                # images.append(plt.imread('tempimg' + str(i) + '.png'))
                 os.remove('tempimg' + str(i) + '.png')
-            imageio.mimsave(env_name + '.gif', images)
+            # imageio.mimsave(env_name + '.gif', images)
 
 
 if __name__ == '__main__':
