@@ -33,7 +33,20 @@ if __name__ == '__main__':
     for i in end_points:
         assert np.argmax(goals[i][3:]) == 0
         # print(goals[i])
-
+    '''
+    _print_end_points = np.random.choice(end_points[:len(end_points) // 100], size=20)
+    _print_end_points2 = np.random.choice(end_points[len(end_points) // 100 * 99:], size=20)
+    _print_end_points3 = np.random.choice(end_points[len(end_points) // 100 * 50: len(end_points) // 10 * 51], size=20)
+    print('first percentile')
+    for i in _print_end_points:
+        print(i, goals[i])
+    print('50 percentile')
+    for i in _print_end_points2:
+        print(i, goals[i])
+    print('last percentile')
+    for i in _print_end_points3:
+        print(i, goals[i])
+    '''
     # print(goals[:, 3:])
 
     ep_idx = 0
@@ -41,7 +54,7 @@ if __name__ == '__main__':
     has_switch = False
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    for i in range(end_points[-3] + 1, dones.shape[0]):
+    for i in range(dones.shape[0]):
         ax.cla()
         ax.set_xlim(1.0, 1.6)
         ax.set_ylim(0.4, 1.1)
@@ -68,10 +81,12 @@ if __name__ == '__main__':
             ep_idx += 1
             step = 0
             has_switch = False
-        # plt.savefig('tempimg' + str(i) + '.png')
-        plt.pause(0.1)
+        plt.savefig('tempimg' + str(i) + '.png')
+        # plt.pause(0.1)
+    os.system('ffmpeg -r 2 -start_number 0 -i tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
+              os.path.join(os.path.dirname(fname), 'augment_data.mp4'))
     # images = []
-    # for i in range(end_points[-3] + 1, dones.shape[0]):
+    for i in range(dones.shape[0]):
     #     images.append(plt.imread('tempimg' + str(i) + '.png'))
-    #     os.remove('tempimg' + str(i) + '.png')
+        os.remove('tempimg' + str(i) + '.png')
     # imageio.mimsave('augment_data.gif', images)

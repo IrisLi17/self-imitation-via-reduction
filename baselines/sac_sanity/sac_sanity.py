@@ -366,6 +366,7 @@ class SAC_sanity(OffPolicyRLModel):
         for i in range(5):
             with open('/home/yunfei/projects/fetcher/logs/sanity_data/augment_episode%d.pkl' % i, 'rb') as f:
                 augment_buf = pickle.load(f)
+                self.log_traj(augment_buf)
                 for item in augment_buf:
                     self.augment_replay_buffer.add(*item)
                 augment_episode += 1
