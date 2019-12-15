@@ -357,8 +357,24 @@ class SAC_sanity(OffPolicyRLModel):
         print(self.env.env.unwrapped.random_ratio)
         augment_episode = 0
         start_states = []
+        # assert os.path.exists('/home/yunfei/projects/fetcher/logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/her_sac_augment_sanity/0/start_states.pkl')
+        # assert os.path.exists('/home/yunfei/projects/fetcher/logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/her_sac_augment_sanity/0/goals.pkl')
+        # with open('/home/yunfei/projects/fetcher/logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/her_sac_augment_sanity/0/start_states.pkl', 'rb') as f:
+        #     start_states = pickle.load(f)
+        # with open('/home/yunfei/projects/fetcher/logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/her_sac_augment_sanity/0/goals.pkl', 'rb') as f:
+        #     goals = pickle.load(f)
+        for i in range(5):
+            with open('/home/yunfei/projects/fetcher/logs/sanity_data/augment_episode%d.pkl' % i, 'rb') as f:
+                augment_buf = pickle.load(f)
+                for item in augment_buf:
+                    self.augment_replay_buffer.add(*item)
+                augment_episode += 1
         while augment_episode < 5:
             # Should reset hard case.
+            # self.env.unwrapped.sim.set_state(start_states[augment_episode])
+            # self.env.unwrapped.goal = goals[augment_episode]
+            # obs = self.env.env.get_obs()
+            # assert np.argmax(obs[-2:]) == 0
             obs = self.env.reset()
             if np.argmax(obs[-2:]) != 0:
                 continue
@@ -448,9 +464,13 @@ class SAC_sanity(OffPolicyRLModel):
                         augment_episode += 1
                         start_states.append(start_state)
                         self.log_traj(augment_buf)
+                        with open(os.path.join(logger.get_dir(), 'augment_episode%d.pkl' % (augment_episode-1)), 'wb') as f:
+                            pickle.dump(augment_buf, f)
         # TODO: store state in file
-        with open(os.path.join(logger.get_dir(), 'start_states.pkl'), 'wb') as f:
-            pickle.dump(start_states, f)
+        os.system('cp /home/yunfei/projects/fetcher/logs/sanity_data/start_states.pkl ' +
+                  os.path.join(logger.get_dir(), 'start_states.pkl'))
+        # with open(os.path.join(logger.get_dir(), 'start_states.pkl'), 'wb') as f:
+        #     pickle.dump(start_states, f)
         self.env.env.unwrapped.random_ratio = random_ratio
 
     def _train_step(self, step, writer, learning_rate):
@@ -464,6 +484,7 @@ class SAC_sanity(OffPolicyRLModel):
             batch_next_obs = np.concatenate([batch1_next_obs, batch2_next_obs])
             batch_dones = np.concatenate([batch1_dones, batch2_dones])
             # print(batch_obs.shape, batch_actions.shape, batch_rewards.shape)
+            # print('sample half-half')
         else:
             batch = self.replay_buffer.sample(self.batch_size)
             batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
