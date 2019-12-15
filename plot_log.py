@@ -26,18 +26,24 @@ def main(args):
             return data[label].values
         success_rate = get_item(progress_file, 'success rate')
         total_timesteps = get_item(progress_file, 'total timesteps')
-        mean_num_augment_ep = get_item(progress_file, 'mean_success_augment_ep')
         print('final success rate', np.mean(success_rate[-1000:]))
-        print('final augment ep', np.mean(mean_num_augment_ep[-1000:]))
+        try:
+            mean_num_augment_ep = get_item(progress_file, 'mean_success_augment_ep')
+            print('final augment ep', np.mean(mean_num_augment_ep[-1000:]))
+        except:
+            pass
         fig = plt.figure(figsize=(10, 5))
         ax1 = fig.add_subplot(121)
         ax2 = fig.add_subplot(122)
         ax1.plot(total_timesteps, success_rate)
         ax1.set_ylabel('success rate')
         ax1.set_xlabel('timesteps')
-        ax2.plot(total_timesteps, mean_num_augment_ep)
-        ax2.set_ylabel('#augmented successful ep')
-        ax2.set_xlabel('timesteps')
+        try:
+            ax2.plot(total_timesteps, mean_num_augment_ep)
+            ax2.set_ylabel('#augmented successful ep')
+            ax2.set_xlabel('timesteps')
+        except:
+            pass
         # if args.yaxis == 'success_rate':
         #     plt.plot(total_timesteps, success_rate)
         #     plt.ylabel('success rate')
