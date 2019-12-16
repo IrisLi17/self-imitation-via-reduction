@@ -4,24 +4,25 @@ from stable_baselines.common import set_global_seeds
 from stable_baselines.common.vec_env import SubprocVecEnv
 from gym.wrappers import FlattenDictWrapper
 
-from push_wall_obstacle import FetchPushWallObstacleEnv
-from push_wall import FetchPushWallEnv
-from push_box import FetchPushBoxEnv
+from push_wall_obstacle import FetchPushWallObstacleEnv_v4
+# from push_wall import FetchPushWallEnv
+# from push_box import FetchPushBoxEnv
 import gym
+from utils.wrapper import DoneOnSuccessWrapper
 
 import os, time, argparse, imageio
 import matplotlib.pyplot as plt
 
-ENTRY_POINT = {'FetchPushObstacle-v1': FetchPushWallObstacleEnv,
-               'FetchPushWall-v1': FetchPushWallEnv,
-               'FetchPushBox-v1': FetchPushBoxEnv,
+ENTRY_POINT = {'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
+               # 'FetchPushWall-v1': FetchPushWallEnv,
+               # 'FetchPushBox-v1': FetchPushBoxEnv,
                }
 
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--env', default='FetchPushObstacle-v1')
+    parser.add_argument('--env', default='FetchPushWallObstacle-v4')
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--num_timesteps', type=float, default=5e6)
+    parser.add_argument('--num_timesteps', type=float, default=1e7)
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--play', action="store_true", default=False)
@@ -47,12 +48,13 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
         # env = ENTRY_POINT[env_id](**kwargs)
         # print(env)
         # from gym.wrappers.time_limit import TimeLimit
-        gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=50, kwargs=kwargs)
+        gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=100, kwargs=kwargs)
         env = gym.make(env_id)
         # env = TimeLimit(env, max_episode_steps=50)
     else:
         env = gym.make(env_id, reward_type='dense')
     env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
+    env = DoneOnSuccessWrapper(env)
     env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets, info_keywords=('is_success',))
     # env.seed(seed + 10000 * rank)
     return env
@@ -68,7 +70,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
         env_kwargs = dict(reward_type='dense')
         # pass
     elif env_name in ENTRY_POINT.keys():
-        env_kwargs = dict(reward_type='dense', penaltize_height=True)
+        env_kwargs = dict(random_box=True,
+                      heavy_obstacle=True,
+                      random_ratio=1.0,
+                      random_gripper=True,)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -76,17 +81,16 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play):
     env = SubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
     if not play:
         os.makedirs(log_dir, exist_ok=True)
-
-        policy_kwargs = dict(layers=[64, 64, 64])
+        policy_kwargs = dict(layers=[256, 256])
         # policy_kwargs = {}
         # TODO: vectorize env
-        model = PPO2('MlpPolicy', env, verbose=1, n_steps=2048, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
+        model = PPO2('MlpPolicy', env, verbose=1, n_steps=2048*8, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
                      ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      )
         def callback(_locals, _globals):
             num_update = _locals["update"]
-            if num_update % 10 == 0:
-                model_path = os.path.join(log_dir, 'model_' + str(num_update))
+            if num_update % 100 == 0:
+                model_path = os.path.join(log_dir, 'model_' + str(num_update // 100))
                 model.save(model_path)
                 print('model saved to', model_path)
             return True
