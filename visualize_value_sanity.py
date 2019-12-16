@@ -74,8 +74,6 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
     # env.unwrapped.sim.set_state(states[0])
-    env.unwrapped.goal = parsed_goals[0]
-    print(env.unwrapped.goal, env.goal)
     # env.unwrapped.sim.forward()
     # Set end effector
     pos_x, pos_y = np.meshgrid(np.linspace(1.05, 1.55, 10), np.linspace(0.55, 0.95, 10))
@@ -83,8 +81,11 @@ if __name__ == '__main__':
     _pos_x = np.reshape(pos_x, (-1, 1))
     _pos_y = np.reshape(pos_y, (-1, 1))
     pos_xy = np.concatenate((_pos_x, _pos_y), axis=-1)
-    for step in range(100):
+    for step in range(500):
         print('step', step)
+        if step % 100 == 0:
+            env.unwrapped.goal = parsed_goals[step // 100]
+            print(env.unwrapped.goal, env.goal)
         batch_obs = []
         real_pos_x, real_pos_y = [], []
         env.sim.set_state(states[step])
@@ -98,7 +99,7 @@ if __name__ == '__main__':
         for i in range(pos_xy.shape[0]):
             reset_end_effector(env, states[step], pos_xy[i])
             obs_dict = env.get_obs()
-            assert np.linalg.norm(obs_dict['desired_goal'] - parsed_goals[0]) < 1e-4
+            assert np.linalg.norm(obs_dict['desired_goal'] - parsed_goals[step // 100]) < 1e-4
             batch_obs.append(np.concatenate([obs_dict[key] for key in KEY_ORDER]))
             real_pos_x.append(obs_dict['observation'][0])
             real_pos_y.append(obs_dict['observation'][1])
@@ -117,5 +118,5 @@ if __name__ == '__main__':
         # plt.pause(0.1)
     os.system('ffmpeg -r 2 -start_number 0 -i tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
               os.path.join(os.path.dirname(load_path), 'value_gripperpos.mp4'))
-    for i in range(100):
+    for i in range(500):
         os.remove('tempimg%d.png' % i)

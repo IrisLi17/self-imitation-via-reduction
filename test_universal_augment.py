@@ -173,13 +173,18 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                 break
             obs = env.reset()
         print('gripper_pos', obs['observation'][0:3])
+        goals = []
+        goal = obs['desired_goal']
+        goals.append(goal)
         img = env.render(mode='rgb_array')
         episode_reward = 0.0
         images = []
+        states = []
         frame_idx = 0
         episode_idx = 0
         for i in range(env.spec.max_episode_steps * 6):
             # images.append(img)
+            states.append(env.unwrapped.sim.get_state())
             action, _ = model.predict(obs)
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
@@ -203,10 +208,15 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
                         break
                     obs = env.reset()
                 print('gripper_pos', obs['observation'][0:3])
+                goals.append(obs['desired_goal'])
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
                 frame_idx = 0
                 episode_idx += 1
+        with open(os.path.join(os.path.dirname(load_path), 'states.pkl'), 'wb') as f:
+            pickle.dump(states, f)
+        with open(os.path.join(os.path.dirname(load_path), 'goals.pkl'), 'wb') as f:
+            pickle.dump(goals, f)
         if export_gif:
             os.system('ffmpeg -r 5 -start_number 0 -i tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))

@@ -53,7 +53,8 @@ def main(args):
         #
         # plt.xlabel('timesteps')
         # plt.title(args.env)
-    plt.show()
+    plt.savefig(os.path.join(log_dir, 'learning_curve.png'))
+    # plt.show()
 
 if __name__ == '__main__':
     args = arg_parse()
