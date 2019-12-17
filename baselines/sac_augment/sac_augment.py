@@ -255,12 +255,16 @@ class SAC_augment(OffPolicyRLModel):
                     # Compute the policy loss
                     # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
                     policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
+                    self.is_demo_ph = tf.placeholder(tf.float32, shape=(None,), name='is_demo')
+                    policy_imitation_loss = tf.reduce_mean(
+                        self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
+                                                         axis=-1))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
                     # this is not used for now
                     # policy_loss = (policy_kl_loss + policy_regularization_loss)
-                    policy_loss = policy_kl_loss
+                    policy_loss = policy_kl_loss + 5 * policy_imitation_loss
 
 
                     # Target for value fn regression
@@ -345,10 +349,13 @@ class SAC_augment(OffPolicyRLModel):
             batch_rewards = np.concatenate([batch1_rewards, batch2_rewards])
             batch_next_obs = np.concatenate([batch1_next_obs, batch2_next_obs])
             batch_dones = np.concatenate([batch1_dones, batch2_dones])
+            batch_is_demo = np.concatenate([np.zeros(batch1_obs.shape[0], dtype=np.float32),
+                                            np.ones(batch2_obs.shape[0], dtype=np.float32)])
             # print(batch_obs.shape, batch_actions.shape, batch_rewards.shape)
         else:
             batch = self.replay_buffer.sample(self.batch_size)
             batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
+            batch_is_demo = np.zeros(batch_obs.shape[0], dtype=np.float32)
 
         feed_dict = {
             self.observations_ph: batch_obs,
@@ -358,6 +365,8 @@ class SAC_augment(OffPolicyRLModel):
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
             self.learning_rate_ph: learning_rate
         }
+        if hasattr(self, 'is_demo_ph'):
+            feed_dict[self.is_demo_ph] =  batch_is_demo
 
         # out  = [policy_loss, qf1_loss, qf2_loss,
         #         value_loss, qf1, qf2, value_fn, logp_pi,
