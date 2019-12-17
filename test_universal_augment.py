@@ -12,6 +12,7 @@ import os, time, pickle
 import imageio
 import argparse
 import numpy as np
+from stable_baselines.her.utils import KEY_ORDER
 
 try:
     from mpi4py import MPI
@@ -180,15 +181,24 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
         episode_reward = 0.0
         images = []
         states = []
+        demo_observations = []
+        demo_actions = []
+        demo_rewards = []
+        demo_episode_starts= []
+        demo_episode_starts.append(True)
         frame_idx = 0
         episode_idx = 0
         for i in range(env.spec.max_episode_steps * 6):
             # images.append(img)
             states.append(env.unwrapped.sim.get_state())
+            demo_observations.append(np.concatenate([obs[key] for key in KEY_ORDER]))
             action, _ = model.predict(obs)
+            demo_actions.append(action)
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
             obs, reward, done, _ = env.step(action)
+            demo_rewards.append(reward)
+            demo_episode_starts.append(bool(done))
             episode_reward += reward
             frame_idx += 1
             ax.cla()
@@ -217,6 +227,22 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
             pickle.dump(states, f)
         with open(os.path.join(os.path.dirname(load_path), 'goals.pkl'), 'wb') as f:
             pickle.dump(goals, f)
+        # Save demo
+        demo_observations = np.asarray(demo_observations)
+        demo_actions = np.asarray(demo_actions)
+        demo_rewards = np.asarray(demo_rewards)
+        demo_episode_starts = np.asarray(demo_episode_starts[:-1])
+        demo_episode_returns = np.zeros(demo_observations.shape[0]) # fake
+        demo_dict = {
+            'actions': demo_actions,
+            'obs': demo_observations,
+            'rewards': demo_rewards,
+            'episode_returns': demo_episode_returns,
+            'episode_starts': demo_episode_starts,
+        }
+        for key, val in demo_dict.items():
+            print(key, val.shape)
+        np.savez(os.path.join(os.path.dirname(load_path), 'demo.npz'), **demo_dict)
         if export_gif:
             os.system('ffmpeg -r 5 -start_number 0 -i tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
