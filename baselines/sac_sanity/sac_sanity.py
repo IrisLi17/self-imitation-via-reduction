@@ -169,6 +169,9 @@ class SAC_sanity(OffPolicyRLModel):
                     self.observations_ph = self.policy_tf.obs_ph
                     # Normalized observation for pixels
                     self.processed_obs_ph = self.policy_tf.processed_obs
+                    # self.imitation_observations_ph = tf.placeholder(shape=(None,) + self.observation_space.shape, dtype=self.observation_space.dtype,
+                    #                                 name='imitation_ob')
+                    # self.imitation_processed_obs_ph = tf.cast(self.imitation_observations_ph, tf.float32)
                     self.next_observations_ph = self.target_policy.obs_ph
                     self.processed_next_obs_ph = self.target_policy.processed_obs
                     self.action_target = self.target_policy.action_ph
@@ -176,6 +179,8 @@ class SAC_sanity(OffPolicyRLModel):
                     self.rewards_ph = tf.placeholder(tf.float32, shape=(None, 1), name='rewards')
                     self.actions_ph = tf.placeholder(tf.float32, shape=(None,) + self.action_space.shape,
                                                      name='actions')
+                    # self.imitation_actions_ph = tf.placeholder(tf.float32, shape=(None,) + self.action_space.shape,
+                    #                                            name='imitation_actions')
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
                 with tf.variable_scope("model", reuse=False):
@@ -184,6 +189,7 @@ class SAC_sanity(OffPolicyRLModel):
                     # policy_out corresponds to stochastic actions, used for training
                     # logp_pi is the log probabilty of actions taken by the policy
                     self.deterministic_action, policy_out, logp_pi = self.policy_tf.make_actor(self.processed_obs_ph)
+                    # self.imitation_deterministic_action, _, _ = self.policy_tf.make_actor(self.imitation_processed_obs_ph, reuse=True)
                     # Monitor the entropy of the policy,
                     # this is not used for training
                     self.entropy = tf.reduce_mean(self.policy_tf.entropy)
@@ -254,12 +260,15 @@ class SAC_sanity(OffPolicyRLModel):
                     # Compute the policy loss
                     # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
                     policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
+                    self.is_demo_ph = tf.placeholder(tf.float32, shape=(None,), name='is_demo')
+                    policy_imitation_loss = tf.reduce_mean(
+                        self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph), axis=-1))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
                     # this is not used for now
                     # policy_loss = (policy_kl_loss + policy_regularization_loss)
-                    policy_loss = policy_kl_loss
+                    policy_loss = policy_kl_loss + 5 * policy_imitation_loss
 
 
                     # Target for value fn regression
@@ -370,6 +379,8 @@ class SAC_sanity(OffPolicyRLModel):
                 for item in augment_buf:
                     self.augment_replay_buffer.add(*item)
                 augment_episode += 1
+        with open('/home/yunfei/projects/fetcher/logs/sanity_data/relabeled_data.pkl', 'wb') as f:
+            pickle.dump(self.augment_replay_buffer.replay_buffer.storage, f)
         while augment_episode < 5:
             # Should reset hard case.
             # self.env.unwrapped.sim.set_state(start_states[augment_episode])
@@ -476,19 +487,20 @@ class SAC_sanity(OffPolicyRLModel):
 
     def _train_step(self, step, writer, learning_rate):
         # Sample a batch from the replay buffer
-        if self.double_buffer and self.augment_replay_buffer.can_sample(self.batch_size // 2):
-            batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones = self.replay_buffer.sample(self.batch_size // 2)
-            batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones = self.augment_replay_buffer.sample(self.batch_size // 2)
-            batch_obs = np.concatenate([batch1_obs, batch2_obs])
-            batch_actions = np.concatenate([batch1_actions, batch2_actions])
-            batch_rewards = np.concatenate([batch1_rewards, batch2_rewards])
-            batch_next_obs = np.concatenate([batch1_next_obs, batch2_next_obs])
-            batch_dones = np.concatenate([batch1_dones, batch2_dones])
-            # print(batch_obs.shape, batch_actions.shape, batch_rewards.shape)
-            # print('sample half-half')
-        else:
-            batch = self.replay_buffer.sample(self.batch_size)
-            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
+        # if self.double_buffer and self.augment_replay_buffer.can_sample(self.batch_size // 2):
+        batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones = self.replay_buffer.sample(self.batch_size // 2)
+        batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones = self.augment_replay_buffer.sample(self.batch_size // 2)
+        batch_obs = np.concatenate([batch1_obs, batch2_obs])
+        batch_actions = np.concatenate([batch1_actions, batch2_actions])
+        batch_rewards = np.concatenate([batch1_rewards, batch2_rewards])
+        batch_next_obs = np.concatenate([batch1_next_obs, batch2_next_obs])
+        batch_dones = np.concatenate([batch1_dones, batch2_dones])
+        batch_is_demo = np.concatenate([np.zeros(batch1_obs.shape[0], dtype=np.float32), np.ones(batch2_obs.shape[0], dtype=np.float32)])
+        # print(batch_obs.shape, batch_actions.shape, batch_rewards.shape)
+        # print('sample half-half')
+        # else:
+        #     batch = self.replay_buffer.sample(self.batch_size)
+        #     batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
 
         feed_dict = {
             self.observations_ph: batch_obs,
@@ -496,7 +508,8 @@ class SAC_sanity(OffPolicyRLModel):
             self.next_observations_ph: batch_next_obs,
             self.rewards_ph: batch_rewards.reshape(self.batch_size, -1),
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
-            self.learning_rate_ph: learning_rate
+            self.learning_rate_ph: learning_rate,
+            self.is_demo_ph: batch_is_demo,
         }
 
         # out  = [policy_loss, qf1_loss, qf2_loss,

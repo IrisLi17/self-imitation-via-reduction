@@ -45,6 +45,7 @@ def arg_parse():
     parser.add_argument('--heavy_obstacle', action="store_true", default=False)
     parser.add_argument('--random_gripper', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
+    parser.add_argument('--pretrain', action="store_true", default=False)
     args = parser.parse_args()
     dict_args = vars(args)
     return dict_args
@@ -150,6 +151,12 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
             print('Start training from', load_path)
             model.model.load_parameters(load_path)
 
+        # Pretrain with expert data.
+        if args['pretrain'] and os.path.exists('./logs/sanity_data/demo1.npz'):
+            from stable_baselines.gail import ExpertDataset
+            dataset = ExpertDataset(expert_path='./logs/sanity_data/demo1.npz', train_fraction=0.9)
+            model.model.pretrain(dataset, n_epochs=3000, learning_rate=1e-4)
+
         # Train the model
         model.learn(int(num_timesteps), seed=seed, callback=callback, log_interval=20)
 
@@ -165,20 +172,25 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
         fig, ax = plt.subplots(1, 2, figsize=(10, 5))
         with open(os.path.join(os.path.dirname(load_path), 'start_states.pkl'), 'rb') as f:
             start_states = pickle.load(f)
-        # Parse csv
-        def get_item(log_file, label):
-            data = pandas.read_csv(log_file, index_col=None, comment='#')
-            return data[label].values
-        fname = os.path.join(os.path.dirname(load_path), 'success_traj.csv')
-        goals = []
-        for i in range(5):
-            goals.append(get_item(fname, 'goal_' + str(i)))
-        goals = np.asarray(goals)
-        goals = np.swapaxes(goals, 0, 1)
-        dones = get_item(fname, 'done')
-        end_points = np.where(dones > 0.5)[0]
-        parsed_goals = [goals[i] for i in end_points]
+        if os.path.exists(os.path.join(os.path.dirname(load_path), 'goals.pkl')):
+            with open(os.path.join(os.path.dirname(load_path), 'goals.pkl'), 'rb') as f:
+                parsed_goals = pickle.load(f)
+        else:
+            # Parse csv
+            def get_item(log_file, label):
+                data = pandas.read_csv(log_file, index_col=None, comment='#')
+                return data[label].values
+            fname = os.path.join(os.path.dirname(load_path), 'success_traj.csv')
+            goals = []
+            for i in range(5):
+                goals.append(get_item(fname, 'goal_' + str(i)))
+            goals = np.asarray(goals)
+            goals = np.swapaxes(goals, 0, 1)
+            dones = get_item(fname, 'done')
+            end_points = np.where(dones > 0.5)[0]
+            parsed_goals = [goals[i] for i in end_points]
         print(parsed_goals)
+        # demo_data = np.load('./logs/sanity_data/demo1.npz')
         # obs = env.reset()
         # while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
         #             obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
@@ -210,7 +222,8 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
             value = model.model.sess.run(model.model.step_ops[6], feed_dict)
             values.append(np.squeeze(value))
             action, _ = model.predict(obs)
-            # print('action', action)
+            # print('step', i, 'obs dist', np.mean((demo_data['obs'][i][:9] - obs['observation'][:9])**2),
+            #       'act dist', np.mean((demo_data['actions'][i] - action) ** 2))
             # print('obstacle euler', obs['observation'][20:23])
             obs, reward, done, _ = env.step(action)
             episode_reward += reward
@@ -225,7 +238,7 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
             ax[1].set_xlim(0, 100)
             ax[1].set_ylim(0, 10)
             if export_gif:
-                plt.savefig('tempimg' + str(i) + '.png')
+                plt.savefig(os.path.join(os.path.dirname(load_path), 'tempimg' + str(i) + '.png'))
             else:
                 plt.pause(0.02)
             if done and episode_idx < 4:
@@ -249,11 +262,11 @@ def main(seed, policy, num_timesteps, batch_size, log_path, load_path, play, hea
         with open(os.path.join(os.path.dirname(load_path), 'states.pkl'), 'wb') as f:
             pickle.dump(states, f)
         if export_gif:
-            os.system('ffmpeg -r 5 -start_number 0 -i tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
+            os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
             for i in range(env.spec.max_episode_steps * 5):
                 # images.append(plt.imread('tempimg' + str(i) + '.png'))
-                os.remove('tempimg' + str(i) + '.png')
+                os.remove(os.path.join(os.path.dirname(load_path), 'tempimg' + str(i) + '.png'))
             # imageio.mimsave(env_name + '.gif', images)
 
 

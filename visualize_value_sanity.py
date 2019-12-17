@@ -114,9 +114,9 @@ if __name__ == '__main__':
         ax[1].set_xlim(1.05, 1.55)
         ax[1].set_ylim(0.55, 0.95)
         ax[1].set_title('step ' + str(step))
-        plt.savefig('tempimg%d.png' % step)
+        plt.savefig(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % step))
         # plt.pause(0.1)
-    os.system('ffmpeg -r 2 -start_number 0 -i tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
+    os.system('ffmpeg -r 2 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
               os.path.join(os.path.dirname(load_path), 'value_gripperpos.mp4'))
     for i in range(500):
-        os.remove('tempimg%d.png' % i)
+        os.remove(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % i))
