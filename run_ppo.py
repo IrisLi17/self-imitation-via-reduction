@@ -58,7 +58,8 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
         env = gym.make(env_id, reward_type='dense')
     env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
     env = DoneOnSuccessWrapper(env)
-    env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets, info_keywords=('is_success',))
+    if log_dir is not None:
+        env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets, info_keywords=('is_success',))
     # env.seed(seed + 10000 * rank)
     return env
 
@@ -120,7 +121,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             ax.cla()
             ax.imshow(img)
             ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx) +
-                         ', goal idx ' + str(np.argmax(obs[-2:])))
+                         ', goal idx ' + str(np.argmax(obs[0][-2:])))
             frame_idx += 1
             if not export_gif:
                 plt.pause(0.1)
