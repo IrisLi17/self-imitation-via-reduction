@@ -111,7 +111,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         num_episode = 0
         frame_idx = 0
         images = []
-        for i in range(200):
+        for i in range(500):
             images.append(img)
             action, _ = model.predict(obs)
             print('action', action)
@@ -128,7 +128,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             else:
                 plt.savefig(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % i))
             if done:
-                # obs = env.reset()
+                obs = env.reset()
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
                 frame_idx = 0
@@ -139,9 +139,12 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         if export_gif:
             os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
-            for i in range(200):
+            for i in range(500):
                 # images.append(plt.imread('tempimg' + str(i) + '.png'))
-                os.remove(os.path.join(os.path.dirname(load_path), 'tempimg' + str(i) + '.png'))
+                try:
+                    os.remove(os.path.join(os.path.dirname(load_path), 'tempimg' + str(i) + '.png'))
+                except:
+                    pass
 
 if __name__ == '__main__':
     args = arg_parse()
