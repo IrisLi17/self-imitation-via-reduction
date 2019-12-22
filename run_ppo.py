@@ -3,6 +3,7 @@ from stable_baselines.bench import Monitor
 from stable_baselines.common import set_global_seeds
 from stable_baselines.common.vec_env import SubprocVecEnv
 from gym.wrappers import FlattenDictWrapper
+from run_ppo_augment import eval_model, log_eval
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 # from push_wall import FetchPushWallEnv
@@ -15,6 +16,7 @@ import os, time, argparse, imageio
 import matplotlib.pyplot as plt
 
 ENTRY_POINT = {'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
+               'FetchPushWallObstacleUnlimit-v4': FetchPushWallObstacleEnv_v4,
                # 'FetchPushWall-v1': FetchPushWallEnv,
                # 'FetchPushBox-v1': FetchPushBoxEnv,
                }
@@ -51,7 +53,11 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
         # env = ENTRY_POINT[env_id](**kwargs)
         # print(env)
         # from gym.wrappers.time_limit import TimeLimit
-        gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=100, kwargs=kwargs)
+        max_episode_steps = None
+        if 'max_episode_steps' in kwargs:
+            max_episode_steps = kwargs['max_episode_steps']
+            del kwargs['max_episode_steps']
+        gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
         env = gym.make(env_id)
         # env = TimeLimit(env, max_episode_steps=50)
     else:
@@ -75,14 +81,22 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         # pass
     elif env_name in ENTRY_POINT.keys():
         env_kwargs = dict(random_box=True,
-                      heavy_obstacle=True,
-                      random_ratio=random_ratio,
-                      random_gripper=True,)
+                          heavy_obstacle=True,
+                          random_ratio=random_ratio,
+                          random_gripper=True,
+                          max_episode_steps=100, )
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
     env = SubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
+    eval_env_kwargs = dict(random_box=True,
+                           heavy_obstacle=True,
+                           random_ratio=0.0,
+                           random_gripper=True,
+                           max_episode_steps=100, )
+    eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
+    print(eval_env)
     if not play:
         os.makedirs(log_dir, exist_ok=True)
         policy_kwargs = dict(layers=[256, 256])
@@ -93,6 +107,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                      )
         def callback(_locals, _globals):
             num_update = _locals["update"]
+            mean_eval_reward = eval_model(eval_env, _locals["self"])
+            log_eval(num_update, mean_eval_reward)
             if num_update % 10 == 0:
                 model_path = os.path.join(log_dir, 'model_' + str(num_update // 10))
                 model.save(model_path)

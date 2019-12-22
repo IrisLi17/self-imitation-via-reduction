@@ -11,11 +11,13 @@ from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 import gym
 from utils.wrapper import DoneOnSuccessWrapper
 import numpy as np
+import csv
 
 import os, time, argparse, imageio
 import matplotlib.pyplot as plt
 
 ENTRY_POINT = {'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
+               'FetchPushWallObstacleUnlimit-v4': FetchPushWallObstacleEnv_v4,
                # 'FetchPushWall-v1': FetchPushWallEnv,
                # 'FetchPushBox-v1': FetchPushBoxEnv,
                }
@@ -75,6 +77,38 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     return env
 
 
+def eval_model(eval_env, model):
+    env = eval_env
+    assert abs(env.unwrapped.random_ratio) < 1e-4
+    n_episode = 0
+    ep_rewards = []
+    while n_episode < 10:
+        ep_reward = 0.0
+        obs = env.reset()
+        while (np.argmax(obs[-2:]) != 0):
+            obs = env.reset()
+        done = False
+        while not done:
+            action, _ = model.predict(obs)
+            obs, reward, done, info = env.step(action)
+            ep_reward += reward
+        ep_rewards.append(ep_reward)
+        n_episode += 1
+    return np.mean(ep_rewards)
+
+
+def log_eval(num_update, mean_eval_reward):
+    if not os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
+        with open(os.path.join(logger.get_dir(), 'eval.csv'), 'a', newline='') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
+            title = ['n_updates', 'mean_eval_reward']
+            csvwriter.writerow(title)
+    with open(os.path.join(logger.get_dir(), 'eval.csv'), 'a', newline='') as csvfile:
+        csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
+        data = [num_update, mean_eval_reward]
+        csvwriter.writerow(data)
+
+
 def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, aug_coef, n_subgoal):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir)
@@ -100,8 +134,15 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     env = SubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
     aug_env_kwargs = env_kwargs.copy()
     aug_env_kwargs['max_episode_steps'] = None
-    aug_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=aug_env_kwargs)
+    aug_env = make_env(env_id='FetchPushWallObstacleUnlimit-v4', seed=seed, rank=0, kwargs=aug_env_kwargs)
     print(aug_env)
+    eval_env_kwargs = dict(random_box=True,
+                          heavy_obstacle=True,
+                          random_ratio=0.0,
+                          random_gripper=True,
+                          max_episode_steps=100,)
+    eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
+    print(eval_env)
     if not play:
         os.makedirs(log_dir, exist_ok=True)
         policy_kwargs = dict(layers=[256, 256])
@@ -114,6 +155,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
 
         def callback(_locals, _globals):
             num_update = _locals["update"]
+            mean_eval_reward = eval_model(eval_env, _locals["self"])
+            log_eval(num_update, mean_eval_reward)
             if num_update % 10 == 0:
                 model_path = os.path.join(log_dir, 'model_' + str(num_update // 10))
                 model.save(model_path)
