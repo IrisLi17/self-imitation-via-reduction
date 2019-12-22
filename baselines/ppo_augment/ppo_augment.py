@@ -392,6 +392,7 @@ class PPO2_augment(ActorCriticRLModel):
                 self.aug_done = None
                 # true_reward is the reward without discount
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
+                augment_steps = 0 if self.aug_obs is None else self.aug_obs.shape[0]
                 if self.aug_obs is not None:
                     obs = np.concatenate([obs, self.aug_obs], axis=0)
                     returns = np.concatenate([returns, self.aug_return], axis=0)
@@ -405,11 +406,11 @@ class PPO2_augment(ActorCriticRLModel):
                 mb_loss_vals = []
                 if states is None:  # nonrecurrent version
                     update_fac = self.n_batch // self.nminibatches // self.noptepochs + 1
-                    inds = np.arange(self.n_batch + self.aug_obs.shape[0])
+                    inds = np.arange(self.n_batch + augment_steps)
                     # print('length self.aug_obs', len(self.aug_obs), batch_size)
                     for epoch_num in range(self.noptepochs):
                         np.random.shuffle(inds)
-                        for start in range(0, self.n_batch + self.aug_obs.shape[0], batch_size):
+                        for start in range(0, self.n_batch + augment_steps, batch_size):
                             timestep = self.num_timesteps // update_fac + ((self.noptepochs * self.n_batch + epoch_num *
                                                                             self.n_batch + start) // batch_size)
                             end = start + batch_size
@@ -452,7 +453,6 @@ class PPO2_augment(ActorCriticRLModel):
                 loss_vals = np.mean(mb_loss_vals, axis=0)
                 t_now = time.time()
                 fps = int(self.n_batch / (t_now - t_start))
-                augment_steps = self.aug_obs.shape[0]
 
                 if writer is not None:
                     self.episode_reward = total_episode_reward_logger(self.episode_reward,
@@ -636,12 +636,20 @@ class Runner(AbstractEnvRunner):
                                     # self.model.aug_act += augment_act_buf
                                     # self.model.aug_neglogp += augment_neglogp_buf
                                     # self.model.aug_adv += augment_adv_buf
-                                    self.model.aug_obs = np.array(augment_obs_buf)
-                                    self.model.aug_act = np.array(augment_act_buf)
-                                    self.model.aug_neglogp = np.array(augment_neglogp_buf)
-                                    self.model.aug_value = np.array(augment_value_buf)
-                                    self.model.aug_return = augment_returns
-                                    self.model.aug_done = np.array(augment_done_buf)
+                                    if self.model.aug_obs is None:
+                                        self.model.aug_obs = np.array(augment_obs_buf)
+                                        self.model.aug_act = np.array(augment_act_buf)
+                                        self.model.aug_neglogp = np.array(augment_neglogp_buf)
+                                        self.model.aug_value = np.array(augment_value_buf)
+                                        self.model.aug_return = augment_returns
+                                        self.model.aug_done = np.array(augment_done_buf)
+                                    else:
+                                        self.model.aug_obs = np.concatenate([self.model.aug_obs, np.array(augment_obs_buf)], axis=0)
+                                        self.model.aug_act = np.concatenate([self.model.aug_act, np.array(augment_act_buf)], axis=0)
+                                        self.model.aug_neglogp = np.concatenate([self.model.aug_neglogp, np.array(augment_neglogp_buf)],axis=0)
+                                        self.model.aug_value = np.concatenate([self.model.aug_value, np.array(augment_value_buf)], axis=0)
+                                        self.model.aug_return = np.concatenate([self.model.aug_return, augment_returns], axis=0)
+                                        self.model.aug_done = np.concatenate([self.model.aug_done, np.array(augment_done_buf)], axis=0)
                                 # else:
                                 #     print('Failed to achieve ultimate goal')
                             # else:
