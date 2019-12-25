@@ -3,6 +3,7 @@ from stable_baselines import logger
 from stable_baselines.bench import Monitor
 from stable_baselines.common import set_global_seeds
 from stable_baselines.common.vec_env import SubprocVecEnv
+from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
 from gym.wrappers import FlattenDictWrapper
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
@@ -11,7 +12,7 @@ from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 import gym
 from utils.wrapper import DoneOnSuccessWrapper
 import numpy as np
-import csv
+import csv, pickle
 
 import os, time, argparse, imageio
 import matplotlib.pyplot as plt
@@ -33,6 +34,7 @@ def arg_parse():
     parser.add_argument('--random_ratio', default=1.0, type=float)
     parser.add_argument('--aug_coef', default=0.1, type=float)
     parser.add_argument('--n_subgoal', default=4, type=int)
+    parser.add_argument('--parallel', action="store_true", default=False)
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
@@ -109,7 +111,21 @@ def log_eval(num_update, mean_eval_reward):
         csvwriter.writerow(data)
 
 
-def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, aug_coef, n_subgoal):
+def log_traj(aug_obs, aug_done, index):
+    with open(os.path.join(logger.get_dir(), 'success_traj_%d.csv' % index), 'w', newline='') as csvfile:
+        csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
+        title = ['gripper_x', 'gripper_y', 'gripper_z', 'box_x', 'box_y', 'box_z',
+                 'obstacle_x', 'obstacle_y', 'obstacle_z',
+                 'goal_0', 'goal_1', 'goal_2', 'goal_3', 'goal_4', 'done']
+        csvwriter.writerow(title)
+        for idx in range(aug_obs.shape[0]):
+            log_obs = aug_obs[idx]
+            data = [log_obs[i] for i in range(9)] + [log_obs[i] for i in range(45, 50)] + [aug_done[idx]]
+            csvwriter.writerow(data)
+
+
+def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, aug_coef, n_subgoal,
+         parallel):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir)
 
@@ -131,11 +147,17 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
 
-    env = SubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
+    if not parallel:
+        env = SubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
+    else:
+        env = ParallelSubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
     aug_env_kwargs = env_kwargs.copy()
     aug_env_kwargs['max_episode_steps'] = None
     aug_env = make_env(env_id='FetchPushWallObstacleUnlimit-v4', seed=seed, rank=0, kwargs=aug_env_kwargs)
     print(aug_env)
+    if os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
+        os.remove(os.path.join(logger.get_dir(), 'eval.csv'))
+        print('Remove existing eval.csv')
     eval_env_kwargs = dict(random_box=True,
                           heavy_obstacle=True,
                           random_ratio=0.0,
@@ -150,7 +172,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         # TODO: vectorize env
         model = PPO2_augment('MlpPolicy', env, aug_env=aug_env, verbose=1, n_steps=2048, nminibatches=32, lam=0.95,
                              gamma=0.99, noptepochs=10, ent_coef=0.01, aug_coef=aug_coef, learning_rate=3e-4,
-                             cliprange=0.2, n_candidate=n_subgoal, policy_kwargs=policy_kwargs,
+                             cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, policy_kwargs=policy_kwargs,
                              )
 
         def callback(_locals, _globals):
@@ -161,6 +183,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 model_path = os.path.join(log_dir, 'model_' + str(num_update // 10))
                 model.save(model_path)
                 print('model saved to', model_path)
+                aug_obs = _locals["self"].aug_obs
+                aug_done = _locals["self"].aug_done
+                if aug_obs is not None:
+                    log_traj(aug_obs, aug_done, num_update)
             return True
 
         # For debug only.
@@ -220,4 +246,5 @@ if __name__ == '__main__':
     print('arg parsed')
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps),
          log_path=args.log_path, load_path=args.load_path, play=args.play, export_gif=args.export_gif,
-         random_ratio=args.random_ratio, aug_coef=args.aug_coef, n_subgoal=args.n_subgoal)
+         random_ratio=args.random_ratio, aug_coef=args.aug_coef, n_subgoal=args.n_subgoal,
+         parallel=args.parallel)

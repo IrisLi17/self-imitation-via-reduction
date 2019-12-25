@@ -49,7 +49,7 @@ class PPO2_augment(ActorCriticRLModel):
 
     def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_coef=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
-                 cliprange_vf=None, n_candidate=4, verbose=0, tensorboard_log=None, _init_setup_model=True,
+                 cliprange_vf=None, n_candidate=4, parallel=False, verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
         super(PPO2_augment, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
@@ -69,6 +69,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.nminibatches = nminibatches
         self.noptepochs = noptepochs
         self.n_candidate = n_candidate
+        self.parallel = parallel
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
 
@@ -368,8 +369,13 @@ class PPO2_augment(ActorCriticRLModel):
                 as writer:
             self._setup_learn(seed)
 
-            runner = Runner(env=self.env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
-                            aug_env=self.aug_env, n_candidate=self.n_candidate)
+            if not self.parallel:
+                runner = Runner(env=self.env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
+                                aug_env=self.aug_env, n_candidate=self.n_candidate)
+            else:
+                from baselines.ppo_augment.parallel_runner import ParallelRunner
+                runner = ParallelRunner(env=self.env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
+                                        n_candidate=self.n_candidate)
             self.episode_reward = np.zeros((self.n_envs,))
 
             ep_info_buf = deque(maxlen=100)
@@ -391,7 +397,10 @@ class PPO2_augment(ActorCriticRLModel):
                 self.aug_value = None
                 self.aug_done = None
                 # true_reward is the reward without discount
+                temp_time0 = time.time()
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
+                temp_time1 = time.time()
+                print('runner.run() takes', temp_time1 - temp_time0)
                 augment_steps = 0 if self.aug_obs is None else self.aug_obs.shape[0]
                 if self.aug_obs is not None:
                     obs = np.concatenate([obs, self.aug_obs], axis=0)
@@ -550,6 +559,7 @@ class Runner(AbstractEnvRunner):
         mb_states = self.states
         ep_infos = []
 
+        augment_data_time = 0
         for _ in range(self.n_steps):
             internal_states = self.env.env_method('get_state')
             for i in range(self.model.n_envs):
@@ -575,6 +585,10 @@ class Runner(AbstractEnvRunner):
                 #                                   mb_neglogpacs[-1][i], mb_dones[-1][i], mb_rewards[-1][i]))
                 self.ep_transition_buf[i].append((mb_obs[-1][i], mb_actions[-1][i], mb_values[-1][i],
                                                   mb_neglogpacs[-1][i], mb_dones[-1][i], mb_rewards[-1][i]))
+            # _values = self.env.env_method('augment_data', self.ep_transition_buf, self.ep_state_buf)
+            # print(_values)
+            # exit()
+            temp_time0 = time.time()
             for idx, done in enumerate(self.dones):
                 if done:
                     # Check if this is failture
@@ -622,7 +636,14 @@ class Runner(AbstractEnvRunner):
                                     augment_done_buf += augment_done2
                                     augment_reward_buf += augment_reward2
 
+                                    if augment_done_buf[0] != True:
+                                        augment_done_buf[0] = True
+
+                                    assert sum(augment_done_buf) == 1, augment_done_buf
+
                                     augment_returns = self.compute_adv(augment_value_buf, augment_done_buf, augment_reward_buf)
+                                    assert augment_done_buf[0] == True
+                                    assert sum(augment_done_buf) == 1
                                     # aug_obs, aug_act = zip(*augment_transition_buf)
                                     # print(len(augment_obs_buf), len(augment_act_buf), len(augment_neglogp_buf))
                                     # print(augment_adv_buf)
@@ -650,6 +671,7 @@ class Runner(AbstractEnvRunner):
                                         self.model.aug_value = np.concatenate([self.model.aug_value, np.array(augment_value_buf)], axis=0)
                                         self.model.aug_return = np.concatenate([self.model.aug_return, augment_returns], axis=0)
                                         self.model.aug_done = np.concatenate([self.model.aug_done, np.array(augment_done_buf)], axis=0)
+                                    assert self.model.aug_done[0] == True
                                 # else:
                                 #     print('Failed to achieve ultimate goal')
                             # else:
@@ -658,6 +680,8 @@ class Runner(AbstractEnvRunner):
                     # Then update buf
                     self.ep_state_buf[idx] = []
                     self.ep_transition_buf[idx] = []
+            temp_time1 = time.time()
+            augment_data_time += (temp_time1 - temp_time0)
         # batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
@@ -683,7 +707,7 @@ class Runner(AbstractEnvRunner):
 
         mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, true_reward = \
             map(swap_and_flatten, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, true_reward))
-
+        print('augment data takes', augment_data_time)
         return mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_states, ep_infos, true_reward
 
     def select_subgoal(self, transition_buf, k):

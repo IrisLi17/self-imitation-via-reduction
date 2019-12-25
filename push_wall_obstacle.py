@@ -662,6 +662,9 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
     def get_state(self):
         return self.sim.get_state()
 
+    def set_state(self, state):
+        self.sim.set_state(state)
+
     def _reset_sim(self):
         self.sim.set_state(self.initial_state)
         # TODO: randomize mocap_pos
