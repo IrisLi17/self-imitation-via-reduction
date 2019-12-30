@@ -404,6 +404,7 @@ class PPO2_augment(ActorCriticRLModel):
 
                 augment_steps = 0 if self.aug_obs is None else self.aug_obs.shape[0]
                 if self.aug_obs is not None:
+                    print(self.aug_obs.shape, self.aug_act.shape, self.aug_neglogp.shape, self.aug_return.shape, self.aug_value.shape, self.aug_done.shape)
                     obs = np.concatenate([obs, self.aug_obs], axis=0)
                     returns = np.concatenate([returns, self.aug_return], axis=0)
                     masks = np.concatenate([masks, self.aug_done], axis=0)
@@ -674,10 +675,10 @@ class Runner(AbstractEnvRunner):
                                         self.model.aug_return = np.concatenate([self.model.aug_return, augment_returns], axis=0)
                                         self.model.aug_done = np.concatenate([self.model.aug_done, np.array(augment_done_buf)], axis=0)
                                     assert self.model.aug_done[0] == True
-                                else:
-                                    print('Failed to achieve ultimate goal')
-                            else:
-                                print('Failed to achieve subgoal')
+                                # else:
+                                #     print('Failed to achieve ultimate goal')
+                            # else:
+                            #     print('Failed to achieve subgoal')
 
                     # Then update buf
                     self.ep_state_buf[idx] = []

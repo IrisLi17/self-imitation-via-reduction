@@ -184,14 +184,14 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             num_update = _locals["update"]
             mean_eval_reward = eval_model(eval_env, _locals["self"])
             log_eval(num_update, mean_eval_reward)
+            aug_obs = _locals["self"].aug_obs
+            aug_done = _locals["self"].aug_done
+            if aug_obs is not None:
+                log_traj(aug_obs, aug_done, num_update)
             if num_update % 10 == 0:
                 model_path = os.path.join(log_dir, 'model_' + str(num_update // 10))
                 model.save(model_path)
                 print('model saved to', model_path)
-                aug_obs = _locals["self"].aug_obs
-                aug_done = _locals["self"].aug_done
-                if aug_obs is not None:
-                    log_traj(aug_obs, aug_done, num_update)
             return True
 
         # For debug only.
