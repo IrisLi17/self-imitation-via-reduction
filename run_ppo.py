@@ -6,6 +6,7 @@ from gym.wrappers import FlattenDictWrapper
 from run_ppo_augment import eval_model, log_eval
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
+from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
@@ -17,6 +18,7 @@ import matplotlib.pyplot as plt
 
 ENTRY_POINT = {'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
                'FetchPushWallObstacleUnlimit-v4': FetchPushWallObstacleEnv_v4,
+               'FetchPushWallDoubleObstacle-v1': FetchPushWallDoubleObstacleEnv,
                # 'FetchPushWall-v1': FetchPushWallEnv,
                # 'FetchPushBox-v1': FetchPushBoxEnv,
                }

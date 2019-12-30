@@ -131,6 +131,7 @@ class FetchPushWallDoubleObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         # Randomize start position of object.
         if self.has_object:
             if self.random_box and self.np_random.uniform() < self.random_ratio:
+                self.sample_hard = False
                 object_xpos = self.initial_gripper_xpos[:2]
                 stick1_xpos = object_xpos.copy()
                 stick2_xpos = object_xpos.copy()
@@ -139,7 +140,12 @@ class FetchPushWallDoubleObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
                     stick1_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
                     stick2_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             else:
-                raise NotImplementedError
+                self.sample_hard = True
+                stick1_xpos = np.array([1.3, self.pos_wall0[1] - self.size_wall[1] - self.size_obstacle[1]])
+                stick2_xpos = np.array([1.3, self.pos_wall2[1] - self.size_wall[1] - self.size_obstacle[1]])
+                object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+                while object_xpos[1] > stick1_xpos[1]:
+                    object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             # Set the position of box. (two slide joints)
             sim_state = self.sim.get_state()
             box_jointx_i = self.sim.model.get_joint_qpos_addr("object0:slidex")
@@ -169,6 +175,14 @@ class FetchPushWallDoubleObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
         return True
 
     def _sample_goal(self):
+        if not hasattr(self, 'size_wall'):
+            self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
+        if not hasattr(self, 'size_object'):
+            self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
+        if not hasattr(self, 'pos_wall0'):
+            self.pos_wall0 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
+        if not hasattr(self, 'pos_wall2'):
+            self.pos_wall2 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall2')]
         if self.has_object:
             # goal = np.concatenate([self.initial_gripper_xpos[:3] + self.target_offset +
             #                    self.np_random.uniform(-self.target_range, self.target_range, size=3) for _ in range(self.n_object)])
@@ -182,16 +196,11 @@ class FetchPushWallDoubleObstacleEnv(fetch_env.FetchEnv, utils.EzPickle):
             one_hot = np.zeros(self.n_object)
             one_hot[g_idx] = 1
             goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+            if hasattr(self, 'sample_hard') and self.sample_hard and g_idx == 0:
+                while goal[1] < self.pos_wall2[1]:
+                    goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
             goal[2] = self.sim.data.get_site_xpos('object' + str(g_idx))[2]
             goal = np.concatenate([goal, one_hot])
-            if not hasattr(self, 'size_wall'):
-                self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
-            if not hasattr(self, 'size_object'):
-                self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
-            if not hasattr(self, 'pos_wall0'):
-                self.pos_wall0 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
-            if not hasattr(self, 'pos_wall2'):
-                self.pos_wall2 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall2')]
             if self.target_in_the_air and self.np_random.uniform() < 0.5:
                 goal[2] += self.np_random.uniform(0, 0.45)
         else:
