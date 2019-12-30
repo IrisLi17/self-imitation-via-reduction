@@ -54,7 +54,7 @@ class ParallelRunner(AbstractEnvRunner):
         ep_infos = []
 
         duration = 0.0
-        step_env_duration = 0.0
+        # step_env_duration = 0.0
         for _ in range(self.n_steps):
             internal_states = self.env.env_method('get_state')
             for i in range(self.model.n_envs):
@@ -117,16 +117,16 @@ class ParallelRunner(AbstractEnvRunner):
                 ultimate_goal = self.ep_transition_buf[env_idx][0][0][-5:]
                 for i in range(self.n_candidate): # len(env_subgoals) should be equal to n_candidates
                     env_subgoals[i] = [np.array(env_subgoals[i]), ultimate_goal]
-                print('env_subgoals', env_subgoals)
+                # print('env_subgoals', env_subgoals)
                 # switch_goal_flag = [True for _ in range(len(env_subgoals))]
                 self.aug_env.env_method('set_goal', [env_subgoals[idx][0] for idx in range(self.n_candidate)])
                 switch_goal_flag = [False for _ in range(self.n_candidate)]
                 env_end_flag = [False for _ in range(self.n_candidate)]
                 env_end_step = [np.inf for _ in range(self.n_candidate)]
                 env_restart_state = [self.ep_state_buf[env_idx][step] for step in env_restart_steps]
-                temp_time2 = time.time()
+                # temp_time2 = time.time()
                 self.aug_env.env_method('set_state', env_restart_state)
-                step_env_duration += (time.time() - temp_time2)
+                # step_env_duration += (time.time() - temp_time2)
                 env_obs = self.aug_env.env_method('get_obs')
                 env_obs = [convert_dict_to_obs(d) for d in env_obs]
                 # print('checking goal', self.aug_env.get_attr('goal'))
@@ -147,7 +147,7 @@ class ParallelRunner(AbstractEnvRunner):
                 #             env_subgoals[idx].pop(0)
                 #             switch_goal_flag[idx] = False
 
-                print('restart step', env_restart_steps)
+                # print('restart step', env_restart_steps)
                 while not sum(env_end_flag) == self.n_candidate:
                     # Switch subgoal according to switch_goal_flag, and update observation
                     switch_subgoal(switch_goal_flag, env_obs)
@@ -160,9 +160,9 @@ class ParallelRunner(AbstractEnvRunner):
                     # Clip the actions to avoid out of bound error
                     if isinstance(self.aug_env.action_space, gym.spaces.Box):
                         clipped_actions = np.clip(env_action, self.aug_env.action_space.low, self.aug_env.action_space.high)
-                    temp_time2 = time.time()
+                    # temp_time2 = time.time()
                     env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
-                    step_env_duration += (time.time() - temp_time2)
+                    # step_env_duration += (time.time() - temp_time2)
                     # for i, info in enumerate(env_info):
                     #     if 'terminal_observation' in info.keys():
                     #         assert 'terminal_state' in info.keys()
@@ -185,8 +185,8 @@ class ParallelRunner(AbstractEnvRunner):
                         if info['is_success']:
                             if len(env_subgoals[idx]) >= 2:
                                 switch_goal_flag[idx] = True
-                                if idx == 0:
-                                    print('switch goal')
+                                # if idx == 0:
+                                #     print('switch goal')
                             elif env_end_flag[idx] == False:
                                 # this is the end
                                 env_end_flag[idx] = True
@@ -196,7 +196,7 @@ class ParallelRunner(AbstractEnvRunner):
                     if increment_step >= 100 - min(env_restart_steps):
                         break
 
-                print('end step', env_end_step)
+                # print('end step', env_end_step)
                 for idx, end_step in enumerate(env_end_step):
                     if end_step <= 100:
                         transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
@@ -218,11 +218,11 @@ class ParallelRunner(AbstractEnvRunner):
                             augment_done_buf = (True,) + (False,) * (len(augment_done_buf) - 1)
                         augment_returns = self.compute_adv(augment_value_buf, augment_done_buf, augment_reward_buf)
                         assert augment_returns.shape[0] == end_step
-                        if idx == 0:
-                            print('augment value', augment_value_buf)
-                            print('augment done', augment_done_buf)
-                            print('augment_reward', augment_reward_buf)
-                            print('augment return', augment_returns)
+                        # if idx == 0:
+                        #     print('augment value', augment_value_buf)
+                        #     print('augment done', augment_done_buf)
+                        #     print('augment_reward', augment_reward_buf)
+                        #     print('augment return', augment_returns)
                         if self.model.aug_obs is None:
                             self.model.aug_obs = np.array(augment_obs_buf)
                             self.model.aug_act = np.array(augment_act_buf)
@@ -334,7 +334,7 @@ class ParallelRunner(AbstractEnvRunner):
             #         self.ep_state_buf[idx] = []
             #         self.ep_transition_buf[idx] = []
         print('augment takes', duration)
-        print('augment stepping env takes', step_env_duration)
+        # print('augment stepping env takes', step_env_duration)
         # batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
