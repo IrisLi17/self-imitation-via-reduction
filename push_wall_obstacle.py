@@ -657,13 +657,33 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
         }
 
     def get_obs(self):
+        # print('in get_obs, goal', self.goal)
         return self._get_obs()
+
+    def set_goal(self, goal):
+        self.goal = goal.copy()
+
+    def switch_obs_goal(self, obs, goal):
+        obs = obs.copy()
+        if isinstance(obs, dict):
+            goal_idx = np.argmax(goal[-2:])
+            obs['achieved_goal'] = np.concatenate([obs['observation'][3 + 3 * goal_idx: 3 + 3 * (goal_idx + 1)], goal[-2:]])
+            obs['desired_goal'] = goal
+        elif isinstance(obs, np.ndarray):
+            goal_idx = np.argmax(goal[-2:])
+            obs[40:43] = obs[3 + goal_idx * 3: 3 + (goal_idx + 1) * 3]
+            obs[43:45] = goal[-2:]
+            obs[45:50] = goal[:]
+        else:
+            raise TypeError
+        return obs
 
     def get_state(self):
         return self.sim.get_state()
 
     def set_state(self, state):
         self.sim.set_state(state)
+        self.sim.forward()
 
     def _reset_sim(self):
         self.sim.set_state(self.initial_state)

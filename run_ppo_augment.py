@@ -147,13 +147,18 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
 
-    if not parallel:
-        env = SubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
-    else:
-        env = ParallelSubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
+    # if not parallel:
+    env = SubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
+    # else:
+    #     env = ParallelSubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
     aug_env_kwargs = env_kwargs.copy()
     aug_env_kwargs['max_episode_steps'] = None
-    aug_env = make_env(env_id='FetchPushWallObstacleUnlimit-v4', seed=seed, rank=0, kwargs=aug_env_kwargs)
+    def make_thunk_aug(rank):
+        return lambda: make_env(env_id='FetchPushWallObstacleUnlimit-v4', seed=seed, rank=rank, kwargs=aug_env_kwargs)
+    if not parallel:
+        aug_env = make_env(env_id='FetchPushWallObstacleUnlimit-v4', seed=seed, rank=0, kwargs=aug_env_kwargs)
+    else:
+        aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_subgoal)])
     print(aug_env)
     if os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
         os.remove(os.path.join(logger.get_dir(), 'eval.csv'))
@@ -190,7 +195,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             return True
 
         # For debug only.
-        # model.load_parameters('./logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/ppo/0/model_30.zip')
+        # model.load_parameters('./logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/ppo/0/model_70.zip')
         model.learn(total_timesteps=num_timesteps, callback=callback, seed=seed, log_interval=1)
         model.save(os.path.join(log_dir, 'final'))
 

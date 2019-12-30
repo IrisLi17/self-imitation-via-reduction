@@ -374,7 +374,7 @@ class PPO2_augment(ActorCriticRLModel):
                                 aug_env=self.aug_env, n_candidate=self.n_candidate)
             else:
                 from baselines.ppo_augment.parallel_runner import ParallelRunner
-                runner = ParallelRunner(env=self.env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
+                runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
                                         n_candidate=self.n_candidate)
             self.episode_reward = np.zeros((self.n_envs,))
 
@@ -401,6 +401,7 @@ class PPO2_augment(ActorCriticRLModel):
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
                 temp_time1 = time.time()
                 print('runner.run() takes', temp_time1 - temp_time0)
+
                 augment_steps = 0 if self.aug_obs is None else self.aug_obs.shape[0]
                 if self.aug_obs is not None:
                     obs = np.concatenate([obs, self.aug_obs], axis=0)
@@ -597,6 +598,7 @@ class Runner(AbstractEnvRunner):
                         # Do augmentation
                         # Sample start step and perturbation
                         restart_steps, subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate)
+                        # print('restart steps', restart_steps, 'subgoals', subgoals, 'ultimate goal', goal)
                         # augment_transition_buf = self.ep_transition_buf[idx][:restart_step]
                         for k in range(restart_steps.shape[0]):
                             restart_step = restart_steps[k]
@@ -672,10 +674,10 @@ class Runner(AbstractEnvRunner):
                                         self.model.aug_return = np.concatenate([self.model.aug_return, augment_returns], axis=0)
                                         self.model.aug_done = np.concatenate([self.model.aug_done, np.array(augment_done_buf)], axis=0)
                                     assert self.model.aug_done[0] == True
-                                # else:
-                                #     print('Failed to achieve ultimate goal')
-                            # else:
-                            #     print('Failed to achieve subgoal')
+                                else:
+                                    print('Failed to achieve ultimate goal')
+                            else:
+                                print('Failed to achieve subgoal')
 
                     # Then update buf
                     self.ep_state_buf[idx] = []
@@ -745,10 +747,13 @@ class Runner(AbstractEnvRunner):
     def rollout_subtask(self, restart_state, goal, restart_step, ultimate_goal):
         aug_transition = []
         self.aug_env.unwrapped.sim.set_state(restart_state)
+        self.aug_env.unwrapped.sim.forward()
         self.aug_env.unwrapped.goal[:] = goal
         dict_obs = self.aug_env.unwrapped.get_obs()
         obs = np.concatenate([dict_obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+        # print('subgoal', goal, 'obs', obs[-10:])
         def switch_goal(obs, goal):
+            obs = obs.copy()
             assert len(goal) == 5
             obs[-5:] = goal
             goal_idx = np.argmax(goal[3:])
@@ -770,6 +775,7 @@ class Runner(AbstractEnvRunner):
             next_state = self.aug_env.unwrapped.sim.get_state()
             # aug_transition.append((obs, action, value, neglogpac, done, reward))
             aug_transition.append((switch_goal(obs, ultimate_goal), action, False, reward)) # Note that done refers to the output of previous action
+            # print(step_idx, obs[-10:], next_obs[-10:])
             if info['is_success']:
                 break
             obs = next_obs
