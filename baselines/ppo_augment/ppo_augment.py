@@ -104,6 +104,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.aug_act = []
         self.aug_neglogp = []
         self.aug_adv = []
+        self.num_aug_steps = 0  # every interaction with simulator should be counted
 
         if _init_setup_model:
             self.setup_model()
@@ -273,7 +274,7 @@ class PPO2_augment(ActorCriticRLModel):
 
                 self.summary = tf.summary.merge_all()
 
-    def _train_step(self, learning_rate, cliprange, obs, returns, masks, actions, values, neglogpacs, update,
+    def _train_step(self, learning_rate, cliprange, obs, returns, masks, actions, values, neglogpacs, is_demo, update,
                     writer, states=None, cliprange_vf=None, aug_obs_slice=None, aug_act_slice=None,
                     aug_neglog_pac_slice=None, aug_adv_slice=None):
         """
@@ -296,6 +297,9 @@ class PPO2_augment(ActorCriticRLModel):
         """
         advs = returns - values
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
+        for i in range(advs.shape[0]):
+            if is_demo[i]:
+                advs[i] = np.max(advs[i], 0)
         if aug_adv_slice is not None:
             aug_adv_slice = (aug_adv_slice - aug_adv_slice.mean()) / (aug_adv_slice.std() + 1e-8)
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
@@ -399,6 +403,7 @@ class PPO2_augment(ActorCriticRLModel):
                 # true_reward is the reward without discount
                 temp_time0 = time.time()
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
+                is_demo = np.zeros(obs.shape[0])
                 temp_time1 = time.time()
                 print('runner.run() takes', temp_time1 - temp_time0)
 
@@ -411,6 +416,7 @@ class PPO2_augment(ActorCriticRLModel):
                     actions = np.concatenate([actions, self.aug_act], axis=0)
                     values = np.concatenate([values, self.aug_value], axis=0)
                     neglogpacs = np.concatenate([neglogpacs, self.aug_neglogp], axis=0)
+                    is_demo = np.concatenate([is_demo, np.ones(self.aug_obs.shape[0])], axis=0)
                     print('augmented data length', obs.shape[0])
                 self.num_timesteps += self.n_batch
                 ep_info_buf.extend(ep_infos)
@@ -426,7 +432,7 @@ class PPO2_augment(ActorCriticRLModel):
                                                                             self.n_batch + start) // batch_size)
                             end = start + batch_size
                             mbinds = inds[start:end]
-                            slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
+                            slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs, is_demo))
                             # if len(self.aug_obs) > batch_size:
                             #     aug_inds = np.random.choice(len(self.aug_obs), batch_size)
                             #     aug_obs_slice = np.array(self.aug_obs)[aug_inds]
@@ -475,7 +481,8 @@ class PPO2_augment(ActorCriticRLModel):
                     explained_var = explained_variance(values, returns)
                     logger.logkv("serial_timesteps", update * self.n_steps)
                     logger.logkv("n_updates", update)
-                    logger.logkv("total_timesteps", self.num_timesteps)
+                    logger.logkv("original_timesteps", self.num_timesteps)
+                    logger.logkv("total_timesteps", self.num_timesteps + self.num_aug_steps)
                     logger.logkv("fps", fps)
                     logger.logkv("explained_variance", float(explained_var))
                     if len(ep_info_buf) > 0 and len(ep_info_buf[0]) > 0:
@@ -772,6 +779,7 @@ class Runner(AbstractEnvRunner):
             if isinstance(self.aug_env.action_space, gym.spaces.Box):
                 clipped_actions = np.clip(action, self.aug_env.action_space.low, self.aug_env.action_space.high)
             next_obs, _, _, info = self.aug_env.step(clipped_actions)
+            self.model.num_aug_steps += 1
             reward = self.aug_env.compute_reward(switch_goal(next_obs, ultimate_goal), ultimate_goal, None)
             next_state = self.aug_env.unwrapped.sim.get_state()
             # aug_transition.append((obs, action, value, neglogpac, done, reward))
