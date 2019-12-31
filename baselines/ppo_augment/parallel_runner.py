@@ -162,6 +162,7 @@ class ParallelRunner(AbstractEnvRunner):
                         clipped_actions = np.clip(env_action, self.aug_env.action_space.low, self.aug_env.action_space.high)
                     # temp_time2 = time.time()
                     env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
+                    self.model.num_aug_steps += self.n_candidate
                     # step_env_duration += (time.time() - temp_time2)
                     # for i, info in enumerate(env_info):
                     #     if 'terminal_observation' in info.keys():

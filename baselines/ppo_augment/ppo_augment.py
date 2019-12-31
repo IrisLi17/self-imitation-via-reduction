@@ -104,6 +104,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.aug_act = []
         self.aug_neglogp = []
         self.aug_adv = []
+        self.num_aug_steps = 0  # every interaction with simulator should be counted
 
         if _init_setup_model:
             self.setup_model()
@@ -475,7 +476,8 @@ class PPO2_augment(ActorCriticRLModel):
                     explained_var = explained_variance(values, returns)
                     logger.logkv("serial_timesteps", update * self.n_steps)
                     logger.logkv("n_updates", update)
-                    logger.logkv("total_timesteps", self.num_timesteps)
+                    logger.logkv("original_timesteps", self.num_timesteps)
+                    logger.logkv("total_timesteps", self.num_timesteps + self.num_aug_steps)
                     logger.logkv("fps", fps)
                     logger.logkv("explained_variance", float(explained_var))
                     if len(ep_info_buf) > 0 and len(ep_info_buf[0]) > 0:
@@ -772,6 +774,7 @@ class Runner(AbstractEnvRunner):
             if isinstance(self.aug_env.action_space, gym.spaces.Box):
                 clipped_actions = np.clip(action, self.aug_env.action_space.low, self.aug_env.action_space.high)
             next_obs, _, _, info = self.aug_env.step(clipped_actions)
+            self.model.num_aug_steps += 1
             reward = self.aug_env.compute_reward(switch_goal(next_obs, ultimate_goal), ultimate_goal, None)
             next_state = self.aug_env.unwrapped.sim.get_state()
             # aug_transition.append((obs, action, value, neglogpac, done, reward))
