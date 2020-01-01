@@ -48,7 +48,7 @@ class PPO2_augment(ActorCriticRLModel):
     """
 
     def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
-                 vf_coef=0.5, aug_coef=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
+                 vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
                  cliprange_vf=None, n_candidate=4, parallel=False, verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
@@ -62,7 +62,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.n_steps = n_steps
         self.ent_coef = ent_coef
         self.vf_coef = vf_coef
-        self.aug_coef = aug_coef
+        self.aug_clip = aug_clip
         self.max_grad_norm = max_grad_norm
         self.gamma = gamma
         self.lam = lam
@@ -299,7 +299,7 @@ class PPO2_augment(ActorCriticRLModel):
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
         for i in range(advs.shape[0]):
             if is_demo[i]:
-                advs[i] = np.max(advs[i], 0)
+                advs[i] = np.max([advs[i], self.aug_clip])
         if aug_adv_slice is not None:
             aug_adv_slice = (aug_adv_slice - aug_adv_slice.mean()) / (aug_adv_slice.std() + 1e-8)
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
@@ -410,6 +410,8 @@ class PPO2_augment(ActorCriticRLModel):
                 augment_steps = 0 if self.aug_obs is None else self.aug_obs.shape[0]
                 if self.aug_obs is not None:
                     print(self.aug_obs.shape, self.aug_act.shape, self.aug_neglogp.shape, self.aug_return.shape, self.aug_value.shape, self.aug_done.shape)
+                    adv_clip_frac = np.sum((self.aug_return - self.aug_value) < (np.mean(returns - values) + self.aug_clip * np.std(returns - values))) / self.aug_return.shape[0]
+                    print('demo adv below average + %f std' % self.aug_clip, adv_clip_frac)
                     obs = np.concatenate([obs, self.aug_obs], axis=0)
                     returns = np.concatenate([returns, self.aug_return], axis=0)
                     masks = np.concatenate([masks, self.aug_done], axis=0)
