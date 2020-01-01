@@ -24,22 +24,24 @@ if __name__ == '__main__':
         success_rate = get_item(progress_file, 'ep_reward_mean')
         total_timesteps = get_item(progress_file, 'total_timesteps')
         try:
-            eval_reward = smooth(get_item(eval_file, 'mean_eval_reward'), window)
-            n_updates = smooth(get_item(eval_file, 'n_updates'), window)
+            eval_reward = get_item(eval_file, 'mean_eval_reward')
+            n_updates = get_item(eval_file, 'n_updates')
         except:
             pass
-        success_rate = smooth(success_rate, window)
-        total_timesteps = smooth(total_timesteps, window)
+        # success_rate = smooth(success_rate, window)
+        # total_timesteps = smooth(total_timesteps, window)
         if option == 'success_rate':
-            ax[0].plot(total_timesteps, success_rate, label=log_path)
+            ax[0].plot(smooth(total_timesteps, window), smooth(success_rate, window), label=log_path)
         elif option == 'eval':
-            ax[0].plot(n_updates*65536, eval_reward, label=log_path)
+            # ax[0].plot(n_updates*65536, eval_reward, label=log_path)
+            
+            ax[0].plot(smooth(total_timesteps[n_updates-1], window), smooth(eval_reward, window), label=log_path)
         try:
             augment_steps = get_item(progress_file, 'augment_steps') / 65536
-            augment_steps = smooth(augment_steps, window)
+            # augment_steps = smooth(augment_steps, window)
         except:
             augment_steps = np.zeros(total_timesteps.shape)
-        ax[1].plot(total_timesteps, augment_steps, label=log_path)
+        ax[1].plot(smooth(total_timesteps, window), smooth(augment_steps, window), label=log_path)
     if option == 'success_rate':
         ax[0].set_title('ep reward mean')
     elif option == 'eval':
