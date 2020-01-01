@@ -1,9 +1,10 @@
-from masspoint_env import MasspointPushDoubleObstacleEnv
+from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-env = MasspointPushDoubleObstacleEnv(random_ratio=1.0, random_pusher=False)
+# env = MasspointPushDoubleObstacleEnv(random_ratio=1.0, random_pusher=False)
+env = MasspointPushSingleObstacleEnv(random_ratio=1.0, random_pusher=False)
 obs = env.reset()
 for i in range(100):
     action = obs['observation'][3:5] - obs['observation'][0:2]

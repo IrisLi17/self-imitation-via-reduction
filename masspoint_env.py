@@ -9,6 +9,129 @@ import numpy as np
 MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'masspoint', 'double_obstacle.xml')
 
 
+class MasspointPushSingleObstacleEnv(MasspointPushEnv, utils.EzPickle):
+    def __init__(self, reward_type='sparse', random_box=True,
+                 random_ratio=1.0, random_pusher=False):
+        XML_PATH = MODEL_XML_PATH
+        initial_qpos = {
+            'masspoint:slidex': 0.0,
+            'masspoint:slidey': 0.0,
+            'object0:slidex': 0.0,
+            'object0:slidey': 0.0,
+            'object1:joint': [1.4, 0.47, 0.43, 1., 0., 0., 0.],
+        }
+        self.random_box = random_box
+        self.random_ratio = random_ratio
+        self.random_pusher = random_pusher
+        MasspointPushEnv.__init__(
+            self, XML_PATH, n_substeps=20,
+            target_in_the_air=False, target_offset=0.0,
+            obj_range=0.15, target_range=0.15, distance_threshold=0.05,
+            initial_qpos=initial_qpos, reward_type=reward_type, n_object=2)
+        utils.EzPickle.__init__(self)
+        self.pos_wall0 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
+        self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
+        self.size_obstacle = self.sim.model.geom_size[self.sim.model.geom_name2id('object1')]
+        self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
+
+    def _reset_sim(self):
+        # self.sim.set_state(self.initial_state)
+        sim_state = copy.deepcopy(self.initial_state)
+        # TODO: randomize masspoint pos
+        if self.random_pusher:
+            masspoint_jointx_i = self.sim.model.get_joint_qpos_addr('masspoint:slidex')
+            masspoint_jointy_i = self.sim.model.get_joint_qpos_addr('masspoint:slidey')
+            masspoint_pos = self.np_random.uniform([1.0, 0.45], [1.6, 1.05])
+            sim_state.qpos[masspoint_jointx_i] = masspoint_pos[0]
+            sim_state.qpos[masspoint_jointy_i] = masspoint_pos[1]
+        else:
+            masspoint_pos = self.initial_masspoint_xpos[:2]
+
+        def config_valid(object_xpos, obstacle1_xpos):
+            if np.linalg.norm(object_xpos - masspoint_pos) >= 0.1 \
+                    and abs(object_xpos[1] - self.pos_wall0[1]) >= self.size_object[1] + self.size_wall[1] \
+                    and abs(obstacle1_xpos[1] - self.pos_wall0[1]) >= self.size_obstacle[1] + self.size_wall[1] \
+                    and (abs(object_xpos[0] - obstacle1_xpos[0]) >= self.size_object[0] + self.size_obstacle[0] or abs(
+                            object_xpos[1] - obstacle1_xpos[1]) >= self.size_object[1] + self.size_obstacle[1]):
+                return True
+            else:
+                return False
+
+        # Randomize start position of object.
+        if self.random_box and self.np_random.uniform() < self.random_ratio:
+            self.sample_hard = False
+            object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            stick1_xpos = object_xpos.copy()
+            while not config_valid(object_xpos, stick1_xpos):
+                object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+                stick1_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+        else:
+            self.sample_hard = True
+            # TODO
+            object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range,
+                                                                                 size=2)
+            stick1_xpos = np.asarray(
+                [self.pos_wall0[0] + self.size_wall[0] + self.size_obstacle[0], self.initial_masspoint_xpos[1]])
+            while not config_valid(object_xpos, stick1_xpos):
+                object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range,
+                                                                                     size=2)
+        # Set the position of box. (two slide joints)
+        box_jointx_i = self.sim.model.get_joint_qpos_addr("object0:slidex")
+        box_jointy_i = self.sim.model.get_joint_qpos_addr("object0:slidey")
+        sim_state.qpos[box_jointx_i] = object_xpos[0]
+        sim_state.qpos[box_jointy_i] = object_xpos[1]
+        self.sim.set_state(sim_state)
+        # Set the position of obstacle. (free joint)
+        stick1_qpos = self.sim.data.get_joint_qpos('object1:joint')
+        assert stick1_qpos.shape == (7,)
+        stick1_qpos[:2] = stick1_xpos
+        self.sim.data.set_joint_qpos('object1:joint', stick1_qpos)
+
+        self.sim.forward()
+        return True
+
+    def _sample_goal(self):
+        if not hasattr(self, 'size_wall'):
+            self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
+        if not hasattr(self, 'size_object'):
+            self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
+        if not hasattr(self, 'pos_wall0'):
+            self.pos_wall0 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
+        g_idx = np.random.randint(2)
+        one_hot = np.zeros(2)
+        one_hot[g_idx] = 1
+        goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+        if hasattr(self, 'sample_hard') and self.sample_hard and g_idx == 0:
+            while (goal[0] - self.pos_wall0[0]) * (self.sim.data.get_site_xpos('object0')[0] - self.pos_wall0[0]) > 0:
+                goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+        goal = np.concatenate([goal, self.sim.data.get_site_xpos('object' + str(g_idx))[2:3], one_hot])
+        if self.target_in_the_air and self.np_random.uniform() < 0.5:
+            goal[2] += self.np_random.uniform(0, 0.45)
+        return goal.copy()
+
+    def compute_reward(self, observation, goal, info):
+        # Note: the input is different from other environments.
+        one_hot = goal[3:]
+        idx = np.argmax(one_hot)
+        # HACK: parse the corresponding object position from observation
+        achieved_goal = observation[3 + 3 * idx : 3 + 3 * (idx + 1)]
+        r = MasspointPushEnv.compute_reward(self, achieved_goal, goal[0:3], info)
+        return r
+
+    def step(self, action):
+        action = np.clip(action, self.action_space.low, self.action_space.high)
+        self._set_action(action)
+        self.sim.step()
+        self._step_callback()
+        obs = self._get_obs()
+
+        done = False
+        info = {
+            'is_success': self._is_success(obs['achieved_goal'][0:3], self.goal[0:3]),
+        }
+        reward = self.compute_reward(obs['observation'], self.goal, info)
+        return obs, reward, done, info
+
 class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
     def __init__(self, reward_type='sparse', random_box=True,
                  random_ratio=1.0, random_pusher=False):
@@ -18,8 +141,8 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
             'masspoint:slidey': 0.0,
             'object0:slidex': 0.0,
             'object0:slidey': 0.0,
-            'object1:joint': [1.4, 0.47, 0.4, 1., 0., 0., 0.],
-            'object2:joint': [1.4, 0.6, 0.4, 1., 0., 0., 0.],
+            'object1:joint': [1.4, 0.47, 0.43, 1., 0., 0., 0.],
+            'object2:joint': [1.4, 0.6, 0.43, 1., 0., 0., 0.],
         }
         self.random_box = random_box
         self.random_ratio = random_ratio

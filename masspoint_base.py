@@ -159,7 +159,7 @@ class MasspointPushEnv(robot_env.RobotEnv):
             self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
         if not hasattr(self, 'pos_wall0'):
             self.pos_wall0 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
-        if not hasattr(self, 'pos_wall2'):
+        if self.n_object > 2 and not hasattr(self, 'pos_wall2'):
             self.pos_wall2 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall2')]
         g_idx = np.random.randint(self.n_object)
         one_hot = np.zeros(self.n_object)

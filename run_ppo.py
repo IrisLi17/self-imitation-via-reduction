@@ -7,6 +7,7 @@ from run_ppo_augment import eval_model, log_eval
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
+from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
@@ -22,6 +23,11 @@ ENTRY_POINT = {'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
                # 'FetchPushWall-v1': FetchPushWallEnv,
                # 'FetchPushBox-v1': FetchPushBoxEnv,
                }
+
+MASS_ENTRY_POINT = {
+    'MasspointPushSingleObstacle-v1': MasspointPushSingleObstacleEnv,
+    'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
+}
 
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -51,7 +57,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     :param allow_early_resets: (bool) allows early reset of the environment
     :return: (Gym Environment) The mujoco environment
     """
-    if env_id in ENTRY_POINT.keys():
+    if env_id in ENTRY_POINT.keys() or env_id in MASS_ENTRY_POINT.keys():
         # env = ENTRY_POINT[env_id](**kwargs)
         # print(env)
         # from gym.wrappers.time_limit import TimeLimit
@@ -87,16 +93,27 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                           random_ratio=random_ratio,
                           random_gripper=True,
                           max_episode_steps=100, )
+    elif env_name in MASS_ENTRY_POINT.keys():
+        env_kwargs = dict(random_box=True,
+                          random_ratio=random_ratio,
+                          random_pusher=True,
+                          max_episode_steps=100,)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
     env = SubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
-    eval_env_kwargs = dict(random_box=True,
-                           heavy_obstacle=True,
-                           random_ratio=0.0,
-                           random_gripper=True,
-                           max_episode_steps=100, )
+    if env_name in ENTRY_POINT.keys():
+        eval_env_kwargs = dict(random_box=True,
+                               heavy_obstacle=True,
+                               random_ratio=0.0,
+                               random_gripper=True,
+                               max_episode_steps=100, )
+    elif env_name in MASS_ENTRY_POINT.keys():
+        eval_env_kwargs = dict(random_box=True,
+                               random_ratio=0.0,
+                               random_pusher=True,
+                               max_episode_steps=100,)
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
     print(eval_env)
     if not play:
