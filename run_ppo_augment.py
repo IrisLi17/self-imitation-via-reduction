@@ -35,6 +35,7 @@ def arg_parse():
     parser.add_argument('--aug_clip', default=0.1, type=float)
     parser.add_argument('--n_subgoal', default=4, type=int)
     parser.add_argument('--parallel', action="store_true", default=False)
+    parser.add_argument('--start_augment', type=float, default=0)
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
@@ -125,7 +126,7 @@ def log_traj(aug_obs, aug_done, index):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, aug_clip, n_subgoal,
-         parallel):
+         parallel, start_augment):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir)
 
@@ -177,7 +178,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         # TODO: vectorize env
         model = PPO2_augment('MlpPolicy', env, aug_env=aug_env, verbose=1, n_steps=2048, nminibatches=32, lam=0.95,
                              gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
-                             cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, policy_kwargs=policy_kwargs,
+                             cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
+                             policy_kwargs=policy_kwargs,
                              )
 
         def callback(_locals, _globals):
@@ -252,4 +254,4 @@ if __name__ == '__main__':
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps),
          log_path=args.log_path, load_path=args.load_path, play=args.play, export_gif=args.export_gif,
          random_ratio=args.random_ratio, aug_clip=args.aug_clip, n_subgoal=args.n_subgoal,
-         parallel=args.parallel)
+         parallel=args.parallel, start_augment=int(args.start_augment))

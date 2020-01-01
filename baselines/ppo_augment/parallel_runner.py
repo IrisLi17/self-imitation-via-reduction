@@ -84,7 +84,7 @@ class ParallelRunner(AbstractEnvRunner):
             restart_steps = [[] for _ in range(self.model.n_envs)]
             subgoals = [[] for _ in range(self.model.n_envs)]
             for idx, done in enumerate(self.dones):
-                if done:
+                if self.model.num_timesteps > self.model.start_augment and done:
                     goal = self.ep_transition_buf[idx][0][0][-5:]
                     if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
                         # Do augmentation

@@ -49,7 +49,8 @@ class PPO2_augment(ActorCriticRLModel):
 
     def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
-                 cliprange_vf=None, n_candidate=4, parallel=False, verbose=0, tensorboard_log=None, _init_setup_model=True,
+                 cliprange_vf=None, n_candidate=4, parallel=False, start_augment=0,
+                 verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
         super(PPO2_augment, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
@@ -70,6 +71,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.noptepochs = noptepochs
         self.n_candidate = n_candidate
         self.parallel = parallel
+        self.start_augment = start_augment
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
 
@@ -601,7 +603,7 @@ class Runner(AbstractEnvRunner):
             # exit()
             temp_time0 = time.time()
             for idx, done in enumerate(self.dones):
-                if done:
+                if self.model.num_timesteps > self.model.start_augment and done:
                     # Check if this is failture
                     goal = self.ep_transition_buf[idx][0][0][-5:]
                     if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
