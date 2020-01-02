@@ -65,7 +65,10 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
         if 'max_episode_steps' in kwargs:
             max_episode_steps = kwargs['max_episode_steps']
             del kwargs['max_episode_steps']
-        gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
+        if env_id in ENTRY_POINT.keys():
+            gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
+        elif env_id in MASS_ENTRY_POINT.keys():
+            gym.register(env_id, entry_point=MASS_ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
         env = gym.make(env_id)
         # env = TimeLimit(env, max_episode_steps=50)
     else:
