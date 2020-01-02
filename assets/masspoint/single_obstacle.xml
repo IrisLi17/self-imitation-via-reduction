@@ -18,7 +18,7 @@
 			<site name="target0" pos="0.7 0.0 0.4" size="0.02 0.02 0.02" rgba="1 0 0 1" type="sphere"></site>
 		</body>
 
-		<body pos="1.3 0.75 0.425" name="masspoint">
+		<body pos="0 0 0.425" name="masspoint">
 			<geom name="masspoint" size="0.024 0.024 0.024" type="sphere" condim="6" material="stick_mat" mass="10"></geom>
 			<joint axis="1 0 0" name="masspoint:slidex" type="slide" damping="0.01"></joint>
 			<joint axis="0 1 0" name="masspoint:slidey" type="slide" damping="0.01"></joint>

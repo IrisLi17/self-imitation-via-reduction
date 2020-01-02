@@ -6,16 +6,17 @@ import gym.envs.robotics.utils as robot_utils
 import numpy as np
 
 
+MODEL_XML_PATH0 = os.path.join(os.path.dirname(__file__), 'assets', 'masspoint', 'single_obstacle.xml')
 MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'masspoint', 'double_obstacle.xml')
 
 
 class MasspointPushSingleObstacleEnv(MasspointPushEnv, utils.EzPickle):
     def __init__(self, reward_type='sparse', random_box=True,
                  random_ratio=1.0, random_pusher=False):
-        XML_PATH = MODEL_XML_PATH
+        XML_PATH = MODEL_XML_PATH0
         initial_qpos = {
-            'masspoint:slidex': 0.0,
-            'masspoint:slidey': 0.0,
+            'masspoint:slidex': 1.3,
+            'masspoint:slidey': 0.75,
             'object0:slidex': 0.0,
             'object0:slidey': 0.0,
             'object1:joint': [1.4, 0.47, 0.43, 1., 0., 0., 0.],
@@ -49,8 +50,8 @@ class MasspointPushSingleObstacleEnv(MasspointPushEnv, utils.EzPickle):
 
         def config_valid(object_xpos, obstacle1_xpos):
             if np.linalg.norm(object_xpos - masspoint_pos) >= 0.1 \
-                    and abs(object_xpos[1] - self.pos_wall0[1]) >= self.size_object[1] + self.size_wall[1] \
-                    and abs(obstacle1_xpos[1] - self.pos_wall0[1]) >= self.size_obstacle[1] + self.size_wall[1] \
+                    and abs(object_xpos[0] - self.pos_wall0[0]) >= self.size_object[0] + self.size_wall[0] \
+                    and abs(obstacle1_xpos[0] - self.pos_wall0[0]) >= self.size_obstacle[0] + self.size_wall[0] \
                     and (abs(object_xpos[0] - obstacle1_xpos[0]) >= self.size_object[0] + self.size_obstacle[0] or abs(
                             object_xpos[1] - obstacle1_xpos[1]) >= self.size_object[1] + self.size_obstacle[1]):
                 return True
@@ -72,7 +73,10 @@ class MasspointPushSingleObstacleEnv(MasspointPushEnv, utils.EzPickle):
                                                                                  size=2)
             stick1_xpos = np.asarray(
                 [self.pos_wall0[0] + self.size_wall[0] + self.size_obstacle[0], self.initial_masspoint_xpos[1]])
-            while not config_valid(object_xpos, stick1_xpos):
+            while not (np.linalg.norm(object_xpos - masspoint_pos) >= 0.1 \
+                    and abs(object_xpos[0] - self.pos_wall0[0]) >= self.size_object[0] + self.size_wall[0] \
+                    and (abs(object_xpos[0] - stick1_xpos[0]) >= self.size_object[0] + self.size_obstacle[0] or abs(
+                            object_xpos[1] - stick1_xpos[1]) >= self.size_object[1] + self.size_obstacle[1])):
                 object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range,
                                                                                      size=2)
         # Set the position of box. (two slide joints)
@@ -137,8 +141,8 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
                  random_ratio=1.0, random_pusher=False):
         XML_PATH = MODEL_XML_PATH
         initial_qpos = {
-            'masspoint:slidex': 0.0,
-            'masspoint:slidey': 0.0,
+            'masspoint:slidex': 1.3,
+            'masspoint:slidey': 0.75,
             'object0:slidex': 0.0,
             'object0:slidey': 0.0,
             'object1:joint': [1.4, 0.47, 0.43, 1., 0., 0., 0.],
