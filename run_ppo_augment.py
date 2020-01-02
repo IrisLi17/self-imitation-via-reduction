@@ -206,29 +206,34 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         model = PPO2_augment.load(load_path)
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
-        img = env.render(mode='rgb_array')
+        while (np.argmax(obs[0][-2:]) != 0):
+            obs = env.reset()
+        # img = env.render(mode='rgb_array')
         episode_reward = 0.0
         num_episode = 0
         frame_idx = 0
         images = []
         for i in range(500):
-            images.append(img)
-            action, _ = model.predict(obs)
-            print('action', action)
-            obs, reward, done, _ = env.step(action)
-            episode_reward += reward
             img = env.render(mode='rgb_array')
+            images.append(img)
             ax.cla()
             ax.imshow(img)
             ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx) +
                          ', goal idx ' + str(np.argmax(obs[0][-2:])))
+            assert np.argmax(obs[0][-2:]) == 0
+            action, _ = model.predict(obs)
+            print('action', action)
+            obs, reward, done, _ = env.step(action)
+            episode_reward += reward
             frame_idx += 1
             if not export_gif:
                 plt.pause(0.1)
             else:
                 plt.savefig(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % i))
             if done:
-                obs = env.reset()
+                # obs = env.reset()
+                while (np.argmax(obs[0][-2:]) != 0):
+                    obs = env.reset()
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
                 frame_idx = 0
