@@ -7,7 +7,7 @@ from run_ppo_augment import eval_model, log_eval
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
-from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv
+from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
@@ -26,6 +26,7 @@ ENTRY_POINT = {'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
 
 MASS_ENTRY_POINT = {
     'MasspointPushSingleObstacle-v1': MasspointPushSingleObstacleEnv,
+    'MasspointPushSingleObstacle-v2': MasspointPushSingleObstacleEnv_v2,
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
 }
 
@@ -72,7 +73,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
         env = gym.make(env_id)
         # env = TimeLimit(env, max_episode_steps=50)
     else:
-        env = gym.make(env_id, reward_type='dense')
+        env = gym.make(env_id, reward_type='sparse')
     env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
     env = DoneOnSuccessWrapper(env)
     if log_dir is not None:
@@ -87,8 +88,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     set_global_seeds(seed)
 
     n_cpu = 32 if not play else 1
-    if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1']:
-        env_kwargs = dict(reward_type='dense')
+    if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1', 'FetchPickAndPlace-v1']:
+        env_kwargs = {}
         # pass
     elif env_name in ENTRY_POINT.keys():
         env_kwargs = dict(random_box=True,
@@ -117,6 +118,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                                random_ratio=0.0,
                                random_pusher=True,
                                max_episode_steps=100,)
+    elif env_name in ['FetchPickAndPlace-v1']:
+        eval_env_kwargs = {}
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
     print(eval_env)
     if not play:
@@ -129,8 +132,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                      )
         def callback(_locals, _globals):
             num_update = _locals["update"]
-            mean_eval_reward = eval_model(eval_env, _locals["self"])
-            log_eval(num_update, mean_eval_reward)
+            if env_name in ENTRY_POINT.keys() or env_name in MASS_ENTRY_POINT.keys():
+                mean_eval_reward = eval_model(eval_env, _locals["self"])
+                log_eval(num_update, mean_eval_reward)
             if num_update % 10 == 0:
                 model_path = os.path.join(log_dir, 'model_' + str(num_update // 10))
                 model.save(model_path)
@@ -144,22 +148,22 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         model = PPO2.load(load_path)
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
-        img = env.render(mode='rgb_array')
+        # img = env.render(mode='rgb_array')
         episode_reward = 0.0
         num_episode = 0
         frame_idx = 0
         images = []
         for i in range(500):
-            images.append(img)
-            action, _ = model.predict(obs)
-            print('action', action)
-            obs, reward, done, _ = env.step(action)
-            episode_reward += reward
             img = env.render(mode='rgb_array')
             ax.cla()
             ax.imshow(img)
             ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx) +
                          ', goal idx ' + str(np.argmax(obs[0][-2:])))
+            images.append(img)
+            action, _ = model.predict(obs)
+            print('action', action)
+            obs, reward, done, _ = env.step(action)
+            episode_reward += reward
             frame_idx += 1
             if not export_gif:
                 plt.pause(0.1)
