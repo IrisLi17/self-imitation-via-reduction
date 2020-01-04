@@ -51,7 +51,7 @@
 			<joint axis="0 1 0" name="object1:slidey" type="slide" damping="10"></joint>
             <joint axis="0 0 1" name="object1:slidez" type="slide" damping="10000"></joint>
             <joint axis="0 0 1" name="object1:rz" type="hinge" damping="10"></joint>
-			<geom size="0.18 0.60 0.18" type="box" name="object1" material="stick_mat" mass="10" euler="0 0 0"></geom>
+			<geom size="0.18 0.60 0.18" type="box" name="object1" material="stick_mat" mass="5" euler="0 0 0"></geom>
 			<site name="object1" pos="0 0 0" size="0.02 0.02 0.02" rgba="0.5 0.2 0 0" type="sphere"></site>
 		</body>
 		<body name="object2" pos="0 0 0">
@@ -59,7 +59,7 @@
 			<joint axis="0 1 0" name="object2:slidey" type="slide" damping="10"></joint>
             <joint axis="0 0 1" name="object2:slidez" type="slide" damping="10000"></joint>
             <joint axis="0 0 1" name="object2:rz" type="hinge" damping="10"></joint>
-			<geom size="0.18 0.60 0.18" type="box" name="object2" material="stick_mat" rgba="1 0 1 0.5" mass="10" euler="0 0 0"></geom>
+			<geom size="0.18 0.60 0.18" type="box" name="object2" material="stick_mat" rgba="1 0 1 0.5" mass="5" euler="0 0 0"></geom>
 			<site name="object2" pos="0 0 0" size="0.02 0.02 0.02" rgba="0.5 0.2 0 0" type="sphere"></site>
 		</body>
 

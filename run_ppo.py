@@ -103,7 +103,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                           random_pusher=True,
                           max_episode_steps=100,)
         if 'MasspointPushDoubleObstacle' in env_name:
-            env_kwargs['max_episode_steps']=200
+            env_kwargs['max_episode_steps']=100
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -150,6 +150,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         model = PPO2.load(load_path)
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
+        while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
+            obs = env.reset()
         # img = env.render(mode='rgb_array')
         episode_reward = 0.0
         num_episode = 0
@@ -163,7 +165,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                          ', goal idx ' + str(np.argmax(obs[0][-2:])))
             images.append(img)
             action, _ = model.predict(obs)
-            print('action', action)
+            # print('action', action)
             obs, reward, done, _ = env.step(action)
             episode_reward += reward
             frame_idx += 1
@@ -173,6 +175,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 plt.savefig(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % i))
             if done:
                 # obs = env.reset()
+                while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
+                    obs = env.reset()
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
                 frame_idx = 0
