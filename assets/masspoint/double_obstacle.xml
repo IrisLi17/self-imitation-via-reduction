@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <mujoco>
 	<compiler angle="radian" coordinate="local"></compiler>
-	<option timestep="0.002">
+	<option timestep="0.005">
 		<flag warmstart="enable"></flag>
 	</option>
 
@@ -13,50 +13,53 @@
 	</asset>
 
 	<worldbody>
-		<geom name="floor0" pos="0.8 0.75 0" size="0.85 0.70 1" type="plane" condim="3" material="floor_mat"></geom>
-		<body name="floor0" pos="0.8 0.75 0">
-			<site name="target0" pos="0.7 0.0 0.4" size="0.02 0.02 0.02" rgba="1 0 0 1" type="sphere"></site>
+		<geom name="floor0" pos="2.5 2.5 0" size="3 3 1" type="plane" condim="3" material="floor_mat"></geom>
+		<body name="floor0" pos="2.5 2.5 0">
+			<site name="target0" pos="0.7 0.0 0.4" size="0.10 0.10 0.10" rgba="1 0 0 1" type="sphere"></site>
 		</body>
 
-		<body pos="1.3 0.75 0.425" name="masspoint">
-			<geom name="masspoint" size="0.024 0.024 0.024" type="sphere" condim="6" material="stick_mat" mass="10"></geom>
-			<joint axis="1 0 0" name="masspoint:slidex" type="slide" damping="0.01"></joint>
-			<joint axis="0 1 0" name="masspoint:slidey" type="slide" damping="0.01"></joint>
+		<geom name="bound0" pos="-0.2 2.5 0.25" size="0.2 2.9 0.25" type="box" mass="2000" material="table_mat"></geom>
+		<geom name="bound1" pos="5.2 2.5 0.25" size="0.2 2.9 0.25" type="box" mass="2000" material="table_mat"></geom>
+		<geom name="bound2" pos="2.5 -0.2 0.25" size="2.5 0.2 0.25" type="box" mass="2000" material="table_mat"></geom>
+		<geom name="bound3" pos="2.5 5.2 0.25" size="2.5 0.2 0.25" type="box" mass="2000" material="table_mat"></geom>
+		<geom name="wall0" pos="1.68 1.0 0.25" size="0.18 1.0 0.25" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
+        <geom name="wall1" pos="1.68 4.0 0.25" size="0.18 1.0 0.25" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
+        <geom name="wall2" pos="3.32 1.0 0.25" size="0.18 1.0 0.25" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
+        <geom name="wall3" pos="3.32 4.0 0.25" size="0.18 1.0 0.25" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
+
+		<body pos="0 0 0" name="masspoint">
+			<geom name="masspoint" size="0.15" type="sphere" material="stick_mat" mass="1" euler="1.57 0 0"></geom>
+			<joint axis="1 0 0" name="masspoint:slidex" type="slide" damping="0.1"></joint>
+			<joint axis="0 1 0" name="masspoint:slidey" type="slide" damping="0.1"></joint>
+			<joint axis="0 0 1" name="masspoint:slidez" type="slide" damping="10000"></joint>
 			<site name="masspoint" pos="0 0 0" size="0.02 0.02 0.02" rgba="1 0 0 1" type="sphere"></site>
 		</body>
 
-		<body pos="1.3 0.75 0.2" name="table0">
-			<geom size="0.30 0.40 0.2" type="box" mass="2000" material="table_mat"></geom>
-		</body>
-
-		<!--geom name="wall0" pos="1.25 0.975 0.45" size="0.02 0.125 0.05" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
-        <geom name="wall1" pos="1.25 0.525 0.45" size="0.02 0.125 0.05" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom!-->
-        <geom name="wall0" pos="1.1 0.58 0.45" size="0.1 0.02 0.05" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
-        <geom name="wall1" pos="1.5 0.58 0.45" size="0.1 0.02 0.05" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
-        <geom name="wall2" pos="1.1 0.92 0.45" size="0.1 0.02 0.05" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
-        <geom name="wall3" pos="1.5 0.92 0.45" size="0.1 0.02 0.05" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
-
-		<body name="object0" pos="0 0 0.425">
+		<body name="object0" pos="0 0 0">
 			<!--joint name="object0:joint" type="free" damping="0.01"></joint!-->
-			<joint axis="1 0 0" name="object0:slidex" type="slide" damping="0.01"></joint>
-			<joint axis="0 1 0" name="object0:slidey" type="slide" damping="0.01"></joint>
-			<geom size="0.025 0.025 0.025" type="box" condim="3" name="object0" material="block_mat" mass="2"></geom>
+			<joint axis="1 0 0" name="object0:slidex" type="slide" damping="10"></joint>
+			<joint axis="0 1 0" name="object0:slidey" type="slide" damping="10"></joint>
+            <joint axis="0 0 1" name="object0:slidez" type="slide" damping="10000"></joint>
+            <joint axis="0 0 1" name="object0:rz" type="hinge" damping="10"></joint>
+			<geom size="0.18 0.18 0.18" type="box" name="object0" material="block_mat" mass="1" euler="1.57 0 0"></geom>
 			<!--geom size="0.025 0.025 0.025" type="sphere" condim="6" name="object0" material="block_mat" mass="2"></geom!-->
 			<site name="object0" pos="0 0 0" size="0.02 0.02 0.02" rgba="1 0 0 1" type="sphere"></site>
 		</body>
 
-		<body name="object1" pos="0 0 0.43">
-			<joint name="object1:joint" type="free" damping="0.01"></joint>
-			<!--joint axis="1 0 0" name="object1:slidex" type="slide" damping="0.01"></joint>
-			<joint axis="0 1 0" name="object1:slidey" type="slide" damping="0.01"></joint!-->
-			<geom size="0.13 0.03 0.03" type="box" condim="3" name="object1" material="stick_mat" mass="50" friction="1 0.005 0.0001"></geom>
+		<body name="object1" pos="0 0 0">
+			<joint axis="1 0 0" name="object1:slidex" type="slide" damping="10"></joint>
+			<joint axis="0 1 0" name="object1:slidey" type="slide" damping="10"></joint>
+            <joint axis="0 0 1" name="object1:slidez" type="slide" damping="10000"></joint>
+            <joint axis="0 0 1" name="object1:rz" type="hinge" damping="10"></joint>
+			<geom size="0.18 0.60 0.18" type="box" name="object1" material="stick_mat" mass="10" euler="0 0 0"></geom>
 			<site name="object1" pos="0 0 0" size="0.02 0.02 0.02" rgba="0.5 0.2 0 0" type="sphere"></site>
 		</body>
-        <body name="object2" pos="0 0 0.43">
-			<joint name="object2:joint" type="free" damping="0.01"></joint>
-			<!--joint axis="1 0 0" name="object2:slidex" type="slide" damping="0.01"></joint>
-			<joint axis="0 1 0" name="object2:slidey" type="slide" damping="0.01"></joint!-->
-			<geom size="0.13 0.03 0.03" type="box" condim="3" name="object2" material="stick_mat" rgba="1 0 1 0.5" mass="50" friction="1 0.005 0.0001"></geom>
+		<body name="object2" pos="0 0 0">
+			<joint axis="1 0 0" name="object2:slidex" type="slide" damping="10"></joint>
+			<joint axis="0 1 0" name="object2:slidey" type="slide" damping="10"></joint>
+            <joint axis="0 0 1" name="object2:slidez" type="slide" damping="10000"></joint>
+            <joint axis="0 0 1" name="object2:rz" type="hinge" damping="10"></joint>
+			<geom size="0.18 0.60 0.18" type="box" name="object2" material="stick_mat" rgba="1 0 1 0.5" mass="10" euler="0 0 0"></geom>
 			<site name="object2" pos="0 0 0" size="0.02 0.02 0.02" rgba="0.5 0.2 0 0" type="sphere"></site>
 		</body>
 
@@ -64,9 +67,9 @@
 	</worldbody>
 
 	<actuator>
-		<motor gear="10000" joint="masspoint:slidex"></motor>
-		<motor gear="10000" joint="masspoint:slidey"></motor>
-		<!--position gear="5000" joint="masspoint:slidex"></position>
-		<position gear="5000" joint="masspoint:slidey"></position!-->
+		<motor gear="100" joint="masspoint:slidex"></motor>
+		<motor gear="100" joint="masspoint:slidey"></motor>
+		<!--position gear="10" joint="masspoint:slidex"></position>
+		<position gear="10" joint="masspoint:slidey"></position!-->
 	</actuator>
 </mujoco>
