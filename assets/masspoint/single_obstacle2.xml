@@ -40,7 +40,7 @@
 			<joint axis="0 1 0" name="object0:slidey" type="slide" damping="10"></joint>
             <joint axis="0 0 1" name="object0:slidez" type="slide" damping="10000"></joint>
             <joint axis="0 0 1" name="object0:rz" type="hinge" damping="10"></joint>
-			<geom size="0.18 0.18 0.18" type="box" name="object0" material="block_mat" mass="1" euler="1.57 0 0"></geom>
+			<geom size="0.18 0.18 0.18" type="box" name="object0" material="block_mat" mass="1" euler="0 0 0"></geom>
 			<!--geom size="0.025 0.025 0.025" type="sphere" condim="6" name="object0" material="block_mat" mass="2"></geom!-->
 			<site name="object0" pos="0 0 0" size="0.02 0.02 0.02" rgba="1 0 0 1" type="sphere"></site>
 		</body>

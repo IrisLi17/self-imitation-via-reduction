@@ -165,7 +165,7 @@ class MasspointPushSingleObstacleEnv_v2(MasspointPushEnv, utils.EzPickle):
         self.random_ratio = random_ratio
         self.random_pusher = random_pusher
         MasspointPushEnv.__init__(
-            self, XML_PATH, n_substeps=10,
+            self, XML_PATH, n_substeps=5,
             target_in_the_air=False, target_offset=0.0,
             obj_range=1.0, target_range=1.0, distance_threshold=0.30,
             initial_qpos=initial_qpos, reward_type=reward_type, n_object=2)
@@ -179,6 +179,11 @@ class MasspointPushSingleObstacleEnv_v2(MasspointPushEnv, utils.EzPickle):
         action *= 20
         MasspointPushEnv._set_action(self, action)
 
+    def inside_wall(self, pos):
+        if abs(pos[0] - self.pos_wall0[0]) < self.size_wall[0] and abs(pos[1] - self.initial_masspoint_xpos[1]) > 0.5:
+            return True
+        return False
+
     def _reset_sim(self):
         # self.sim.set_state(self.initial_state)
         sim_state = copy.deepcopy(self.initial_state)
@@ -187,6 +192,8 @@ class MasspointPushSingleObstacleEnv_v2(MasspointPushEnv, utils.EzPickle):
             masspoint_jointx_i = self.sim.model.get_joint_qpos_addr('masspoint:slidex')
             masspoint_jointy_i = self.sim.model.get_joint_qpos_addr('masspoint:slidey')
             masspoint_pos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            while self.inside_wall(masspoint_pos):
+                masspoint_pos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             sim_state.qpos[masspoint_jointx_i] = masspoint_pos[0]
             sim_state.qpos[masspoint_jointy_i] = masspoint_pos[1]
         else:
@@ -321,7 +328,7 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
         self.random_ratio = random_ratio
         self.random_pusher = random_pusher
         MasspointPushEnv.__init__(
-            self, XML_PATH, n_substeps=10,
+            self, XML_PATH, n_substeps=5,
             target_in_the_air=False, target_offset=0.0,
             obj_range=1.5, target_range=1.5, distance_threshold=0.30,
             initial_qpos=initial_qpos, reward_type=reward_type, n_object=3)
@@ -340,6 +347,8 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
             masspoint_jointx_i = self.sim.model.get_joint_qpos_addr('masspoint:slidex')
             masspoint_jointy_i = self.sim.model.get_joint_qpos_addr('masspoint:slidey')
             masspoint_pos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            while self.inside_wall(masspoint_pos):
+                masspoint_pos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             sim_state.qpos[masspoint_jointx_i] = masspoint_pos[0]
             sim_state.qpos[masspoint_jointy_i] = masspoint_pos[1]
         else:
@@ -424,19 +433,13 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
                 return True
             return False
 
-        def inside_wall(pos):
-            if (abs(pos[0] - self.pos_wall0[0]) < self.size_wall[0] or abs(pos[0] - self.pos_wall2[0]) < self.size_wall[0]) \
-                    and abs(pos[1] - 2.5) > 0.5:
-                return True
-            return False
-
         if hasattr(self, 'sample_hard') and self.sample_hard and g_idx == 0:
             while (same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.sim.data.get_site_xpos('object1')[0]) and \
                     same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.sim.data.get_site_xpos('object2')[0])) \
-                    or inside_wall(goal):
+                    or self.inside_wall(goal):
                 goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
         else:
-            while inside_wall(goal):
+            while self.inside_wall(goal):
                 goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
         goal = np.concatenate([goal, self.sim.data.get_site_xpos('object' + str(g_idx))[2:3], one_hot])
         if self.target_in_the_air and self.np_random.uniform() < 0.5:
@@ -475,3 +478,9 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
         self.viewer.cam.distance = 10.0
         self.viewer.cam.azimuth = 132.
         self.viewer.cam.elevation = -60.
+
+    def inside_wall(self, pos):
+        if (abs(pos[0] - self.pos_wall0[0]) < self.size_wall[0] or abs(pos[0] - self.pos_wall2[0]) < self.size_wall[0]) \
+                and abs(pos[1] - 2.5) > 0.5:
+            return True
+        return False
