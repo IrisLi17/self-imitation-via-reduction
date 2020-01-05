@@ -5,7 +5,9 @@ CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 
 CUDA_VISIBLE_DEVICES=2 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 4 --parallel --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_augment/1
 # clip adv from demo to non-negative
 CUDA_VISIBLE_DEVICES=1 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 4 --parallel --aug_clip 0.0 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_augment/2
+CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 4 --parallel --aug_clip 0.0 --start_augment 5e6  --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_augment/6
 CUDA_VISIBLE_DEVICES=1 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 2 --parallel --aug_clip 0.0 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_augment/5
+CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 2 --parallel --aug_clip 0.0 --start_augment 5e6 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_augment/7
 # clip adv from demo to 0.1 std
 CUDA_VISIBLE_DEVICES=1 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 4 --parallel --aug_clip 0.1 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_augment/3
 CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 2 --parallel --aug_clip 0.1 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_augment/4
