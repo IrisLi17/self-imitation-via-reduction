@@ -204,7 +204,9 @@ class MasspointPushSingleObstacleEnv_v2(MasspointPushEnv, utils.EzPickle):
                     and abs(object_xpos[0] - self.pos_wall0[0]) >= self.size_object[0] + self.size_wall[0] \
                     and abs(obstacle1_xpos[0] - self.pos_wall0[0]) >= self.size_obstacle[0] + self.size_wall[0] \
                     and (abs(object_xpos[0] - obstacle1_xpos[0]) >= self.size_object[0] + self.size_obstacle[0] or abs(
-                            object_xpos[1] - obstacle1_xpos[1]) >= self.size_object[1] + self.size_obstacle[1]):
+                            object_xpos[1] - obstacle1_xpos[1]) >= self.size_object[1] + self.size_obstacle[1]) \
+                    and (abs(obstacle1_xpos[0] - masspoint_pos[0]) > self.size_obstacle[0] + 0.15
+                         or abs(obstacle1_xpos[1] - masspoint_pos[1]) > self.size_obstacle[1] + 0.15):
                 return True
             else:
                 return False
@@ -266,7 +268,10 @@ class MasspointPushSingleObstacleEnv_v2(MasspointPushEnv, utils.EzPickle):
         one_hot[g_idx] = 1
         goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
         if hasattr(self, 'sample_hard') and self.sample_hard and g_idx == 0:
-            while (goal[0] - self.pos_wall0[0]) * (self.sim.data.get_site_xpos('object0')[0] - self.pos_wall0[0]) > 0:
+            while self.inside_wall(goal) or (goal[0] - self.pos_wall0[0]) * (self.sim.data.get_site_xpos('object0')[0] - self.pos_wall0[0]) > 0:
+                goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+        else:
+            while self.inside_wall(goal):
                 goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
         goal = np.concatenate([goal, self.sim.data.get_site_xpos('object' + str(g_idx))[2:3], one_hot])
         if self.target_in_the_air and self.np_random.uniform() < 0.5:
@@ -313,16 +318,16 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
         initial_qpos = {
             'masspoint:slidex': 2.5,
             'masspoint:slidey': 2.5,
-            'masspoint:slidez': 0.15,
+            'masspoint:slidez': 0.10,
             # 'object0:slidex': 0.0,
             # 'object0:slidey': 0.0,
-            'object0:slidez': 0.18,
+            'object0:slidez': 0.15,
             # 'object1:slidex': 0,
             # 'object1:slidey': 0,
-            'object1:slidez': 0.18,
+            'object1:slidez': 0.15,
             # 'object2:slidex': 0,
             # 'object2:slidey': 0,
-            'object2:slidez': 0.18,
+            'object2:slidez': 0.15,
         }
         self.random_box = random_box
         self.random_ratio = random_ratio
@@ -439,8 +444,14 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
                     or self.inside_wall(goal):
                 goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
         else:
-            while self.inside_wall(goal):
-                goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+            if g_idx != 0:
+                while self.inside_wall(goal) \
+                        or (not same_side(goal[0], self.sim.data.get_site_xpos('object' + str(g_idx))[0], self.pos_wall0[0])) \
+                        or (not same_side(goal[0], self.sim.data.get_site_xpos('object' + str(g_idx))[0], self.pos_wall2[0])):
+                    goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+            else:
+                while self.inside_wall(goal):
+                    goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
         goal = np.concatenate([goal, self.sim.data.get_site_xpos('object' + str(g_idx))[2:3], one_hot])
         if self.target_in_the_air and self.np_random.uniform() < 0.5:
             goal[2] += self.np_random.uniform(0, 0.45)
