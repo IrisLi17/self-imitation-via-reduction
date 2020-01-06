@@ -15,7 +15,7 @@ from stable_baselines.a2c.utils import total_episode_reward_logger
 
 
 class ParallelRunner(AbstractEnvRunner):
-    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate):
+    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon):
         """
         A runner to learn the policy of an environment for a model
 
@@ -37,7 +37,9 @@ class ParallelRunner(AbstractEnvRunner):
         self.obs_dim = self.env.observation_space.shape[0] - 2 * self.goal_dim
         self.noise_mag = self.env.get_attr('size_obstacle')[0][0]*5
         self.n_object = self.env.get_attr('n_object')[0]
-        print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag, 'n_object', self.n_object)
+        self.horizon = horizon
+        print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
+              'n_object', self.n_object, 'horizon', self.horizon)
 
     def run(self):
         """
@@ -199,12 +201,12 @@ class ParallelRunner(AbstractEnvRunner):
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
                             else:
                                 pass
-                    if increment_step >= 100 - min(env_restart_steps):
+                    if increment_step >= self.horizon - min(env_restart_steps):
                         break
 
                 # print('end step', env_end_step)
                 for idx, end_step in enumerate(env_end_step):
-                    if end_step <= 100:
+                    if end_step <= self.horizon:
                         transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
                         augment_obs_buf, augment_act_buf, augment_done_buf, augment_reward_buf = zip(*transitions)
                         augment_value_buf = self.model.value(np.array(augment_obs_buf))

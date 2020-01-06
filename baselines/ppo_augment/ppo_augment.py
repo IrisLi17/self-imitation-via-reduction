@@ -49,7 +49,7 @@ class PPO2_augment(ActorCriticRLModel):
 
     def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
-                 cliprange_vf=None, n_candidate=4, parallel=False, start_augment=0,
+                 cliprange_vf=None, n_candidate=4, parallel=False, start_augment=0, horizon=100,
                  verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
@@ -107,6 +107,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.aug_neglogp = []
         self.aug_adv = []
         self.num_aug_steps = 0  # every interaction with simulator should be counted
+        self.horizon = horizon
 
         if _init_setup_model:
             self.setup_model()
@@ -381,7 +382,7 @@ class PPO2_augment(ActorCriticRLModel):
             else:
                 from baselines.ppo_augment.parallel_runner import ParallelRunner
                 runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
-                                        n_candidate=self.n_candidate)
+                                        n_candidate=self.n_candidate, horizon=self.horizon)
             self.episode_reward = np.zeros((self.n_envs,))
 
             ep_info_buf = deque(maxlen=100)
@@ -549,6 +550,10 @@ class Runner(AbstractEnvRunner):
         self.gamma = gamma
         self.aug_env = aug_env
         self.n_candidate = n_candidate
+        # obs param
+        self.obs_dim = 40
+        self.goal_dim = 5
+        self.n_object = env.unwrapped.n_object
         # For restart
         self.ep_state_buf = [[] for _ in range(self.model.n_envs)]
         self.ep_transition_buf = [[] for _ in range(self.model.n_envs)]

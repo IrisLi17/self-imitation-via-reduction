@@ -67,6 +67,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
         # env = ENTRY_POINT[env_id](**kwargs)
         # print(env)
         # from gym.wrappers.time_limit import TimeLimit
+        kwargs = kwargs.copy()
         max_episode_steps = None
         if 'max_episode_steps' in kwargs:
             max_episode_steps = kwargs['max_episode_steps']
@@ -194,7 +195,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         model = PPO2_augment('MlpPolicy', env, aug_env=aug_env, verbose=1, n_steps=2048, nminibatches=32, lam=0.95,
                              gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
                              cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
-                             policy_kwargs=policy_kwargs,
+                             policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
                              )
 
         def callback(_locals, _globals):
