@@ -318,7 +318,7 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
         initial_qpos = {
             'masspoint:slidex': 2.5,
             'masspoint:slidey': 2.5,
-            'masspoint:slidez': 0.10,
+            'masspoint:slidez': 0.15,
             # 'object0:slidex': 0.0,
             # 'object0:slidey': 0.0,
             'object0:slidez': 0.15,

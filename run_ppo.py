@@ -62,6 +62,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
         # env = ENTRY_POINT[env_id](**kwargs)
         # print(env)
         # from gym.wrappers.time_limit import TimeLimit
+        kwargs = kwargs.copy()
         max_episode_steps = None
         if 'max_episode_steps' in kwargs:
             max_episode_steps = kwargs['max_episode_steps']
@@ -88,6 +89,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     set_global_seeds(seed)
 
     n_cpu = 32 if not play else 1
+    if 'MasspointPushDoubleObstacle' in env_name:
+        n_cpu = 64 if not play else 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1', 'FetchPickAndPlace-v1']:
         env_kwargs = {}
         # pass
@@ -105,7 +108,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         if 'MasspointPushSingleObstacle' in env_name:
             env_kwargs['max_episode_steps']=200
         if 'MasspointPushDoubleObstacle' in env_name:
-            env_kwargs['max_episode_steps']=200
+            env_kwargs['max_episode_steps']=300
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -129,6 +132,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     if not play:
         os.makedirs(log_dir, exist_ok=True)
         policy_kwargs = dict(layers=[256, 256])
+        # if 'MasspointPushDoubleObstacle' in env_name:
+        #     policy_kwargs = dict(layers=[512, 512])
+        print(policy_kwargs)
         # policy_kwargs = {}
         # TODO: vectorize env
         model = PPO2('MlpPolicy', env, verbose=1, n_steps=2048, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
@@ -152,6 +158,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         model = PPO2.load(load_path)
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
+        while np.argmax(obs[0][-3:]) != 2:
+            obs = env.reset()
+        print(obs[0][-6:])
         # while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
         #     obs = env.reset()
         # img = env.render(mode='rgb_array')
@@ -159,7 +168,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         num_episode = 0
         frame_idx = 0
         images = []
-        for i in range(500):
+        for i in range(env_kwargs['max_episode_steps'] * 5):
             img = env.render(mode='rgb_array')
             ax.cla()
             ax.imshow(img)
@@ -179,6 +188,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 # obs = env.reset()
                 # while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
                 #     obs = env.reset()
+                while np.argmax(obs[0][-3:]) != 2:
+                    obs = env.reset()
+                print(obs[0][-6:])
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
                 frame_idx = 0
@@ -189,7 +201,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         if export_gif:
             os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
-            for i in range(500):
+            for i in range(env_kwargs['max_episode_steps'] * 5):
                 # images.append(plt.imread('tempimg' + str(i) + '.png'))
                 try:
                     os.remove(os.path.join(os.path.dirname(load_path), 'tempimg' + str(i) + '.png'))
