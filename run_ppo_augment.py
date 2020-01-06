@@ -7,6 +7,7 @@ from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
 from gym.wrappers import FlattenDictWrapper
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
+from masspoint_env import MasspointPushSingleObstacleEnv_v2, MasspointPushDoubleObstacleEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
@@ -22,7 +23,11 @@ ENTRY_POINT = {'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
                # 'FetchPushWall-v1': FetchPushWallEnv,
                # 'FetchPushBox-v1': FetchPushBoxEnv,
                }
-
+MASS_ENTRY_POINT = {
+    'MasspointPushSingleObstacle-v2': MasspointPushSingleObstacleEnv_v2,
+    'MasspointPushSingleObstacleUnlimit-v2': MasspointPushSingleObstacleEnv_v2,
+    'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
+}
 
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -58,19 +63,23 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     :param allow_early_resets: (bool) allows early reset of the environment
     :return: (Gym Environment) The mujoco environment
     """
-    if env_id in ENTRY_POINT.keys():
+    if env_id in ENTRY_POINT.keys() or env_id in MASS_ENTRY_POINT.keys():
         # env = ENTRY_POINT[env_id](**kwargs)
         # print(env)
         # from gym.wrappers.time_limit import TimeLimit
+        kwargs = kwargs.copy()
         max_episode_steps = None
         if 'max_episode_steps' in kwargs:
             max_episode_steps = kwargs['max_episode_steps']
             del kwargs['max_episode_steps']
-        gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
+        if env_id in ENTRY_POINT.keys():
+            gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
+        elif env_id in MASS_ENTRY_POINT.keys():
+            gym.register(env_id, entry_point=MASS_ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
         env = gym.make(env_id)
         # env = TimeLimit(env, max_episode_steps=50)
     else:
-        env = gym.make(env_id, reward_type='dense')
+        env = gym.make(env_id, reward_type='sparse')
     env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
     env = DoneOnSuccessWrapper(env)
     if log_dir is not None:
@@ -121,7 +130,7 @@ def log_traj(aug_obs, aug_done, index):
         csvwriter.writerow(title)
         for idx in range(aug_obs.shape[0]):
             log_obs = aug_obs[idx]
-            data = [log_obs[i] for i in range(9)] + [log_obs[i] for i in range(45, 50)] + [aug_done[idx]]
+            data = [log_obs[i] for i in range(9)] + [log_obs[i] for i in range(-5, 0)] + [aug_done[idx]]
             csvwriter.writerow(data)
 
 
@@ -142,6 +151,15 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                           random_ratio=random_ratio,
                           random_gripper=True,
                           max_episode_steps=100,)
+    elif env_name in MASS_ENTRY_POINT.keys():
+        env_kwargs = dict(random_box=True,
+                          random_ratio=random_ratio,
+                          random_pusher=True,
+                          max_episode_steps=100,)
+        if 'MasspointPushSingleObstacle' in env_name:
+            env_kwargs['max_episode_steps']=200
+        if 'MasspointPushDoubleObstacle' in env_name:
+            env_kwargs['max_episode_steps']=200
     else:
         raise NotImplementedError("%s not implemented" % env_name)
 
@@ -152,23 +170,21 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     env = SubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
     # else:
     #     env = ParallelSubprocVecEnv([make_thunk(i) for i in range(n_cpu)])
+    aug_env_name = env_name.split('-')[0] + 'Unlimit-' + env_name.split('-')[1]
     aug_env_kwargs = env_kwargs.copy()
     aug_env_kwargs['max_episode_steps'] = None
     def make_thunk_aug(rank):
-        return lambda: make_env(env_id='FetchPushWallObstacleUnlimit-v4', seed=seed, rank=rank, kwargs=aug_env_kwargs)
+        return lambda: make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs)
     if not parallel:
-        aug_env = make_env(env_id='FetchPushWallObstacleUnlimit-v4', seed=seed, rank=0, kwargs=aug_env_kwargs)
+        aug_env = make_env(env_id=aug_env_name, seed=seed, rank=0, kwargs=aug_env_kwargs)
     else:
         aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_subgoal)])
     print(aug_env)
     if os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
         os.remove(os.path.join(logger.get_dir(), 'eval.csv'))
         print('Remove existing eval.csv')
-    eval_env_kwargs = dict(random_box=True,
-                          heavy_obstacle=True,
-                          random_ratio=0.0,
-                          random_gripper=True,
-                          max_episode_steps=100,)
+    eval_env_kwargs = env_kwargs.copy()
+    eval_env_kwargs['random_ratio'] = 0.0
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
     print(eval_env)
     if not play:
@@ -179,7 +195,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         model = PPO2_augment('MlpPolicy', env, aug_env=aug_env, verbose=1, n_steps=2048, nminibatches=32, lam=0.95,
                              gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
                              cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
-                             policy_kwargs=policy_kwargs,
+                             policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
                              )
 
         def callback(_locals, _globals):
