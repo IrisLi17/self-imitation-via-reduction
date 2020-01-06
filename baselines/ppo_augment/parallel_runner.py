@@ -33,6 +33,11 @@ class ParallelRunner(AbstractEnvRunner):
         # For restart
         self.ep_state_buf = [[] for _ in range(self.model.n_envs)]
         self.ep_transition_buf = [[] for _ in range(self.model.n_envs)]
+        self.goal_dim = self.env.get_attr('goal')[0].shape[0]
+        self.obs_dim = self.env.observation_space.shape[0] - 2 * self.goal_dim
+        self.noise_mag = self.env.get_attr('size_obstacle')[0][0]*5
+        self.n_object = self.env.get_attr('n_object')[0]
+        print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag, 'n_object', self.n_object)
 
     def run(self):
         """
@@ -84,7 +89,7 @@ class ParallelRunner(AbstractEnvRunner):
             restart_steps = [[] for _ in range(self.model.n_envs)]
             subgoals = [[] for _ in range(self.model.n_envs)]
             for idx, done in enumerate(self.dones):
-                if self.model.num_timesteps > self.model.start_augment and done:
+                if self.model.num_timesteps >= self.model.start_augment and done:
                     goal = self.ep_transition_buf[idx][0][0][-5:]
                     if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
                         # Do augmentation
@@ -365,33 +370,52 @@ class ParallelRunner(AbstractEnvRunner):
         return mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_states, ep_infos, true_reward
 
     def select_subgoal(self, transition_buf, k):
+        debug = False
         # self.ep_transition_buf, self.model.value
-        assert len(transition_buf) == 100, len(transition_buf)
         obs_buf, *_ = zip(*transition_buf)
         obs_buf = np.asarray(obs_buf)
         sample_t = np.random.randint(0, len(transition_buf), 4096)
         sample_obs = obs_buf[sample_t]
-        noise = np.random.uniform(low=-0.15, high=0.15, size=(len(sample_t), 2))
-        obstacle_xy = sample_obs[:, 6:8] + noise
-        sample_obs[:, 6:8] = obstacle_xy
-        sample_obs[:, 12:14] = sample_obs[:, 6:8] - sample_obs[:, 0:2]
+        noise = np.random.uniform(low=-self.noise_mag, high=self.noise_mag, size=(len(sample_t), 2))
+        if debug:
+            sample_obs = np.tile(sample_obs, (2, 1))
+            noise = np.concatenate([noise, np.zeros(noise.shape)], axis=0)
+        # TODO: if there are more than one obstacle
+        object_idx = 1
+        obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
+        sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
+        sample_obs[:, 3*(object_idx+1+self.n_object):3*(object_idx+1+self.n_object)+2] \
+            = sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] - sample_obs[:, 0:2]
         value2 = self.model.value(sample_obs)
+        if debug:
+            origin_value2 = value2[value2.shape[0] // 2:]
+            value2 = value2[0: value2.shape[0] // 2]
         subgoal_obs = obs_buf[sample_t]
-        subgoal_obs[:, 40:43] = subgoal_obs[:, 6:9]
-        subgoal_obs[:, 43:45] = np.array([[0., 1.]])
-        subgoal_obs[:, 45:47] = obstacle_xy
-        subgoal_obs[:, 47:48] = subgoal_obs[:, 8:9]
-        subgoal_obs[:, 48:50] = np.array([[0., 1.]])
+        if debug:
+            subgoal_obs = np.tile(subgoal_obs, (2, 1))
+        subgoal_obs[:, self.obs_dim:self.obs_dim+3] = subgoal_obs[:, 3*(object_idx+1):3*(object_idx+1)+3]
+        subgoal_obs[:, self.obs_dim+3:self.obs_dim+self.goal_dim] = np.array([[0., 1.]])
+        subgoal_obs[:, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim+2] = obstacle_xy
+        subgoal_obs[:, self.obs_dim+self.goal_dim+2:self.obs_dim+self.goal_dim+3] = subgoal_obs[:, 3*(object_idx+1)+2:3*(object_idx+1)+3]
+        subgoal_obs[:, self.obs_dim+self.goal_dim+3:self.obs_dim+self.goal_dim*2] = np.array([[0., 1.]])
         value1 = self.model.value(subgoal_obs)
+        if debug:
+            origin_value1 = value1[value1.shape[0] // 2:]
+            value1 = value1[0: value1.shape[0] // 2]
         normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
         normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
         # best_idx = np.argmax(normalize_value1 * normalize_value2)
         ind = np.argsort(normalize_value1 * normalize_value2)
         good_ind = ind[-k:]
+        if debug:
+            print('original value1', 'mean', np.mean(origin_value1), 'std', np.std(origin_value1))
+            print('original value2', 'mean', np.mean(origin_value2), 'std', np.std(origin_value2))
+            print(value1[good_ind])
+            print(value2[good_ind])
         # restart_step = sample_t[best_idx]
         # subgoal = subgoal_obs[best_idx, 45:50]
         restart_step = sample_t[good_ind]
-        subgoal = subgoal_obs[good_ind, 45:50]
+        subgoal = subgoal_obs[good_ind, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim*2]
         # print('subgoal', subgoal, 'with value1', normalize_value1[best_idx], 'value2', normalize_value2[best_idx])
         # print('restart step', restart_step)
         return restart_step, subgoal

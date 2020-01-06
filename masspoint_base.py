@@ -120,6 +120,37 @@ class MasspointPushEnv(robot_env.RobotEnv):
             'desired_goal': self.goal.copy(),
         }
 
+    def get_obs(self):
+        # print('in get_obs, goal', self.goal)
+        return self._get_obs()
+
+    def set_goal(self, goal):
+        self.goal = goal.copy()
+
+    def switch_obs_goal(self, obs, goal):
+        obs = obs.copy()
+        if isinstance(obs, dict):
+            goal_idx = np.argmax(goal[3:])
+            obs['achieved_goal'] = np.concatenate([obs['observation'][3 + 3 * goal_idx: 3 + 3 * (goal_idx + 1)], goal[3:]])
+            obs['desired_goal'] = goal
+        elif isinstance(obs, np.ndarray):
+            goal_idx = np.argmax(goal[3:])
+            obs_dim = self.observation_space['observation'].shape[0]
+            goal_dim = self.observation_space['achieved_goal'].shape[0]
+            obs[obs_dim:obs_dim+3] = obs[3 + goal_idx * 3: 3 + (goal_idx + 1) * 3]
+            obs[obs_dim+3:obs_dim+goal_dim] = goal[3:]
+            obs[obs_dim+goal_dim:obs_dim+goal_dim*2] = goal[:]
+        else:
+            raise TypeError
+        return obs
+
+    def get_state(self):
+        return self.sim.get_state()
+
+    def set_state(self, state):
+        self.sim.set_state(state)
+        self.sim.forward()
+
     def _viewer_setup(self):
         # body_id = self.sim.model.body_name2id('robot0:gripper_link')
         # lookat = self.sim.data.body_xpos[body_id]
