@@ -158,9 +158,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         model = PPO2.load(load_path)
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
-        while np.argmax(obs[0][-3:]) != 2:
+        goal_dim = env.get_attr('goal')[0].shape[0]
+        while np.argmax(obs[0][-goal_dim + 3:]) != 0:
             obs = env.reset()
-        print(obs[0][-6:])
         # while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
         #     obs = env.reset()
         # img = env.render(mode='rgb_array')
@@ -168,12 +168,17 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         num_episode = 0
         frame_idx = 0
         images = []
+        if not 'max_episode_steps' in env_kwargs.keys():
+            env_kwargs['max_episode_steps'] = 100
         for i in range(env_kwargs['max_episode_steps'] * 5):
             img = env.render(mode='rgb_array')
             ax.cla()
             ax.imshow(img)
-            ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx) +
-                         ', goal idx ' + str(np.argmax(env.get_attr('goal')[0][3:])))
+            if env_name == 'FetchPickAndPlace-v1':
+                ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx))
+            else:
+                ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx) +
+                             ', goal idx ' + str(np.argmax(env.get_attr('goal')[0][3:])))
             images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
@@ -188,9 +193,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 # obs = env.reset()
                 # while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
                 #     obs = env.reset()
-                while np.argmax(obs[0][-3:]) != 2:
+                while np.argmax(obs[0][-goal_dim + 3:]) != 0:
                     obs = env.reset()
-                print(obs[0][-6:])
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
                 frame_idx = 0

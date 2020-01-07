@@ -445,9 +445,10 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
                 goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
         else:
             if g_idx != 0:
-                while self.inside_wall(goal) \
-                        or (not same_side(goal[0], self.sim.data.get_site_xpos('object' + str(g_idx))[0], self.pos_wall0[0])) \
-                        or (not same_side(goal[0], self.sim.data.get_site_xpos('object' + str(g_idx))[0], self.pos_wall2[0])):
+                # while self.inside_wall(goal) \
+                #         or (not same_side(goal[0], self.sim.data.get_site_xpos('object' + str(g_idx))[0], self.pos_wall0[0])) \
+                #         or (not same_side(goal[0], self.sim.data.get_site_xpos('object' + str(g_idx))[0], self.pos_wall2[0])):
+                while self.inside_wall(goal):
                     goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
             else:
                 while self.inside_wall(goal):
