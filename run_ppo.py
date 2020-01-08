@@ -108,7 +108,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         if 'MasspointPushSingleObstacle' in env_name:
             env_kwargs['max_episode_steps']=200
         if 'MasspointPushDoubleObstacle' in env_name:
-            env_kwargs['max_episode_steps']=300
+            env_kwargs['max_episode_steps']=150
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -137,7 +137,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         print(policy_kwargs)
         # policy_kwargs = {}
         # TODO: vectorize env
-        model = PPO2('MlpPolicy', env, verbose=1, n_steps=2048, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
+        model = PPO2('MlpPolicy', env, verbose=1, n_steps=8192, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
                      ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      )
         def callback(_locals, _globals):

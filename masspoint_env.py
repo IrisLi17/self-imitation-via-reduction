@@ -333,7 +333,7 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
         self.random_ratio = random_ratio
         self.random_pusher = random_pusher
         MasspointPushEnv.__init__(
-            self, XML_PATH, n_substeps=5,
+            self, XML_PATH, n_substeps=10,
             target_in_the_air=False, target_offset=0.0,
             obj_range=1.5, target_range=1.5, distance_threshold=0.30,
             initial_qpos=initial_qpos, reward_type=reward_type, n_object=3)
