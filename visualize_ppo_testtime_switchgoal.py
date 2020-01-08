@@ -5,6 +5,11 @@ from run_ppo import make_env
 from stable_baselines import PPO2
 
 
+def same_side(pos0, pos1, sep):
+    if (pos0 - sep) * (pos1 - sep) > 0:
+        return True
+    return False
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print('Usage: python visualize_ppo_testtime_switchgoal.py [load_path]')
@@ -29,7 +34,9 @@ if __name__ == '__main__':
     model = PPO2.load(load_path)
     # We only test the tasks that aim to move box
     obs = env.reset()
-    while np.argmax(obs[obs_dim + goal_dim + 3:]) != 0:
+    while np.argmax(obs[obs_dim + goal_dim + 3:]) != 0 \
+            or (not same_side(obs[3], obs[6], env.pos_wall0[0])) \
+            or (not same_side(obs[0], obs[6], env.pos_wall0[0])):
         obs = env.reset()
     ultimate_goal = obs[-goal_dim:].copy()
     # Generate obstacle positions to select from.
