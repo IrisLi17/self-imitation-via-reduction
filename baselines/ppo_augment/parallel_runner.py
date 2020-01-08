@@ -35,7 +35,7 @@ class ParallelRunner(AbstractEnvRunner):
         self.ep_transition_buf = [[] for _ in range(self.model.n_envs)]
         self.goal_dim = self.env.get_attr('goal')[0].shape[0]
         self.obs_dim = self.env.observation_space.shape[0] - 2 * self.goal_dim
-        self.noise_mag = self.env.get_attr('size_obstacle')[0][0]*5
+        self.noise_mag = self.env.get_attr('size_obstacle')[0][1]
         self.n_object = self.env.get_attr('n_object')[0]
         self.horizon = horizon
         print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
@@ -92,7 +92,7 @@ class ParallelRunner(AbstractEnvRunner):
             subgoals = [[] for _ in range(self.model.n_envs)]
             for idx, done in enumerate(self.dones):
                 if self.model.num_timesteps >= self.model.start_augment and done:
-                    goal = self.ep_transition_buf[idx][0][0][-5:]
+                    goal = self.ep_transition_buf[idx][0][0][-self.goal_dim:]
                     if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
                         # Do augmentation
                         # Sample start step and perturbation
@@ -121,7 +121,7 @@ class ParallelRunner(AbstractEnvRunner):
                 env_subgoals = subgoals[env_idx].tolist()
                 env_storage = [self.ep_transition_buf[env_idx][:_restart_step] for _restart_step in env_restart_steps]
                 env_increment_storage = [[] for _ in env_restart_steps]
-                ultimate_goal = self.ep_transition_buf[env_idx][0][0][-5:]
+                ultimate_goal = self.ep_transition_buf[env_idx][0][0][-self.goal_dim:]
                 for i in range(self.n_candidate): # len(env_subgoals) should be equal to n_candidates
                     env_subgoals[i] = [np.array(env_subgoals[i]), ultimate_goal]
                 # print('env_subgoals', env_subgoals)
@@ -383,27 +383,30 @@ class ParallelRunner(AbstractEnvRunner):
             sample_obs = np.tile(sample_obs, (2, 1))
             noise = np.concatenate([noise, np.zeros(noise.shape)], axis=0)
         # TODO: if there are more than one obstacle
-        object_idx = 1
-        obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
-        sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
-        sample_obs[:, 3*(object_idx+1+self.n_object):3*(object_idx+1+self.n_object)+2] \
-            = sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] - sample_obs[:, 0:2]
-        value2 = self.model.value(sample_obs)
-        if debug:
-            origin_value2 = value2[value2.shape[0] // 2:]
-            value2 = value2[0: value2.shape[0] // 2]
-        subgoal_obs = obs_buf[sample_t]
-        if debug:
-            subgoal_obs = np.tile(subgoal_obs, (2, 1))
-        subgoal_obs[:, self.obs_dim:self.obs_dim+3] = subgoal_obs[:, 3*(object_idx+1):3*(object_idx+1)+3]
-        subgoal_obs[:, self.obs_dim+3:self.obs_dim+self.goal_dim] = np.array([[0., 1.]])
-        subgoal_obs[:, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim+2] = obstacle_xy
-        subgoal_obs[:, self.obs_dim+self.goal_dim+2:self.obs_dim+self.goal_dim+3] = subgoal_obs[:, 3*(object_idx+1)+2:3*(object_idx+1)+3]
-        subgoal_obs[:, self.obs_dim+self.goal_dim+3:self.obs_dim+self.goal_dim*2] = np.array([[0., 1.]])
-        value1 = self.model.value(subgoal_obs)
-        if debug:
-            origin_value1 = value1[value1.shape[0] // 2:]
-            value1 = value1[0: value1.shape[0] // 2]
+        sample_obs_buf = []
+        subgoal_obs_buf = []
+        for object_idx in range(1, self.n_object):
+            obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
+            sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
+            sample_obs[:, 3*(object_idx+1+self.n_object):3*(object_idx+1+self.n_object)+2] \
+                = sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] - sample_obs[:, 0:2]
+            sample_obs_buf.append(sample_obs.copy())
+
+            subgoal_obs = obs_buf[sample_t]
+            if debug:
+                subgoal_obs = np.tile(subgoal_obs, (2, 1))
+            subgoal_obs[:, self.obs_dim:self.obs_dim+3] = subgoal_obs[:, 3*(object_idx+1):3*(object_idx+1)+3]
+            one_hot = np.zeros(self.n_object)
+            one_hot[object_idx] = 1
+            subgoal_obs[:, self.obs_dim+3:self.obs_dim+self.goal_dim] = one_hot
+            subgoal_obs[:, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim+2] = obstacle_xy
+            subgoal_obs[:, self.obs_dim+self.goal_dim+2:self.obs_dim+self.goal_dim+3] = subgoal_obs[:, 3*(object_idx+1)+2:3*(object_idx+1)+3]
+            subgoal_obs[:, self.obs_dim+self.goal_dim+3:self.obs_dim+self.goal_dim*2] = one_hot
+            subgoal_obs_buf.append(subgoal_obs)
+        sample_obs_buf = np.concatenate(sample_obs_buf, axis=0)
+        value2 = self.model.value(sample_obs_buf)
+        subgoal_obs_buf = np.concatenate(subgoal_obs_buf)
+        value1 = self.model.value(subgoal_obs_buf)
         normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
         normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
         # best_idx = np.argmax(normalize_value1 * normalize_value2)
@@ -416,8 +419,8 @@ class ParallelRunner(AbstractEnvRunner):
             print(value2[good_ind])
         # restart_step = sample_t[best_idx]
         # subgoal = subgoal_obs[best_idx, 45:50]
-        restart_step = sample_t[good_ind]
-        subgoal = subgoal_obs[good_ind, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim*2]
+        restart_step = sample_t[good_ind % len(sample_t)]
+        subgoal = subgoal_obs_buf[good_ind, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim*2]
         # print('subgoal', subgoal, 'with value1', normalize_value1[best_idx], 'value2', normalize_value2[best_idx])
         # print('restart step', restart_step)
         return restart_step, subgoal
