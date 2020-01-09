@@ -8,6 +8,7 @@ from run_ppo_augment import eval_model, log_eval
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
+from pick_and_place_box import FetchPickAndPlaceBoxEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
@@ -28,6 +29,10 @@ MASS_ENTRY_POINT = {
     'MasspointPushSingleObstacle-v1': MasspointPushSingleObstacleEnv,
     'MasspointPushSingleObstacle-v2': MasspointPushSingleObstacleEnv_v2,
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
+}
+
+PICK_ENTRY_POINT = {
+    'FetchPickAndPlaceBox-v1': FetchPickAndPlaceBoxEnv,
 }
 
 def arg_parse():
@@ -58,7 +63,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     :param allow_early_resets: (bool) allows early reset of the environment
     :return: (Gym Environment) The mujoco environment
     """
-    if env_id in ENTRY_POINT.keys() or env_id in MASS_ENTRY_POINT.keys():
+    if env_id in ENTRY_POINT.keys() or env_id in MASS_ENTRY_POINT.keys() or env_id in PICK_ENTRY_POINT.keys():
         # env = ENTRY_POINT[env_id](**kwargs)
         # print(env)
         # from gym.wrappers.time_limit import TimeLimit
@@ -71,6 +76,8 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
             gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
         elif env_id in MASS_ENTRY_POINT.keys():
             gym.register(env_id, entry_point=MASS_ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
+        elif env_id in PICK_ENTRY_POINT.keys():
+            gym.register(env_id, entry_point=PICK_ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
         env = gym.make(env_id)
         # env = TimeLimit(env, max_episode_steps=50)
     else:
@@ -109,6 +116,11 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             env_kwargs['max_episode_steps']=200
         if 'MasspointPushDoubleObstacle' in env_name:
             env_kwargs['max_episode_steps']=150
+    elif env_name in PICK_ENTRY_POINT.keys():
+        env_kwargs = dict(random_box=True,
+                          random_ratio=random_ratio,
+                          random_gripper=True,
+                          max_episode_steps=100, )
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -125,6 +137,11 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                                random_ratio=0.0,
                                random_pusher=True,
                                max_episode_steps=100,)
+    elif env_name in PICK_ENTRY_POINT.keys():
+        eval_env_kwargs = dict(random_box=True,
+                               random_ratio=0.0,
+                               random_gripper=True,
+                               max_episode_steps=100, )
     elif env_name in ['FetchPickAndPlace-v1']:
         eval_env_kwargs = {}
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
@@ -137,7 +154,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         print(policy_kwargs)
         # policy_kwargs = {}
         # TODO: vectorize env
-        model = PPO2('MlpPolicy', env, verbose=1, n_steps=8192, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
+        n_steps = 2048
+        if 'MasspointPushDoubleObstacle' in env_name or 'FetchPickAndPlaceBox' in env_name:
+            n_steps = 8192
+        model = PPO2('MlpPolicy', env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
                      ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      )
         def callback(_locals, _globals):
