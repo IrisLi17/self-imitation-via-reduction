@@ -122,16 +122,18 @@ def log_eval(num_update, mean_eval_reward):
         csvwriter.writerow(data)
 
 
-def log_traj(aug_obs, aug_done, index):
+def log_traj(aug_obs, aug_done, index, goal_dim=5, n_obstacle=1):
     with open(os.path.join(logger.get_dir(), 'success_traj_%d.csv' % index), 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
         title = ['gripper_x', 'gripper_y', 'gripper_z', 'box_x', 'box_y', 'box_z',
-                 'obstacle_x', 'obstacle_y', 'obstacle_z',
-                 'goal_0', 'goal_1', 'goal_2', 'goal_3', 'goal_4', 'done']
+                 'obstacle_x', 'obstacle_y', 'obstacle_z']
+        for i in range(1, n_obstacle):
+            title += ['obstacle' + str(i) + '_x', 'obstacle' + str(i) + '_y', 'obstacle' + str(i) + '_z']
+        title += ['goal_' + str(i) for i in range(goal_dim)] + ['done']
         csvwriter.writerow(title)
         for idx in range(aug_obs.shape[0]):
             log_obs = aug_obs[idx]
-            data = [log_obs[i] for i in range(9)] + [log_obs[i] for i in range(-5, 0)] + [aug_done[idx]]
+            data = [log_obs[i] for i in range(6 + 3 * n_obstacle)] + [log_obs[i] for i in range(-goal_dim, 0)] + [aug_done[idx]]
             csvwriter.writerow(data)
 
 
@@ -190,6 +192,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     eval_env_kwargs['random_ratio'] = 0.0
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
     print(eval_env)
+    print(eval_env.goal.shape[0], eval_env.n_object)
     if not play:
         os.makedirs(log_dir, exist_ok=True)
         policy_kwargs = dict(layers=[256, 256])
@@ -208,7 +211,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             aug_obs = _locals["self"].aug_obs
             aug_done = _locals["self"].aug_done
             if aug_obs is not None:
-                log_traj(aug_obs, aug_done, num_update)
+                log_traj(aug_obs, aug_done, num_update, goal_dim=eval_env.goal.shape[0],
+                         n_obstacle=eval_env.n_object)
             if num_update % 10 == 0:
                 model_path = os.path.join(log_dir, 'model_' + str(num_update // 10))
                 model.save(model_path)
@@ -217,7 +221,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
 
         # For debug only.
         # model.load_parameters('./logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/ppo/0/model_70.zip')
-        # model.load_parameters('./logs/MasspointPushDoubleObstacle-v1/ppo/6/model_71.zip')
+        model.load_parameters('./logs/MasspointPushDoubleObstacle-v1/ppo/6/model_71.zip')
         model.learn(total_timesteps=num_timesteps, callback=callback, seed=seed, log_interval=1)
         model.save(os.path.join(log_dir, 'final'))
 
