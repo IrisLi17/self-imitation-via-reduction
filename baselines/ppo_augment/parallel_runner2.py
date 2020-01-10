@@ -45,6 +45,8 @@ class ParallelRunner2(AbstractEnvRunner):
         self.subgoals = [] # Every element should be [*subgoals, ultimate goal]
         self.restart_states = [] # list of (n_candidate) states
         self.transition_storage = [] # every element is list of tuples. length of every element should match restart steps
+        # For filter subgoals
+        self.mean_value_buf = deque(maxlen=500)
 
     def run(self):
         """
@@ -102,7 +104,6 @@ class ParallelRunner2(AbstractEnvRunner):
                         _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate, env_idx=idx)
                         assert isinstance(_restart_steps, np.ndarray)
                         assert isinstance(_subgoals, np.ndarray)
-                        assert _restart_steps.shape[0] == self.n_candidate
                         for j in range(_restart_steps.shape[0]):
                             self.restart_steps.append(_restart_steps[j])
                             self.subgoals.append([np.array(_subgoals[j]), goal.copy()])
@@ -456,6 +457,13 @@ class ParallelRunner2(AbstractEnvRunner):
         #     print(value2[good_ind])
         # restart_step = sample_t[best_idx]
         # subgoal = subgoal_obs[best_idx, 45:50]
+        mean_values = (value1[good_ind] + value2[good_ind]) / 2
+        assert mean_values.shape[0] == k
+        for i in range(k):
+            self.mean_value_buf.append(mean_values[i])
+        filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
+        good_ind = good_ind[filtered_idx]
+
         restart_step = sample_t[good_ind % len(sample_t)]
         subgoal = subgoal_obs_buf[good_ind, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim*2]
 
