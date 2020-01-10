@@ -198,7 +198,11 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         policy_kwargs = dict(layers=[256, 256])
         # policy_kwargs = {}
         # TODO: vectorize env
-        model = PPO2_augment('MlpPolicy', env, aug_env=aug_env, verbose=1, n_steps=8192, nminibatches=32, lam=0.95,
+        if 'MasspointPushDoubleObstacle' in env_name:
+            n_steps = 8192
+        else:
+            n_steps = 2048
+        model = PPO2_augment('MlpPolicy', env, aug_env=aug_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
                              gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
                              cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
                              policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
@@ -221,7 +225,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
 
         # For debug only.
         # model.load_parameters('./logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/ppo/0/model_70.zip')
-        model.load_parameters('./logs/MasspointPushDoubleObstacle-v1/ppo/6/model_71.zip')
+        # model.load_parameters('./logs/MasspointPushDoubleObstacle-v1/ppo/6/model_71.zip')
         model.learn(total_timesteps=num_timesteps, callback=callback, seed=seed, log_interval=1)
         model.save(os.path.join(log_dir, 'final'))
 

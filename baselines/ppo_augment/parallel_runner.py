@@ -1,5 +1,5 @@
 import time
-import sys
+import sys, os, csv
 import multiprocessing
 from collections import deque
 
@@ -40,6 +40,9 @@ class ParallelRunner(AbstractEnvRunner):
         self.horizon = horizon
         print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
               'n_object', self.n_object, 'horizon', self.horizon)
+        self.debug_reference_value = [[] for _ in range(self.model.n_envs)]
+        self.debug_value1 = [[] for _ in range(self.model.n_envs)]
+        self.debug_value2 = [[] for _ in range(self.model.n_envs)]
 
     def run(self):
         """
@@ -96,7 +99,7 @@ class ParallelRunner(AbstractEnvRunner):
                     if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
                         # Do augmentation
                         # Sample start step and perturbation
-                        _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate)
+                        _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate, env_idx=idx)
                         assert isinstance(_restart_steps, np.ndarray)
                         assert isinstance(_subgoals, np.ndarray)
                         restart_steps[idx] = _restart_steps
@@ -169,7 +172,7 @@ class ParallelRunner(AbstractEnvRunner):
                         clipped_actions = np.clip(env_action, self.aug_env.action_space.low, self.aug_env.action_space.high)
                     # temp_time2 = time.time()
                     env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
-                    self.model.num_aug_steps += self.n_candidate
+                    self.model.num_aug_steps += (self.n_candidate - sum(env_end_flag))
                     # step_env_duration += (time.time() - temp_time2)
                     # for i, info in enumerate(env_info):
                     #     if 'terminal_observation' in info.keys():
@@ -204,7 +207,21 @@ class ParallelRunner(AbstractEnvRunner):
                     if increment_step >= self.horizon - min(env_restart_steps):
                         break
 
-                # print('end step', env_end_step)
+                # print(env_idx, 'end step', env_end_step)
+                # DEBUG: log values and indicator of success
+                if not os.path.exists(os.path.join(logger.get_dir(), 'debug_value.csv')):
+                    with open(os.path.join(logger.get_dir(), 'debug_value.csv'), 'a', newline='') as csvfile:
+                        csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
+                        title = ['reference_value', 'value1', 'value2', 'is_success']
+                        csvwriter.writerow(title)
+                with open(os.path.join(logger.get_dir(), 'debug_value.csv'), 'a', newline='') as csvfile:
+                    csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
+                    for i in range(len(env_end_step)):
+                        data = [self.debug_reference_value[env_idx][i], self.debug_value1[env_idx][i],
+                                self.debug_value2[env_idx][i], int(env_end_step[i] <= self.horizon)]
+                        csvwriter.writerow(data)
+                # End DEBUG
+
                 for idx, end_step in enumerate(env_end_step):
                     if end_step <= self.horizon:
                         transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
@@ -371,8 +388,8 @@ class ParallelRunner(AbstractEnvRunner):
 
         return mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_states, ep_infos, true_reward
 
-    def select_subgoal(self, transition_buf, k):
-        debug = False
+    def select_subgoal(self, transition_buf, k, env_idx):
+        debug = True
         # self.ep_transition_buf, self.model.value
         obs_buf, *_ = zip(*transition_buf)
         obs_buf = np.asarray(obs_buf)
@@ -380,8 +397,9 @@ class ParallelRunner(AbstractEnvRunner):
         sample_obs = obs_buf[sample_t]
         noise = np.random.uniform(low=-self.noise_mag, high=self.noise_mag, size=(len(sample_t), 2))
         if debug:
-            sample_obs = np.tile(sample_obs, (2, 1))
-            noise = np.concatenate([noise, np.zeros(noise.shape)], axis=0)
+            # sample_obs = np.tile(sample_obs, (2, 1))
+            # noise = np.concatenate([noise, np.zeros(noise.shape)], axis=0)
+            original_value = self.model.value(sample_obs)
         # TODO: if there are more than one obstacle
         sample_obs_buf = []
         subgoal_obs_buf = []
@@ -393,8 +411,8 @@ class ParallelRunner(AbstractEnvRunner):
             sample_obs_buf.append(sample_obs.copy())
 
             subgoal_obs = obs_buf[sample_t]
-            if debug:
-                subgoal_obs = np.tile(subgoal_obs, (2, 1))
+            # if debug:
+            #     subgoal_obs = np.tile(subgoal_obs, (2, 1))
             subgoal_obs[:, self.obs_dim:self.obs_dim+3] = subgoal_obs[:, 3*(object_idx+1):3*(object_idx+1)+3]
             one_hot = np.zeros(self.n_object)
             one_hot[object_idx] = 1
@@ -412,15 +430,25 @@ class ParallelRunner(AbstractEnvRunner):
         # best_idx = np.argmax(normalize_value1 * normalize_value2)
         ind = np.argsort(normalize_value1 * normalize_value2)
         good_ind = ind[-k:]
-        if debug:
-            print('original value1', 'mean', np.mean(origin_value1), 'std', np.std(origin_value1))
-            print('original value2', 'mean', np.mean(origin_value2), 'std', np.std(origin_value2))
-            print(value1[good_ind])
-            print(value2[good_ind])
+        # if debug:
+        #     print('original value1', 'mean', np.mean(origin_value1), 'std', np.std(origin_value1))
+        #     print('original value2', 'mean', np.mean(origin_value2), 'std', np.std(origin_value2))
+        #     print(value1[good_ind])
+        #     print(value2[good_ind])
         # restart_step = sample_t[best_idx]
         # subgoal = subgoal_obs[best_idx, 45:50]
         restart_step = sample_t[good_ind % len(sample_t)]
         subgoal = subgoal_obs_buf[good_ind, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim*2]
+        if debug:
+            reference_value = original_value[good_ind % (len(sample_t))]
+            debug_value1 = value1[good_ind]
+            debug_value2 = value2[good_ind]
+            self.debug_reference_value[env_idx] = reference_value
+            self.debug_value1[env_idx] = debug_value1
+            self.debug_value2[env_idx] = debug_value2
+            # print(env_idx, 'reference value', reference_value)
+            # print('debug_value1', debug_value1)
+            # print('debug_value2', debug_value2)
         # print('subgoal', subgoal, 'with value1', normalize_value1[best_idx], 'value2', normalize_value2[best_idx])
         # print('restart step', restart_step)
         return restart_step, subgoal
