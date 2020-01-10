@@ -94,14 +94,14 @@ class FetchPickAndPlaceBoxEnv(fetch_env.FetchEnv, utils.EzPickle):
             if self.random_box and self.np_random.uniform() < self.random_ratio:
                 self.sample_hard = False
                 object_xpos = self.initial_gripper_xpos[:2]
-                cover_xpos = self.pos_cover[:2] + self.np_random.uniform(-0.25, 0.25, size=2)
+                cover_xpos = self.pos_cover[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
                 # cover_xpos += (self.size_box_cover[0] * 2) * np.sign(cover_xpos)
                 while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1):
                     object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
                                                                                          self.obj_range, size=2)
                 while (abs(cover_xpos[0] - self.sim.data.get_mocap_pos('robot0:mocap')[0]) < self.size_box_cover[0]
                        and abs(cover_xpos[1] - self.sim.data.get_mocap_pos('robot0:mocap')[1]) < self.size_box_cover[1]):
-                    cover_xpos = self.pos_cover[:2] + self.np_random.uniform(-0.25, 0.25, size=2)
+                    cover_xpos = self.pos_cover[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             else:
                 self.sample_hard = True
                 # object_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range * 0.9, self.obj_range / 2])
@@ -119,8 +119,10 @@ class FetchPickAndPlaceBoxEnv(fetch_env.FetchEnv, utils.EzPickle):
             if abs(cover_xpos[0] - self.pos_box_bottom[0]) < self.size_box_cover[0] * 2 \
                     and abs(cover_xpos[1] - self.pos_box_bottom[1]) < self.size_box_cover[1] * 2:
                 cover_height = 0.51
+                self.covered = True
             else:
                 cover_height = 0.41
+                self.covered = False
             # Set the position of obstacle. (free joint)
             object_qpos = self.sim.data.get_joint_qpos('object0:joint')
             cover_qpos = self.sim.data.get_joint_qpos('cover:joint')
@@ -133,22 +135,33 @@ class FetchPickAndPlaceBoxEnv(fetch_env.FetchEnv, utils.EzPickle):
             self.sim.data.set_joint_qpos('object0:joint', object_qpos)
             self.sim.data.set_joint_qpos('cover:joint', cover_qpos)
 
+        for _ in range(5):
+            self.sim.step()
         self.sim.forward()
         return True
 
     def _sample_goal(self):
+        if not hasattr(self, 'pos_cover'):
+            self.pos_cover = self.sim.data.get_joint_qpos('cover:joint')[:3].copy()
         g_idx = np.random.randint(2)
         one_hot = np.zeros(2)
         one_hot[g_idx] = 1
-        goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range,
-                                                                                           self.target_range, size=3)
+        if g_idx == 0:
+            goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range,
+                                                                                               self.target_range, size=3)
+        else:
+            goal = self.pos_cover[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
         if hasattr(self, 'sample_hard') and self.sample_hard and g_idx == 0:
             goal = self.pos_box_bottom[:3] + self.np_random.uniform(-self.size_box_cover, self.size_box_cover, size=3)
 
         if g_idx == 0:
             goal[2] = self.sim.data.get_site_xpos('object0')[2]
         else:
-            goal[2] = 0.501
+            #TODO if closed
+            if hasattr(self, 'covered') and self.covered:
+                goal[2] = 0.603
+            else:
+                goal[2] = 0.501
 
         goal = np.concatenate([goal, one_hot])
         if self.target_in_the_air and self.np_random.uniform() < 0.5:
