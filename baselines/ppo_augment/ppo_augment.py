@@ -381,8 +381,12 @@ class PPO2_augment(ActorCriticRLModel):
                                 aug_env=self.aug_env, n_candidate=self.n_candidate)
             else:
                 from baselines.ppo_augment.parallel_runner import ParallelRunner
-                runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
-                                        n_candidate=self.n_candidate, horizon=self.horizon)
+                from baselines.ppo_augment.parallel_runner2 import ParallelRunner2
+                # runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
+                #                         n_candidate=self.n_candidate, horizon=self.horizon)
+                runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                         gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                         horizon=self.horizon)
             self.episode_reward = np.zeros((self.n_envs,))
 
             ep_info_buf = deque(maxlen=100)
