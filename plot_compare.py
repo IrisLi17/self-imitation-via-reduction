@@ -40,7 +40,8 @@ if __name__ == '__main__':
         elif option == 'entropy':
             ax[0].plot(smooth(total_timesteps, window), smooth(entropy, window), label=log_path)
         try:
-            augment_steps = get_item(progress_file, 'augment_steps') / 65536
+            original_steps = get_item(progress_file, 'original_timesteps')[0]
+            augment_steps = get_item(progress_file, 'augment_steps') / original_steps
             # augment_steps = smooth(augment_steps, window)
         except:
             augment_steps = np.zeros(total_timesteps.shape)

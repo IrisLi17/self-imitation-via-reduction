@@ -169,6 +169,10 @@ class ParallelRunner2(AbstractEnvRunner):
                         if env_reward[idx] > 0 and env_end_flag[idx] == False:
                             env_end_flag[idx] = True
                             env_end_step[idx] = env_restart_steps[idx] + increment_step
+                        # Exceed time limit
+                        if env_end_flag[idx] == False and env_restart_steps[idx] + increment_step > self.horizon:
+                            env_end_flag[idx] = True
+                            # But env_end_step is still np.inf
                         if info['is_success']:
                             if len(env_subgoals[idx]) >= 2:
                                 switch_goal_flag[idx] = True

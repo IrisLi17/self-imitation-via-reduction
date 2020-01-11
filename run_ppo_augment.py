@@ -184,7 +184,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         aug_env = make_env(env_id=aug_env_name, seed=seed, rank=0, kwargs=aug_env_kwargs)
     else:
         # aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_subgoal)])
-        aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_cpu)])
+        aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(32)])
     print(aug_env)
     if os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
         os.remove(os.path.join(logger.get_dir(), 'eval.csv'))
