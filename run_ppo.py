@@ -9,6 +9,7 @@ from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
 from pick_and_place_box import FetchPickAndPlaceBoxEnv
+from open_close_box import FetchOpenCloseBoxEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
@@ -33,6 +34,7 @@ MASS_ENTRY_POINT = {
 
 PICK_ENTRY_POINT = {
     'FetchPickAndPlaceBox-v1': FetchPickAndPlaceBoxEnv,
+    'FetchOpenCloseBox-v1': FetchOpenCloseBoxEnv,
 }
 
 def arg_parse():
@@ -194,7 +196,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             img = env.render(mode='rgb_array')
             ax.cla()
             ax.imshow(img)
-            if env_name == 'FetchPickAndPlace-v1':
+            if env.get_attr('goal')[0].shape[0] <= 3:
                 ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx))
             else:
                 ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx) +
