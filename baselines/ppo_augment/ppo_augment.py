@@ -49,7 +49,7 @@ class PPO2_augment(ActorCriticRLModel):
 
     def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
-                 cliprange_vf=None, n_candidate=4, parallel=False, start_augment=0, horizon=100,
+                 cliprange_vf=None, n_candidate=4, parallel=False, reuse_times=1, start_augment=0, horizon=100,
                  verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
@@ -102,10 +102,13 @@ class PPO2_augment(ActorCriticRLModel):
         self.summary = None
         self.episode_reward = None
 
+        self.reuse_times = reuse_times
         self.aug_obs = []
         self.aug_act = []
         self.aug_neglogp = []
-        self.aug_adv = []
+        self.aug_return = []
+        self.aug_value = []
+        self.aug_done = []
         self.num_aug_steps = 0  # every interaction with simulator should be counted
         self.horizon = horizon
 
@@ -386,7 +389,7 @@ class PPO2_augment(ActorCriticRLModel):
                 #                         n_candidate=self.n_candidate, horizon=self.horizon)
                 runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
                                          gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
-                                         horizon=self.horizon)
+                                         horizon=self.horizon, reuse_times=self.reuse_times)
             self.episode_reward = np.zeros((self.n_envs,))
 
             ep_info_buf = deque(maxlen=100)
@@ -401,12 +404,12 @@ class PPO2_augment(ActorCriticRLModel):
                 lr_now = self.learning_rate(frac)
                 cliprange_now = self.cliprange(frac)
                 cliprange_vf_now = cliprange_vf(frac)
-                self.aug_obs = None
-                self.aug_act = None
-                self.aug_neglogp = None
-                self.aug_return = None
-                self.aug_value = None
-                self.aug_done = None
+                self.aug_obs = self.aug_obs[-self.reuse_times+1:] + [None]
+                self.aug_act = self.aug_act[-self.reuse_times+1:] + [None]
+                self.aug_neglogp = self.aug_neglogp[-self.reuse_times+1:] + [None]
+                self.aug_return = self.aug_return[-self.reuse_times+1:] + [None]
+                self.aug_value = self.aug_value[-self.reuse_times+1:] + [None]
+                self.aug_done = self.aug_done[-self.reuse_times+1:] + [None]
                 # true_reward is the reward without discount
                 temp_time0 = time.time()
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
@@ -414,18 +417,22 @@ class PPO2_augment(ActorCriticRLModel):
                 temp_time1 = time.time()
                 print('runner.run() takes', temp_time1 - temp_time0)
 
-                augment_steps = 0 if self.aug_obs is None else self.aug_obs.shape[0]
-                if self.aug_obs is not None:
-                    print(self.aug_obs.shape, self.aug_act.shape, self.aug_neglogp.shape, self.aug_return.shape, self.aug_value.shape, self.aug_done.shape)
-                    adv_clip_frac = np.sum((self.aug_return - self.aug_value) < (np.mean(returns - values) + self.aug_clip * np.std(returns - values))) / self.aug_return.shape[0]
+                # augment_steps = 0 if self.aug_obs is None else self.aug_obs.shape[0]
+                augment_steps = sum([item.shape[0] if item is not None else 0 for item in self.aug_obs])
+                print([item.shape[0] if item is not None else 0 for item in self.aug_obs])
+                # if self.aug_obs is not None:
+                if augment_steps > 0:
+                    _aug_return = np.concatenate(list(filter(lambda v:v is not None, self.aug_return)), axis=0)
+                    _aug_value = np.concatenate(list(filter(lambda v: v is not None, self.aug_value)), axis=0)
+                    adv_clip_frac = np.sum((_aug_return - _aug_value) < (np.mean(returns - values) + self.aug_clip * np.std(returns - values))) / _aug_return.shape[0]
                     print('demo adv below average + %f std' % self.aug_clip, adv_clip_frac)
-                    obs = np.concatenate([obs, self.aug_obs], axis=0)
-                    returns = np.concatenate([returns, self.aug_return], axis=0)
-                    masks = np.concatenate([masks, self.aug_done], axis=0)
-                    actions = np.concatenate([actions, self.aug_act], axis=0)
-                    values = np.concatenate([values, self.aug_value], axis=0)
-                    neglogpacs = np.concatenate([neglogpacs, self.aug_neglogp], axis=0)
-                    is_demo = np.concatenate([is_demo, np.ones(self.aug_obs.shape[0])], axis=0)
+                    obs = np.concatenate([obs, *(list(filter(lambda v:v is not None, self.aug_obs)))], axis=0)
+                    returns = np.concatenate([returns, *(list(filter(lambda v:v is not None, self.aug_return)))], axis=0)
+                    masks = np.concatenate([masks, *(list(filter(lambda v:v is not None, self.aug_done)))], axis=0)
+                    actions = np.concatenate([actions, *(list(filter(lambda v:v is not None, self.aug_act)))], axis=0)
+                    values = np.concatenate([values, *(list(filter(lambda v:v is not None, self.aug_value)))], axis=0)
+                    neglogpacs = np.concatenate([neglogpacs, *(list(filter(lambda v:v is not None, self.aug_neglogp)))], axis=0)
+                    is_demo = np.concatenate([is_demo, np.ones(augment_steps)], axis=0)
                     print('augmented data length', obs.shape[0])
                 self.num_timesteps += self.n_batch
                 ep_info_buf.extend(ep_infos)

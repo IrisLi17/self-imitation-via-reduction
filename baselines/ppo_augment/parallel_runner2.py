@@ -15,7 +15,7 @@ from stable_baselines.a2c.utils import total_episode_reward_logger
 
 
 class ParallelRunner2(AbstractEnvRunner):
-    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon):
+    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon, reuse_times):
         """
         A runner to learn the policy of an environment for a model
 
@@ -38,6 +38,7 @@ class ParallelRunner2(AbstractEnvRunner):
         self.noise_mag = self.env.get_attr('size_obstacle')[0][1]
         self.n_object = self.env.get_attr('n_object')[0]
         self.horizon = horizon
+        self.reuse_times = reuse_times
         print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
               'n_object', self.n_object, 'horizon', self.horizon)
         # TODO: add buffers
@@ -214,23 +215,23 @@ class ParallelRunner2(AbstractEnvRunner):
                         #     print('augment done', augment_done_buf)
                         #     print('augment_reward', augment_reward_buf)
                         #     print('augment return', augment_returns)
-                        if self.model.aug_obs is None:
-                            self.model.aug_obs = np.array(augment_obs_buf)
-                            self.model.aug_act = np.array(augment_act_buf)
-                            self.model.aug_neglogp = np.array(augment_neglogp_buf)
-                            self.model.aug_value = np.array(augment_value_buf)
-                            self.model.aug_return = augment_returns
-                            self.model.aug_done = np.array(augment_done_buf)
+                        if self.model.aug_obs[-1] is None:
+                            self.model.aug_obs[-1] = np.array(augment_obs_buf)
+                            self.model.aug_act[-1] = np.array(augment_act_buf)
+                            self.model.aug_neglogp[-1] = np.array(augment_neglogp_buf)
+                            self.model.aug_value[-1] = np.array(augment_value_buf)
+                            self.model.aug_return[-1] = augment_returns
+                            self.model.aug_done[-1] = np.array(augment_done_buf)
                         else:
-                            self.model.aug_obs = np.concatenate([self.model.aug_obs, np.array(augment_obs_buf)], axis=0)
-                            self.model.aug_act = np.concatenate([self.model.aug_act, np.array(augment_act_buf)], axis=0)
-                            self.model.aug_neglogp = np.concatenate(
-                                [self.model.aug_neglogp, np.array(augment_neglogp_buf)], axis=0)
-                            self.model.aug_value = np.concatenate([self.model.aug_value, np.array(augment_value_buf)],
-                                                                  axis=0)
-                            self.model.aug_return = np.concatenate([self.model.aug_return, augment_returns], axis=0)
-                            self.model.aug_done = np.concatenate([self.model.aug_done, np.array(augment_done_buf)],
-                                                                 axis=0)
+                            self.model.aug_obs[-1] = np.concatenate([self.model.aug_obs[-1], np.array(augment_obs_buf)], axis=0)
+                            self.model.aug_act[-1] = np.concatenate([self.model.aug_act[-1], np.array(augment_act_buf)], axis=0)
+                            self.model.aug_neglogp[-1] = np.concatenate(
+                                [self.model.aug_neglogp[-1], np.array(augment_neglogp_buf)], axis=0)
+                            self.model.aug_value[-1] = np.concatenate(
+                                [self.model.aug_value[-1], np.array(augment_value_buf)], axis=0)
+                            self.model.aug_return[-1] = np.concatenate([self.model.aug_return[-1], augment_returns], axis=0)
+                            self.model.aug_done[-1] = np.concatenate(
+                                [self.model.aug_done[-1], np.array(augment_done_buf)], axis=0)
 
 
                 self.restart_steps = self.restart_steps[self.aug_env.num_envs:]

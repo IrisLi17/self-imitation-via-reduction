@@ -42,6 +42,7 @@ def arg_parse():
     parser.add_argument('--n_subgoal', default=4, type=int)
     parser.add_argument('--parallel', action="store_true", default=False)
     parser.add_argument('--start_augment', type=float, default=0)
+    parser.add_argument('--reuse_times', default=1, type=int)
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
@@ -138,7 +139,7 @@ def log_traj(aug_obs, aug_done, index, goal_dim=5, n_obstacle=1):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, aug_clip, n_subgoal,
-         parallel, start_augment):
+         parallel, start_augment, reuse_times):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir)
 
@@ -207,6 +208,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                              gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
                              cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
                              policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
+                             reuse_times=reuse_times,
                              )
 
         def callback(_locals, _globals):
@@ -215,7 +217,11 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             log_eval(num_update, mean_eval_reward)
             aug_obs = _locals["self"].aug_obs
             aug_done = _locals["self"].aug_done
-            if aug_obs is not None:
+            aug_obs = list(filter(lambda v:v is not None, aug_obs))
+            aug_done = list(filter(lambda v:v is not None, aug_done))
+            if len(aug_obs):
+                aug_obs = np.concatenate(aug_obs, axis=0)
+                aug_done = np.concatenate(aug_done, axis=0)
                 log_traj(aug_obs, aug_done, num_update, goal_dim=eval_env.goal.shape[0],
                          n_obstacle=eval_env.n_object)
             if num_update % 10 == 0:
@@ -288,4 +294,4 @@ if __name__ == '__main__':
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps),
          log_path=args.log_path, load_path=args.load_path, play=args.play, export_gif=args.export_gif,
          random_ratio=args.random_ratio, aug_clip=args.aug_clip, n_subgoal=args.n_subgoal,
-         parallel=args.parallel, start_augment=int(args.start_augment))
+         parallel=args.parallel, start_augment=int(args.start_augment), reuse_times=args.reuse_times)
