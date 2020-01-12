@@ -335,7 +335,7 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
         MasspointPushEnv.__init__(
             self, XML_PATH, n_substeps=10,
             target_in_the_air=False, target_offset=0.0,
-            obj_range=1.5, target_range=1.5, distance_threshold=0.30,
+            obj_range=2.0, target_range=2.0, distance_threshold=0.30,
             initial_qpos=initial_qpos, reward_type=reward_type, n_object=3)
         utils.EzPickle.__init__(self)
         self.pos_wall0 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
@@ -438,9 +438,12 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
                 return True
             return False
 
-        if hasattr(self, 'sample_hard') and self.sample_hard and g_idx == 0:
-            while (same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.sim.data.get_site_xpos('object1')[0]) and \
-                    same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.sim.data.get_site_xpos('object2')[0])) \
+        if hasattr(self, 'sample_hard') and self.sample_hard:
+            g_idx = 0
+            one_hot = np.zeros(self.n_object)
+            one_hot[g_idx] = 1
+            while (same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.pos_wall0[0]) and
+                       same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.pos_wall2[0])) \
                     or self.inside_wall(goal):
                 goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
         else:

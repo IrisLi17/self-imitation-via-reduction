@@ -183,6 +183,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         goal_dim = env.get_attr('goal')[0].shape[0]
         while np.argmax(obs[0][-goal_dim + 3:]) != 0:
             obs = env.reset()
+        print('goal', obs[0][-goal_dim:])
         # while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
         #     obs = env.reset()
         # img = env.render(mode='rgb_array')
@@ -215,9 +216,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 # obs = env.reset()
                 # while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
                 #     obs = env.reset()
+                print('episode_reward', episode_reward)
                 while np.argmax(obs[0][-goal_dim + 3:]) != 0:
                     obs = env.reset()
-                print('episode_reward', episode_reward)
+                print('goal', obs[0][-goal_dim:])
                 episode_reward = 0.0
                 frame_idx = 0
                 num_episode += 1
