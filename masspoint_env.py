@@ -335,7 +335,7 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
         MasspointPushEnv.__init__(
             self, XML_PATH, n_substeps=10,
             target_in_the_air=False, target_offset=0.0,
-            obj_range=2.0, target_range=2.0, distance_threshold=0.30,
+            obj_range=1.5, target_range=1.5, distance_threshold=0.30,
             initial_qpos=initial_qpos, reward_type=reward_type, n_object=3)
         utils.EzPickle.__init__(self)
         self.pos_wall0 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
