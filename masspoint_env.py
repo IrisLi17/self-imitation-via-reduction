@@ -389,19 +389,35 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
                 stick2_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
         else:
             self.sample_hard = True
+            if self.np_random.uniform() < 0.5:
+                self.sample_harder = True
+            else:
+                self.sample_harder = False
             stick1_xpos = np.array([np.random.choice([self.pos_wall0[0] - self.size_wall[0] - self.size_obstacle[0],
                                                       self.pos_wall0[0] + self.size_wall[0] + self.size_obstacle[0]]), 2.5])
             stick2_xpos = np.array([np.random.choice([self.pos_wall2[0] - self.size_wall[0] - self.size_obstacle[0],
                                                       self.pos_wall2[0] + self.size_wall[0] + self.size_obstacle[0]]), 2.5])
             object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
-            while not (np.linalg.norm(object_xpos - masspoint_pos) >= 0.3
-                    and abs(object_xpos[0] - self.pos_wall0[0]) >= self.size_object[0] + self.size_wall[0]
-                    and abs(object_xpos[0] - self.pos_wall2[0]) >= self.size_object[0] + self.size_wall[0]
-                    and (abs(object_xpos[0] - stick1_xpos[0]) >= self.size_object[0] + self.size_obstacle[0] or abs(
-                            object_xpos[1] - stick1_xpos[1]) >= self.size_object[1] + self.size_obstacle[1])
-                    and (abs(object_xpos[0] - stick2_xpos[0]) >= self.size_object[0] + self.size_obstacle[0] or abs(
-                            object_xpos[1] - stick2_xpos[1]) >= self.size_object[1] + self.size_obstacle[1])):
-                object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            if not self.sample_harder:
+                while not (np.linalg.norm(object_xpos - masspoint_pos) >= 0.3
+                           and abs(object_xpos[0] - self.pos_wall0[0]) >= self.size_object[0] + self.size_wall[0]
+                           and abs(object_xpos[0] - self.pos_wall2[0]) >= self.size_object[0] + self.size_wall[0]
+                           and (abs(object_xpos[0] - stick1_xpos[0]) >= self.size_object[0] + self.size_obstacle[0] or abs(
+                                object_xpos[1] - stick1_xpos[1]) >= self.size_object[1] + self.size_obstacle[1])
+                           and (abs(object_xpos[0] - stick2_xpos[0]) >= self.size_object[0] + self.size_obstacle[0] or abs(
+                                object_xpos[1] - stick2_xpos[1]) >= self.size_object[1] + self.size_obstacle[1])):
+                    object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            else:
+                while not (np.linalg.norm(object_xpos - masspoint_pos) >= 0.3
+                           and abs(object_xpos[0] - self.pos_wall0[0]) >= self.size_object[0] + self.size_wall[0]
+                           and abs(object_xpos[0] - self.pos_wall2[0]) >= self.size_object[0] + self.size_wall[0]
+                           and (abs(object_xpos[0] - stick1_xpos[0]) >= self.size_object[0] + self.size_obstacle[0] or abs(
+                                object_xpos[1] - stick1_xpos[1]) >= self.size_object[1] + self.size_obstacle[1])
+                           and (abs(object_xpos[0] - stick2_xpos[0]) >= self.size_object[0] + self.size_obstacle[0] or abs(
+                                object_xpos[1] - stick2_xpos[1]) >= self.size_object[1] + self.size_obstacle[1])
+                           and ((object_xpos[0] - self.pos_wall0[0]) * (masspoint_pos[0] - self.pos_wall0[0]) < 0
+                                or (object_xpos[0] - self.pos_wall2[0]) * (masspoint_pos[0] - self.pos_wall2[0]) < 0)):
+                    object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
         # Set the position of box. (two slide joints)
         box_jointx_i = self.sim.model.get_joint_qpos_addr("object0:slidex")
         box_jointy_i = self.sim.model.get_joint_qpos_addr("object0:slidey")
@@ -442,10 +458,19 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
             g_idx = 0
             one_hot = np.zeros(self.n_object)
             one_hot[g_idx] = 1
-            while (same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.pos_wall0[0]) and
+            if hasattr(self, 'sample_harder') and self.sample_harder:
+                # print('sample harder')
+                masspoint_pos = self.sim.data.get_site_xpos('masspoint')
+                object_pos = self.sim.data.get_site_xpos('object0')
+                while (same_side(goal[0], object_pos[0], self.pos_wall0[0]) and same_side(goal[0], object_pos[0], self.pos_wall2[0])
+                       or (same_side(goal[0], masspoint_pos[0], self.pos_wall0[0]) and same_side(goal[0], masspoint_pos[0], self.pos_wall2[0]))
+                       or self.inside_wall(goal)):
+                    goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+            else:
+                while (same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.pos_wall0[0]) and
                        same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.pos_wall2[0])) \
-                    or self.inside_wall(goal):
-                goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+                        or self.inside_wall(goal):
+                    goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
         else:
             if g_idx != 0:
                 # while self.inside_wall(goal) \
