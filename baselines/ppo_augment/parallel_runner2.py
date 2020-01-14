@@ -225,12 +225,13 @@ class ParallelRunner2(AbstractEnvRunner):
                             self.model.aug_reward[-1] = np.array(augment_reward_buf)
                             for reuse_idx in range(len(self.model.aug_obs) - 1):
                                 # Update previous data with new value and policy parameters
-                                self.model.aug_neglogp[reuse_idx] = self.model.sess.run(self.model.aug_neglogp_op,
-                                                                                        {self.model.train_aug_model.obs_ph: self.model.aug_obs[reuse_idx],
-                                                                                         self.model.aug_action_ph: self.model.aug_act[reuse_idx]})
-                                self.model.aug_value[reuse_idx] = self.model.value(self.model.aug_obs[reuse_idx])
-                                self.model.aug_return[reuse_idx] = self.compute_adv(
-                                    self.model.aug_value[reuse_idx], self.model.aug_done[reuse_idx], self.model.aug_reward[reuse_idx])
+                                if self.model.aug_obs[reuse_idx] is not None:
+                                    self.model.aug_neglogp[reuse_idx] = self.model.sess.run(self.model.aug_neglogpac_op,
+                                                                                            {self.model.train_aug_model.obs_ph: self.model.aug_obs[reuse_idx],
+                                                                                             self.model.aug_action_ph: self.model.aug_act[reuse_idx]})
+                                    self.model.aug_value[reuse_idx] = self.model.value(self.model.aug_obs[reuse_idx])
+                                    self.model.aug_return[reuse_idx] = self.compute_adv(
+                                        self.model.aug_value[reuse_idx], self.model.aug_done[reuse_idx], self.model.aug_reward[reuse_idx])
 
                         else:
                             self.model.aug_obs[-1] = np.concatenate([self.model.aug_obs[-1], np.array(augment_obs_buf)], axis=0)
