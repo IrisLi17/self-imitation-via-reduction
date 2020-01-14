@@ -109,6 +109,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.aug_return = []
         self.aug_value = []
         self.aug_done = []
+        self.aug_reward = []
         self.num_aug_steps = 0  # every interaction with simulator should be counted
         self.horizon = horizon
 
@@ -411,6 +412,7 @@ class PPO2_augment(ActorCriticRLModel):
                     self.aug_return = self.aug_return[-self.reuse_times+1:] + [None]
                     self.aug_value = self.aug_value[-self.reuse_times+1:] + [None]
                     self.aug_done = self.aug_done[-self.reuse_times+1:] + [None]
+                    self.aug_reward = self.aug_reward[-self.reuse_times+1:] + [None]
                 else:
                     self.aug_obs = [None]
                     self.aug_act = [None]
@@ -418,6 +420,7 @@ class PPO2_augment(ActorCriticRLModel):
                     self.aug_return = [None]
                     self.aug_value = [None]
                     self.aug_done = [None]
+                    self.aug_reward = [None]
                 # true_reward is the reward without discount
                 temp_time0 = time.time()
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()

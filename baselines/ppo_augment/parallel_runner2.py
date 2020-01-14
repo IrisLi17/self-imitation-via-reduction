@@ -222,6 +222,16 @@ class ParallelRunner2(AbstractEnvRunner):
                             self.model.aug_value[-1] = np.array(augment_value_buf)
                             self.model.aug_return[-1] = augment_returns
                             self.model.aug_done[-1] = np.array(augment_done_buf)
+                            self.model.aug_reward[-1] = np.array(augment_reward_buf)
+                            for reuse_idx in range(len(self.model.aug_obs) - 1):
+                                # Update previous data with new value and policy parameters
+                                self.model.aug_neglogp[reuse_idx] = self.model.sess.run(self.model.aug_neglogp_op,
+                                                                                        {self.model.train_aug_model.obs_ph: self.model.aug_obs[reuse_idx],
+                                                                                         self.model.aug_action_ph: self.model.aug_act[reuse_idx]})
+                                self.model.aug_value[reuse_idx] = self.model.value(self.model.aug_obs[reuse_idx])
+                                self.model.aug_return[reuse_idx] = self.compute_adv(
+                                    self.model.aug_value[reuse_idx], self.model.aug_done[reuse_idx], self.model.aug_reward[reuse_idx])
+
                         else:
                             self.model.aug_obs[-1] = np.concatenate([self.model.aug_obs[-1], np.array(augment_obs_buf)], axis=0)
                             self.model.aug_act[-1] = np.concatenate([self.model.aug_act[-1], np.array(augment_act_buf)], axis=0)
@@ -232,6 +242,8 @@ class ParallelRunner2(AbstractEnvRunner):
                             self.model.aug_return[-1] = np.concatenate([self.model.aug_return[-1], augment_returns], axis=0)
                             self.model.aug_done[-1] = np.concatenate(
                                 [self.model.aug_done[-1], np.array(augment_done_buf)], axis=0)
+                            self.model.aug_reward[-1] = np.concatenate(
+                                [self.model.aug_reward[-1], np.array(augment_reward_buf)], axis=0)
 
 
                 self.restart_steps = self.restart_steps[self.aug_env.num_envs:]
