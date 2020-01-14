@@ -393,10 +393,19 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
                 self.sample_harder = True
             else:
                 self.sample_harder = False
-            stick1_xpos = np.array([np.random.choice([self.pos_wall0[0] - self.size_wall[0] - self.size_obstacle[0],
-                                                      self.pos_wall0[0] + self.size_wall[0] + self.size_obstacle[0]]), 2.5])
-            stick2_xpos = np.array([np.random.choice([self.pos_wall2[0] - self.size_wall[0] - self.size_obstacle[0],
-                                                      self.pos_wall2[0] + self.size_wall[0] + self.size_obstacle[0]]), 2.5])
+            if masspoint_pos[0] < self.pos_wall0[0]:
+                stick1_xpos = np.array([self.pos_wall0[0] - self.size_wall[0] - self.size_obstacle[0], 2.5])
+                stick2_xpos = np.array([self.pos_wall2[0] - self.size_wall[0] - self.size_obstacle[0], 2.5])
+            elif masspoint_pos[0] < self.pos_wall2[0]:
+                stick1_xpos = np.array([self.pos_wall0[0] + self.size_wall[0] + self.size_obstacle[0], 2.5])
+                stick2_xpos = np.array([self.pos_wall2[0] - self.size_wall[0] - self.size_obstacle[0], 2.5])
+            else:
+                stick1_xpos = np.array([self.pos_wall0[0] + self.size_wall[0] + self.size_obstacle[0], 2.5])
+                stick2_xpos = np.array([self.pos_wall2[0] + self.size_wall[0] + self.size_obstacle[0], 2.5])
+            # stick1_xpos = np.array([np.random.choice([self.pos_wall0[0] - self.size_wall[0] - self.size_obstacle[0],
+            #                                           self.pos_wall0[0] + self.size_wall[0] + self.size_obstacle[0]]), 2.5])
+            # stick2_xpos = np.array([np.random.choice([self.pos_wall2[0] - self.size_wall[0] - self.size_obstacle[0],
+            #                                           self.pos_wall2[0] + self.size_wall[0] + self.size_obstacle[0]]), 2.5])
             object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             if not self.sample_harder:
                 while not (np.linalg.norm(object_xpos - masspoint_pos) >= 0.3
