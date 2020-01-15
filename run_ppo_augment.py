@@ -99,8 +99,10 @@ def eval_model(eval_env, model):
     while n_episode < 10:
         ep_reward = 0.0
         obs = env.reset()
-        while (np.argmax(obs[-2:]) != 0):
-            obs = env.reset()
+        goal_dim = env.goal.shape[0]
+        if goal_dim > 3:
+            while (np.argmax(obs[-goal_dim + 3:]) != 0):
+                obs = env.reset()
         done = False
         while not done:
             action, _ = model.predict(obs)
