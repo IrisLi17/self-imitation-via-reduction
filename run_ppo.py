@@ -193,7 +193,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         images = []
         if not 'max_episode_steps' in env_kwargs.keys():
             env_kwargs['max_episode_steps'] = 100
-        for i in range(env_kwargs['max_episode_steps'] * 5):
+        for i in range(env_kwargs['max_episode_steps'] * 10):
             img = env.render(mode='rgb_array')
             ax.cla()
             ax.imshow(img)
@@ -223,13 +223,13 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 episode_reward = 0.0
                 frame_idx = 0
                 num_episode += 1
-                if num_episode >= 5:
+                if num_episode >= 10:
                     break
         # imageio.mimsave(env_name + '.gif', images)
         if export_gif:
             os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
-            for i in range(env_kwargs['max_episode_steps'] * 5):
+            for i in range(env_kwargs['max_episode_steps'] * 10):
                 # images.append(plt.imread('tempimg' + str(i) + '.png'))
                 try:
                     os.remove(os.path.join(os.path.dirname(load_path), 'tempimg' + str(i) + '.png'))
