@@ -85,10 +85,12 @@ class ParallelRunner2(AbstractEnvRunner):
             if isinstance(self.env.action_space, gym.spaces.Box):
                 clipped_actions = np.clip(actions, self.env.action_space.low, self.env.action_space.high)
             self.obs[:], rewards, self.dones, infos = self.env.step(clipped_actions)
-            for info in infos:
+            for idx, info in enumerate(infos):
                 maybe_ep_info = info.get('episode')
                 if maybe_ep_info is not None:
                     ep_infos.append(maybe_ep_info)
+                if self.dones[idx] and (not info['is_success']):
+                    rewards[idx] = self.model.value(info['terminal_observation'])
             mb_rewards.append(rewards)
             for i in range(self.model.n_envs):
                 self.ep_transition_buf[i].append((mb_obs[-1][i], mb_actions[-1][i], mb_values[-1][i],
