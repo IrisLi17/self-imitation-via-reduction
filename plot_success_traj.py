@@ -92,7 +92,7 @@ if __name__ == '__main__':
             step = 0
             has_switch = False
         plt.savefig('tempimg' + str(i) + '.png')
-        # plt.pause(0.1)
+        plt.pause(0.1)
     os.system('ffmpeg -r 2 -start_number 0 -i tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
               os.path.join(os.path.dirname(fname), 'augment_data.mp4'))
     # images = []
