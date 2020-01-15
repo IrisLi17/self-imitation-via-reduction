@@ -90,7 +90,7 @@ class ParallelRunner2(AbstractEnvRunner):
                 if maybe_ep_info is not None:
                     ep_infos.append(maybe_ep_info)
                 if self.dones[idx] and (not info['is_success']):
-                    rewards[idx] = self.model.value(info['terminal_observation'])
+                    rewards[idx] = self.model.value(np.expand_dims(info['terminal_observation'], axis=0))
             mb_rewards.append(rewards)
             for i in range(self.model.n_envs):
                 self.ep_transition_buf[i].append((mb_obs[-1][i], mb_actions[-1][i], mb_values[-1][i],
