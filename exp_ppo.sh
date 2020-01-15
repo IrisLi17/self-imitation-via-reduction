@@ -17,4 +17,6 @@ CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 
 CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 2 --parallel --aug_clip 0.1 --reuse_times 5 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_augment/4_reuse5
 # Update online part
 CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 2 --parallel --aug_clip 0.1 --reuse_times 5 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_augment/4_reuse5_new
+# Schedule
+CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 2 --parallel --aug_clip 0.1 --reuse_times 5 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_augment/4_reuse1-5
 CUDA_VISIBLE_DEVICES=2 python run_ppo.py --env FetchPushWallDoubleObstacle-v1 --num_timesteps 1e8 --log_path logs/FetchPushWallDoubleObstacle-v1/ppo/0

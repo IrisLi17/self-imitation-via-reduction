@@ -15,7 +15,7 @@ from stable_baselines.a2c.utils import total_episode_reward_logger
 
 
 class ParallelRunner2(AbstractEnvRunner):
-    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon, reuse_times):
+    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon):
         """
         A runner to learn the policy of an environment for a model
 
@@ -38,7 +38,7 @@ class ParallelRunner2(AbstractEnvRunner):
         self.noise_mag = self.env.get_attr('size_obstacle')[0][1]
         self.n_object = self.env.get_attr('n_object')[0]
         self.horizon = horizon
-        self.reuse_times = reuse_times
+        # self.reuse_times = reuse_times
         print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
               'n_object', self.n_object, 'horizon', self.horizon)
         # TODO: add buffers
@@ -232,6 +232,9 @@ class ParallelRunner2(AbstractEnvRunner):
                                     self.model.aug_value[reuse_idx] = self.model.value(self.model.aug_obs[reuse_idx])
                                     self.model.aug_return[reuse_idx] = self.compute_adv(
                                         self.model.aug_value[reuse_idx], self.model.aug_done[reuse_idx], self.model.aug_reward[reuse_idx])
+                                    # print('aug_done', self.model.aug_done[reuse_idx])
+                                    # print('aug_reward', self.model.aug_reward[reuse_idx])
+                                    # print('aug return', self.model.aug_return[reuse_idx])
 
                         else:
                             self.model.aug_obs[-1] = np.concatenate([self.model.aug_obs[-1], np.array(augment_obs_buf)], axis=0)

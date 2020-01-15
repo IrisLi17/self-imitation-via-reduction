@@ -390,7 +390,7 @@ class PPO2_augment(ActorCriticRLModel):
                 #                         n_candidate=self.n_candidate, horizon=self.horizon)
                 runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
                                          gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
-                                         horizon=self.horizon, reuse_times=self.reuse_times)
+                                         horizon=self.horizon)
             self.episode_reward = np.zeros((self.n_envs,))
 
             ep_info_buf = deque(maxlen=100)
@@ -405,7 +405,7 @@ class PPO2_augment(ActorCriticRLModel):
                 lr_now = self.learning_rate(frac)
                 cliprange_now = self.cliprange(frac)
                 cliprange_vf_now = cliprange_vf(frac)
-                if self.reuse_times > 1:
+                if frac < 0.9 and self.reuse_times > 1:
                     self.aug_obs = self.aug_obs[-self.reuse_times+1:] + [None]
                     self.aug_act = self.aug_act[-self.reuse_times+1:] + [None]
                     self.aug_neglogp = self.aug_neglogp[-self.reuse_times+1:] + [None]
