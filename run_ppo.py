@@ -1,4 +1,5 @@
-from stable_baselines import PPO2, logger
+from baselines import PPO2
+from stable_baselines import logger
 from stable_baselines.bench import Monitor
 from stable_baselines.common import set_global_seeds
 from stable_baselines.common.vec_env import SubprocVecEnv
