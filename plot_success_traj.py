@@ -23,8 +23,11 @@ if __name__ == '__main__':
     obstacle_xs = get_item(fname, 'obstacle_x')
     obstacle_ys = get_item(fname, 'obstacle_y')
     obstacle_zs = get_item(fname, 'obstacle_z')
+    obstacle1_xs = get_item(fname, 'obstacle1_x')
+    obstacle1_ys = get_item(fname, 'obstacle1_y')
+    obstacle1_zs = get_item(fname, 'obstacle1_z')
     goals = []
-    for i in range(5):
+    for i in range(6):
         goals.append(get_item(fname, 'goal_' + str(i)))
     goals = np.asarray(goals)
     goals = np.swapaxes(goals, 0, 1)
@@ -54,16 +57,23 @@ if __name__ == '__main__':
     has_switch = False
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    for i in range(dones.shape[0]):
+    for i in range(end_points[5]):
         ax.cla()
-        ax.set_xlim(1.0, 1.6)
-        ax.set_ylim(0.4, 1.1)
+        # ax.set_xlim(1.0, 1.6)
+        # ax.set_ylim(0.4, 1.1)
+        ax.set_xlim(0.0, 5.0)
+        ax.set_ylim(0.0, 5.0)
         # ax.set_zlim(0, 1.2)
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.scatter(gripper_xs[i], gripper_ys[i], c='tab:gray')
         ax.scatter(box_xs[i], box_ys[i], c='tab:blue')
         ax.scatter(obstacle_xs[i], obstacle_ys[i], c='tab:brown')
+        ax.scatter(obstacle1_xs[i], obstacle1_ys[i], c='#ff00ff')
+        ax.plot([1.5, 1.5, 1.8, 1.8], [0.0, 2.0, 2.0, 0.0], 'tab:gray')
+        ax.plot([1.5, 1.5, 1.8, 1.8], [5.0, 3.0, 3.0, 5.0], 'tab:gray')
+        ax.plot([3.5, 3.5, 3.2, 3.2], [0.0, 2.0, 2.0, 0.0], 'tab:gray')
+        ax.plot([3.5, 3.5, 3.2, 3.2], [5.0, 3.0, 3.0, 5.0], 'tab:gray')
         if not has_switch and np.argmax(goals[i][3:]) == 1:
             print('episode %d switch step %d' % (ep_idx, step))
             print('restart box', box_xs[i], box_ys[i], 'subgoal', goals[i])
@@ -86,7 +96,7 @@ if __name__ == '__main__':
     os.system('ffmpeg -r 2 -start_number 0 -i tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
               os.path.join(os.path.dirname(fname), 'augment_data.mp4'))
     # images = []
-    for i in range(dones.shape[0]):
+    for i in range(end_points[5]):
     #     images.append(plt.imread('tempimg' + str(i) + '.png'))
         os.remove('tempimg' + str(i) + '.png')
     # imageio.mimsave('augment_data.gif', images)
