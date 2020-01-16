@@ -67,6 +67,7 @@ class ParallelRunner2(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [], [], [], [], [], []
         mb_states = self.states
         ep_infos = []
+        mb_goals = self.env.get_attr('goal')
 
         duration = 0.0
         # step_env_duration = 0.0
@@ -88,7 +89,9 @@ class ParallelRunner2(AbstractEnvRunner):
             for idx, info in enumerate(infos):
                 maybe_ep_info = info.get('episode')
                 if maybe_ep_info is not None:
-                    ep_infos.append(maybe_ep_info)
+                    if self.goal_dim > 3 and np.argmax(mb_goals[idx][3:]) == 0:
+                        ep_infos.append(maybe_ep_info)
+                    mb_goals[idx] = self.env.get_attr('goal', indices=idx)[0]
                 if self.dones[idx] and (not info['is_success']):
                     rewards[idx] = self.model.value(np.expand_dims(info['terminal_observation'], axis=0))
             mb_rewards.append(rewards)
