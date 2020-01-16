@@ -459,6 +459,11 @@ class PPO2_augment(ActorCriticRLModel):
                                                                             self.n_batch + start) // batch_size)
                             end = start + batch_size
                             mbinds = inds[start:end]
+                            _recompute_inds = np.where(is_demo[mbinds] > 0.5)[0]
+                            if _recompute_inds.shape[0] > 0:
+                                neglogpacs[_recompute_inds] = self.sess.run(
+                                    self.aug_neglogpac_op, {self.train_aug_model.obs_ph: obs[_recompute_inds],
+                                                            self.aug_action_ph: actions[_recompute_inds]})
                             slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs, is_demo))
                             # if len(self.aug_obs) > batch_size:
                             #     aug_inds = np.random.choice(len(self.aug_obs), batch_size)
