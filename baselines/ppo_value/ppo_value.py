@@ -442,6 +442,7 @@ class Runner(AbstractEnvRunner):
         super().__init__(env=env, model=model, n_steps=n_steps)
         self.lam = lam
         self.gamma = gamma
+        self.goal_dim = self.env.get_attr('goal')[0].shape[0]
 
     def run(self):
         """
@@ -461,6 +462,7 @@ class Runner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [], [], [], [], [], []
         mb_states = self.states
         ep_infos = []
+        mb_goals = self.env.get_attr('goal')
         for _ in range(self.n_steps):
             actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones)
             mb_obs.append(self.obs.copy())
@@ -476,7 +478,9 @@ class Runner(AbstractEnvRunner):
             for idx, info in enumerate(infos):
                 maybe_ep_info = info.get('episode')
                 if maybe_ep_info is not None:
-                    ep_infos.append(maybe_ep_info)
+                    if self.goal_dim > 3 and np.argmax(mb_goals[idx][3:]) == 0:
+                        ep_infos.append(maybe_ep_info)
+                    mb_goals[idx] = self.env.get_attr('goal', indices=idx)[0]
                 if self.dones[idx] and (not info['is_success']):
                     rewards[idx] = self.model.value(np.expand_dims(info['terminal_observation'], axis=0))
             mb_rewards.append(rewards)
