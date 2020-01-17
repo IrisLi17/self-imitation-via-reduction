@@ -96,7 +96,7 @@ def eval_model(eval_env, model):
     assert abs(env.unwrapped.random_ratio) < 1e-4
     n_episode = 0
     ep_rewards = []
-    while n_episode < 10:
+    while n_episode < 20:
         ep_reward = 0.0
         obs = env.reset()
         goal_dim = env.goal.shape[0]
