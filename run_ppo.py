@@ -9,8 +9,7 @@ from run_ppo_augment import eval_model, log_eval
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
-from pick_and_place_box import FetchPickAndPlaceBoxEnv
-from open_close_box import FetchOpenCloseBoxEnv
+from fetch_stack import FetchStackEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
@@ -34,8 +33,7 @@ MASS_ENTRY_POINT = {
 }
 
 PICK_ENTRY_POINT = {
-    'FetchPickAndPlaceBox-v1': FetchPickAndPlaceBoxEnv,
-    'FetchOpenCloseBox-v1': FetchOpenCloseBoxEnv,
+    'FetchStack-v1': FetchStackEnv,
 }
 
 def arg_parse():
@@ -123,7 +121,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         env_kwargs = dict(random_box=True,
                           random_ratio=random_ratio,
                           random_gripper=True,
-                          max_episode_steps=100, )
+                          max_episode_steps=150, )
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -144,7 +142,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         eval_env_kwargs = dict(random_box=True,
                                random_ratio=0.0,
                                random_gripper=True,
-                               max_episode_steps=100, )
+                               max_episode_steps=150, )
     elif env_name in ['FetchPickAndPlace-v1']:
         eval_env_kwargs = {}
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)

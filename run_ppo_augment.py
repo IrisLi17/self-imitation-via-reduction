@@ -8,6 +8,7 @@ from gym.wrappers import FlattenDictWrapper
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from masspoint_env import MasspointPushSingleObstacleEnv_v2, MasspointPushDoubleObstacleEnv
+from fetch_stack import FetchStackEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
@@ -28,6 +29,11 @@ MASS_ENTRY_POINT = {
     'MasspointPushSingleObstacleUnlimit-v2': MasspointPushSingleObstacleEnv_v2,
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
     'MasspointPushDoubleObstacleUnlimit-v1': MasspointPushDoubleObstacleEnv,
+}
+
+PICK_ENTRY_POINT = {
+    'FetchStack-v1': FetchStackEnv,
+    'FetchStackUnlimit-v1': FetchStackEnv,
 }
 
 def arg_parse():
@@ -65,7 +71,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     :param allow_early_resets: (bool) allows early reset of the environment
     :return: (Gym Environment) The mujoco environment
     """
-    if env_id in ENTRY_POINT.keys() or env_id in MASS_ENTRY_POINT.keys():
+    if env_id in ENTRY_POINT.keys() or env_id in MASS_ENTRY_POINT.keys() or env_id in PICK_ENTRY_POINT.keys():
         # env = ENTRY_POINT[env_id](**kwargs)
         # print(env)
         # from gym.wrappers.time_limit import TimeLimit
@@ -78,6 +84,9 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
             gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
         elif env_id in MASS_ENTRY_POINT.keys():
             gym.register(env_id, entry_point=MASS_ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
+        elif env_id in PICK_ENTRY_POINT.keys():
+            gym.register(env_id, entry_point=PICK_ENTRY_POINT[env_id], max_episode_steps=max_episode_steps,
+                         kwargs=kwargs)
         env = gym.make(env_id)
         # env = TimeLimit(env, max_episode_steps=50)
     else:
@@ -168,6 +177,11 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             env_kwargs['max_episode_steps']=200
         if 'MasspointPushDoubleObstacle' in env_name:
             env_kwargs['max_episode_steps']=150
+    elif env_name in PICK_ENTRY_POINT.keys():
+        env_kwargs = dict(random_box=True,
+                          random_ratio=random_ratio,
+                          random_gripper=True,
+                          max_episode_steps=150, )
     else:
         raise NotImplementedError("%s not implemented" % env_name)
 
