@@ -89,8 +89,8 @@ class ParallelRunner2(AbstractEnvRunner):
             for idx, info in enumerate(infos):
                 maybe_ep_info = info.get('episode')
                 if maybe_ep_info is not None:
-                    if self.goal_dim > 3 and np.argmax(mb_goals[idx][3:]) == 0:
-                        ep_infos.append(maybe_ep_info)
+                    # if self.goal_dim > 3 and np.argmax(mb_goals[idx][3:]) == 0:
+                    ep_infos.append(maybe_ep_info)
                     mb_goals[idx] = self.env.get_attr('goal', indices=idx)[0]
                 if self.dones[idx] and (not info['is_success']):
                     rewards[idx] = self.model.value(np.expand_dims(info['terminal_observation'], axis=0))
