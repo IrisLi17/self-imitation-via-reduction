@@ -16,13 +16,13 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             'robot0:slide2': 0.0,
             'object0:joint': [1.25, 0.53, 0.4, 1., 0., 0., 0.],
             'object1:joint': [1.30, 0.53, 0.4, 1., 0., 0., 0.],
-            'object2:joint': [1.25, 0.58, 0.4, 1., 0., 0., 0.],
-            'object3:joint': [1.30, 0.58, 0.4, 1., 0., 0., 0.],
+            # 'object2:joint': [1.25, 0.58, 0.4, 1., 0., 0., 0.],
+            # 'object3:joint': [1.30, 0.58, 0.4, 1., 0., 0., 0.],
         }
         self.random_gripper = random_gripper
         self.random_box = random_box
         self.random_ratio = random_ratio
-        self.n_object = 4
+        self.n_object = 2
         fetch_env.FetchEnv.__init__(
             self, MODEL_XML_PATH, has_object=True, block_gripper=False, n_substeps=20,
             gripper_extra_height=0.2, target_in_the_air=True, target_offset=0.0,
@@ -119,8 +119,8 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         def is_valid(objects_xpos):
             for id1 in range(self.n_object):
                 for id2 in range(id1 + 1, self.n_object):
-                    if abs(objects_xpos[id1][0] - objects_xpos[id2][0]) < self.size_object[0] and \
-                                    abs(objects_xpos[id1][1] - objects_xpos[id2][1]) < self.size_object[1]:
+                    if abs(objects_xpos[id1][0] - objects_xpos[id2][0]) < 2 * self.size_object[0] and \
+                                    abs(objects_xpos[id1][1] - objects_xpos[id2][1]) < 2 * self.size_object[1]:
                         return False
             return True
 
@@ -141,7 +141,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             for i in range(self.n_object):
                 object_qpos = self.sim.data.get_joint_qpos('object%d:joint' % i)
                 object_qpos[:2] = objects_xpos[i]
-                object_qpos[2] = 0.425
+                object_qpos[2] = self.height_offset
                 self.sim.data.set_joint_qpos('object%d:joint' % i, object_qpos)
 
         self.sim.forward()
@@ -150,15 +150,20 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
     def _sample_goal(self):
         if not hasattr(self, 'size_object'):
             self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
-        self.task_mode = np.random.randint(2)
+        if self.np_random.uniform() < 0.0:
+            self.task_mode = 1
+        else:
+            self.task_mode = 0
+        # self.task_mode = np.random.randint(2)
         g_idx = np.random.randint(self.n_object)
         one_hot = np.zeros(self.n_object)
         one_hot[g_idx] = 1
         goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
-        goal[2] = 0.425
-        if self.task_mode == 1 or self.np_random.uniform() < 0.5:
-            level = np.random.randint(1, self.n_object)
-            goal[2] += self.size_object[2] * 2 * level
+        goal[2] = self.height_offset
+        if self.task_mode == 1 or self.np_random.uniform() < 0.3:
+            # level = np.random.randint(1, self.n_object)
+            goal[2] += self.np_random.uniform(0, 0.45)
+            # goal[2] += self.size_object[2] * 2 * level
         goal = np.concatenate([goal, one_hot])
         return goal.copy()
 
@@ -184,13 +189,16 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                 # print('other_objects_pos', other_objects_pos)
                 # print('achieved_goal', achieved_goal)
                 stack = False
+                if achieved_goal[2] < self.height_offset + self.size_object[2]:
+                    stack = True
                 # TODO: if two objects serve together as lower part?
-                for i in range(self.n_object - 1):
-                    if abs(other_objects_pos[3 * i + 2] - (achieved_goal[2] - self.size_object[2] * 2)) < 0.01 \
-                            and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[0] \
-                            and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
-                        stack = True
-                        break
+                else:
+                    for i in range(self.n_object - 1):
+                        if abs(other_objects_pos[3 * i + 2] - (achieved_goal[2] - self.size_object[2] * 2)) < 0.01 \
+                                and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[0] \
+                                and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
+                            stack = True
+                            break
                 gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > self.distance_threshold
                 # print('stack', stack, 'gripper_far', gripper_far)
                 if stack and gripper_far:
