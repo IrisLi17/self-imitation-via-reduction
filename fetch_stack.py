@@ -150,7 +150,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
     def _sample_goal(self):
         if not hasattr(self, 'size_object'):
             self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
-        if self.np_random.uniform() < 0.0:
+        if self.np_random.uniform() < 0.3:
             self.task_mode = 1
         else:
             self.task_mode = 0
