@@ -97,7 +97,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     set_global_seeds(seed)
 
     n_cpu = 32 if not play else 1
-    if 'MasspointPushDoubleObstacle' in env_name or 'FetchPickAndPlaceBox' in env_name:
+    if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
         n_cpu = 64 if not play else 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1', 'FetchPickAndPlace-v1']:
         env_kwargs = {}
@@ -138,6 +138,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                                random_ratio=0.0,
                                random_pusher=True,
                                max_episode_steps=100,)
+        if 'MasspointPushDoubleObstacle' in env_name:
+            env_kwargs['max_episode_steps']=150
     elif env_name in PICK_ENTRY_POINT.keys():
         eval_env_kwargs = dict(random_box=True,
                                random_ratio=0.0,
