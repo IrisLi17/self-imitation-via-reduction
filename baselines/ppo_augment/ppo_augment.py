@@ -49,7 +49,7 @@ class PPO2_augment(ActorCriticRLModel):
 
     def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
-                 cliprange_vf=None, n_candidate=4, parallel=False, reuse_times=1, start_augment=0, horizon=100,
+                 cliprange_vf=None, n_candidate=4, dim_candidate=2, parallel=False, reuse_times=1, start_augment=0, horizon=100,
                  verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
@@ -70,6 +70,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.nminibatches = nminibatches
         self.noptepochs = noptepochs
         self.n_candidate = n_candidate
+        self.dim_candidate = dim_candidate
         self.parallel = parallel
         self.start_augment = start_augment
         self.tensorboard_log = tensorboard_log
@@ -306,7 +307,7 @@ class PPO2_augment(ActorCriticRLModel):
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
         for i in range(advs.shape[0]):
             if is_demo[i]:
-                advs[i] = np.max([advs[i], self.aug_clip])
+                advs[i] = np.max([advs[i], self.aug_clip]) * 0.2
         if aug_adv_slice is not None:
             aug_adv_slice = (aug_adv_slice - aug_adv_slice.mean()) / (aug_adv_slice.std() + 1e-8)
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
@@ -390,6 +391,7 @@ class PPO2_augment(ActorCriticRLModel):
                 #                         n_candidate=self.n_candidate, horizon=self.horizon)
                 runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
                                          gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                         # dim_candidate=self.dim_candidate,
                                          horizon=self.horizon)
             self.episode_reward = np.zeros((self.n_envs,))
 
@@ -397,6 +399,9 @@ class PPO2_augment(ActorCriticRLModel):
             t_first_start = time.time()
 
             n_updates = total_timesteps // self.n_batch
+            total_success = 0
+            original_success = 0
+            _reuse_times = self.reuse_times
             for update in range(1, n_updates + 1):
                 assert self.n_batch % self.nminibatches == 0
                 batch_size = self.n_batch // self.nminibatches
@@ -405,14 +410,21 @@ class PPO2_augment(ActorCriticRLModel):
                 lr_now = self.learning_rate(frac)
                 cliprange_now = self.cliprange(frac)
                 cliprange_vf_now = cliprange_vf(frac)
-                if self.reuse_times > 1:
-                    self.aug_obs = self.aug_obs[-self.reuse_times+1:] + [None]
-                    self.aug_act = self.aug_act[-self.reuse_times+1:] + [None]
-                    self.aug_neglogp = self.aug_neglogp[-self.reuse_times+1:] + [None]
-                    self.aug_return = self.aug_return[-self.reuse_times+1:] + [None]
-                    self.aug_value = self.aug_value[-self.reuse_times+1:] + [None]
-                    self.aug_done = self.aug_done[-self.reuse_times+1:] + [None]
-                    self.aug_reward = self.aug_reward[-self.reuse_times+1:] + [None]
+                aug_success_ratio = (total_success - original_success) / (total_success + 1e-8)
+                if aug_success_ratio > 1.0:
+                # if aug_success_ratio > 0.25:
+                    _reuse_times -= 1
+                    _reuse_times = max(1, _reuse_times)
+                else:
+                    _reuse_times = min(self.reuse_times, _reuse_times + 1)
+                if _reuse_times > 1:
+                    self.aug_obs = self.aug_obs[-_reuse_times+1:] + [None]
+                    self.aug_act = self.aug_act[-_reuse_times+1:] + [None]
+                    self.aug_neglogp = self.aug_neglogp[-_reuse_times+1:] + [None]
+                    self.aug_return = self.aug_return[-_reuse_times+1:] + [None]
+                    self.aug_value = self.aug_value[-_reuse_times+1:] + [None]
+                    self.aug_done = self.aug_done[-_reuse_times+1:] + [None]
+                    self.aug_reward = self.aug_reward[-_reuse_times+1:] + [None]
                 else:
                     self.aug_obs = [None]
                     self.aug_act = [None]
@@ -427,6 +439,9 @@ class PPO2_augment(ActorCriticRLModel):
                 is_demo = np.zeros(obs.shape[0])
                 temp_time1 = time.time()
                 print('runner.run() takes', temp_time1 - temp_time0)
+                original_episodes = np.sum(masks)
+                original_success = np.sum([info['r'] for info in ep_infos])
+                total_success = original_success
 
                 # augment_steps = 0 if self.aug_obs is None else self.aug_obs.shape[0]
                 augment_steps = sum([item.shape[0] if item is not None else 0 for item in self.aug_obs])
@@ -444,9 +459,12 @@ class PPO2_augment(ActorCriticRLModel):
                     values = np.concatenate([values, *(list(filter(lambda v:v is not None, self.aug_value)))], axis=0)
                     neglogpacs = np.concatenate([neglogpacs, *(list(filter(lambda v:v is not None, self.aug_neglogp)))], axis=0)
                     is_demo = np.concatenate([is_demo, np.ones(augment_steps)], axis=0)
+                    _aug_reward = np.concatenate(list(filter(lambda v:v is not None, self.aug_reward)), axis=0)
+                    total_success += np.sum(_aug_reward)
                     print('augmented data length', obs.shape[0])
                 self.num_timesteps += self.n_batch
                 ep_info_buf.extend(ep_infos)
+                total_episodes = np.sum(masks)
                 mb_loss_vals = []
                 if states is None:  # nonrecurrent version
                     update_fac = self.n_batch // self.nminibatches // self.noptepochs + 1
@@ -524,6 +542,8 @@ class PPO2_augment(ActorCriticRLModel):
                     for (loss_val, loss_name) in zip(loss_vals, self.loss_names):
                         logger.logkv(loss_name, loss_val)
                     logger.logkv("augment_steps", augment_steps)
+                    logger.logkv("original_success", original_success)
+                    logger.logkv("total_success", total_success)
                     logger.dumpkvs()
 
                 if callback is not None:

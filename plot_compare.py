@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 if __name__ == '__main__':
     option = sys.argv[1]
     log_paths = sys.argv[2:]
-    assert option in ['success_rate', 'eval', 'entropy']
+    assert option in ['success_rate', 'eval', 'entropy', 'aug_ratio']
     window = 10
     def get_item(log_file, label):
         data = pandas.read_csv(log_file, index_col=None, comment='#', error_bad_lines=True)
@@ -39,6 +39,12 @@ if __name__ == '__main__':
             ax[0].plot(smooth(total_timesteps[n_updates-1], window), smooth(eval_reward, window), label=log_path)
         elif option == 'entropy':
             ax[0].plot(smooth(total_timesteps, window), smooth(entropy, window), label=log_path)
+        elif option == 'aug_ratio':
+            original_success = get_item(progress_file, 'original_success')
+            total_success = get_item(progress_file, 'total_success')
+            aug_ratio = (total_success - original_success) / (total_success + 1e-8)
+            print(total_timesteps.shape, aug_ratio.shape)
+            ax[0].plot(smooth(total_timesteps, 2), smooth(aug_ratio, 2), label=log_path)
         try:
             original_steps = get_item(progress_file, 'original_timesteps')[0]
             augment_steps = get_item(progress_file, 'augment_steps') / original_steps
@@ -52,6 +58,8 @@ if __name__ == '__main__':
         ax[0].set_title('eval success rate')
     elif option == 'entropy':
         ax[0].set_title('entropy')
+    elif option == 'aug_ratio':
+        ax[0].set_title('aug success episode / total success episode')
     ax[1].set_title('augment steps / original rollout steps')
     ax[0].grid()
     ax[1].grid()
