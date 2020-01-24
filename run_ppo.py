@@ -121,7 +121,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         env_kwargs = dict(random_box=True,
                           random_ratio=random_ratio,
                           random_gripper=True,
-                          max_episode_steps=150, )
+                          max_episode_steps=100, )
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -144,7 +144,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         eval_env_kwargs = dict(random_box=True,
                                random_ratio=0.0,
                                random_gripper=True,
-                               max_episode_steps=150, )
+                               max_episode_steps=100, )
     elif env_name in ['FetchPickAndPlace-v1']:
         eval_env_kwargs = {}
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
@@ -152,8 +152,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     if not play:
         os.makedirs(log_dir, exist_ok=True)
         policy_kwargs = dict(layers=[256, 256])
-        # if 'MasspointPushDoubleObstacle' in env_name:
-        #     policy_kwargs = dict(layers=[512, 512])
+        if 'FetchStack' in env_name:
+            policy_kwargs = dict(layers=[512, 512])
         print(policy_kwargs)
         # policy_kwargs = {}
         # TODO: vectorize env
@@ -203,6 +203,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             else:
                 ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx) +
                              ', goal idx ' + str(np.argmax(env.get_attr('goal')[0][3:])))
+                if 'FetchStack' in env_name:
+                    tasks = ['pick and place', 'stack']
+                    ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx) 
+                            + ', task: ' + tasks[int(obs[0][-2*goal_dim-1])])
             images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
