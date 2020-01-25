@@ -15,7 +15,7 @@ from stable_baselines.a2c.utils import total_episode_reward_logger
 
 
 class ParallelRunner2(AbstractEnvRunner):
-    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon):
+    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon, dim_candidate=2):
         """
         A runner to learn the policy of an environment for a model
 
@@ -37,6 +37,7 @@ class ParallelRunner2(AbstractEnvRunner):
         self.obs_dim = self.env.observation_space.shape[0] - 2 * self.goal_dim
         self.noise_mag = self.env.get_attr('size_obstacle')[0][1]
         self.n_object = self.env.get_attr('n_object')[0]
+        self.dim_candidate = dim_candidate
         self.horizon = horizon
         # self.reuse_times = reuse_times
         print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
@@ -107,7 +108,8 @@ class ParallelRunner2(AbstractEnvRunner):
                     if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
                         # Do augmentation
                         # Sample start step and perturbation
-                        _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate, env_idx=idx)
+                        _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate,
+                                                                        dim=self.dim_candidate, env_idx=idx)
                         assert isinstance(_restart_steps, np.ndarray)
                         assert isinstance(_subgoals, np.ndarray)
                         for j in range(_restart_steps.shape[0]):
@@ -438,7 +440,7 @@ class ParallelRunner2(AbstractEnvRunner):
 
         return mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_states, ep_infos, true_reward
 
-    def select_subgoal(self, transition_buf, k, env_idx):
+    def select_subgoal(self, transition_buf, k, dim, env_idx):
         debug = False
         # self.ep_transition_buf, self.model.value
         obs_buf, *_ = zip(*transition_buf)
@@ -449,24 +451,48 @@ class ParallelRunner2(AbstractEnvRunner):
         # TODO: if there are more than one obstacle
         sample_obs_buf = []
         subgoal_obs_buf = []
-        for object_idx in range(1, self.n_object):
-            obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
-            sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
-            sample_obs[:, 3*(object_idx+1+self.n_object):3*(object_idx+1+self.n_object)+2] \
-                = sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] - sample_obs[:, 0:2]
-            sample_obs_buf.append(sample_obs.copy())
+        if dim == 2:
+            for object_idx in range(0, self.n_object):
+                obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
+                sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
+                sample_obs[:, 3*(object_idx+1+self.n_object):3*(object_idx+1+self.n_object)+2] \
+                    = sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] - sample_obs[:, 0:2]
+                sample_obs_buf.append(sample_obs.copy())
 
-            subgoal_obs = obs_buf[sample_t]
-            # if debug:
-            #     subgoal_obs = np.tile(subgoal_obs, (2, 1))
-            subgoal_obs[:, self.obs_dim:self.obs_dim+3] = subgoal_obs[:, 3*(object_idx+1):3*(object_idx+1)+3]
-            one_hot = np.zeros(self.n_object)
-            one_hot[object_idx] = 1
-            subgoal_obs[:, self.obs_dim+3:self.obs_dim+self.goal_dim] = one_hot
-            subgoal_obs[:, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim+2] = obstacle_xy
-            subgoal_obs[:, self.obs_dim+self.goal_dim+2:self.obs_dim+self.goal_dim+3] = subgoal_obs[:, 3*(object_idx+1)+2:3*(object_idx+1)+3]
-            subgoal_obs[:, self.obs_dim+self.goal_dim+3:self.obs_dim+self.goal_dim*2] = one_hot
-            subgoal_obs_buf.append(subgoal_obs)
+                subgoal_obs = obs_buf[sample_t]
+                # if debug:
+                #     subgoal_obs = np.tile(subgoal_obs, (2, 1))
+                subgoal_obs[:, self.obs_dim:self.obs_dim+3] = subgoal_obs[:, 3*(object_idx+1):3*(object_idx+1)+3]
+                one_hot = np.zeros(self.n_object)
+                one_hot[object_idx] = 1
+                subgoal_obs[:, self.obs_dim+3:self.obs_dim+self.goal_dim] = one_hot
+                subgoal_obs[:, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim+2] = obstacle_xy
+                subgoal_obs[:, self.obs_dim+self.goal_dim+2:self.obs_dim+self.goal_dim+3] = subgoal_obs[:, 3*(object_idx+1)+2:3*(object_idx+1)+3]
+                subgoal_obs[:, self.obs_dim+self.goal_dim+3:self.obs_dim+self.goal_dim*2] = one_hot
+                subgoal_obs_buf.append(subgoal_obs)
+        elif dim == 3:
+            for object_idx in range(0, self.n_object):
+                obstacle_xy = sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 2] + noise
+                obstacle_height = np.random.uniform(low=0.425, high=0.425 + 0.15, size=(len(sample_t), 1))
+                obstacle_xy = np.concatenate([obstacle_xy, obstacle_height], axis=-1)
+                sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 3] = obstacle_xy
+                sample_obs[:, 3 * (object_idx + 1 + self.n_object):3 * (object_idx + 1 + self.n_object) + 3] \
+                    = sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 3] - sample_obs[:, 0:3]
+                sample_obs_buf.append(sample_obs.copy())
+
+                subgoal_obs = obs_buf[sample_t]
+                # if debug:
+                #     subgoal_obs = np.tile(subgoal_obs, (2, 1))
+                subgoal_obs[:, self.obs_dim:self.obs_dim + 3] = subgoal_obs[:,
+                                                                3 * (object_idx + 1):3 * (object_idx + 1) + 3]
+                one_hot = np.zeros(self.n_object)
+                one_hot[object_idx] = 1
+                subgoal_obs[:, self.obs_dim + 3:self.obs_dim + self.goal_dim] = one_hot
+                subgoal_obs[:, self.obs_dim + self.goal_dim:self.obs_dim + self.goal_dim + 3] = obstacle_xy
+                # subgoal_obs[:, self.obs_dim + self.goal_dim + 2:self.obs_dim + self.goal_dim + 3] = subgoal_obs[:, 3 * (
+                # object_idx + 1) + 2:3 * (object_idx + 1) + 3]
+                subgoal_obs[:, self.obs_dim + self.goal_dim + 3:self.obs_dim + self.goal_dim * 2] = one_hot
+                subgoal_obs_buf.append(subgoal_obs)
         sample_obs_buf = np.concatenate(sample_obs_buf, axis=0)
         value2 = self.model.value(sample_obs_buf)
         subgoal_obs_buf = np.concatenate(subgoal_obs_buf)

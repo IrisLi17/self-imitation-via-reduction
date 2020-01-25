@@ -45,6 +45,7 @@ def arg_parse():
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--random_ratio', default=1.0, type=float)
     parser.add_argument('--aug_clip', default=0.1, type=float)
+    parser.add_argument('--aug_adv_weight', default=1.0, type=float)
     parser.add_argument('--n_subgoal', default=4, type=int)
     parser.add_argument('--parallel', action="store_true", default=False)
     parser.add_argument('--start_augment', type=float, default=0)
@@ -150,7 +151,7 @@ def log_traj(aug_obs, aug_done, index, goal_dim=5, n_obstacle=1):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, aug_clip, n_subgoal,
-         parallel, start_augment, reuse_times):
+         parallel, start_augment, reuse_times, aug_adv_weight):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir)
 
@@ -224,7 +225,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                              gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
                              cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
                              policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
-                             reuse_times=reuse_times,
+                             reuse_times=reuse_times, aug_adv_weight=aug_adv_weight,
                              )
 
         def callback(_locals, _globals):
@@ -310,4 +311,5 @@ if __name__ == '__main__':
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps),
          log_path=args.log_path, load_path=args.load_path, play=args.play, export_gif=args.export_gif,
          random_ratio=args.random_ratio, aug_clip=args.aug_clip, n_subgoal=args.n_subgoal,
-         parallel=args.parallel, start_augment=int(args.start_augment), reuse_times=args.reuse_times)
+         parallel=args.parallel, start_augment=int(args.start_augment), reuse_times=args.reuse_times,
+         aug_adv_weight=args.aug_adv_weight)

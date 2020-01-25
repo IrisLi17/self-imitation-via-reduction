@@ -49,7 +49,8 @@ class PPO2_augment(ActorCriticRLModel):
 
     def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
-                 cliprange_vf=None, n_candidate=4, dim_candidate=2, parallel=False, reuse_times=1, start_augment=0, horizon=100,
+                 cliprange_vf=None, n_candidate=4, dim_candidate=2, parallel=False, reuse_times=1, start_augment=0,
+                 horizon=100, aug_adv_weight=1.0,
                  verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
@@ -113,6 +114,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.aug_reward = []
         self.num_aug_steps = 0  # every interaction with simulator should be counted
         self.horizon = horizon
+        self.aug_adv_weight = aug_adv_weight
 
         if _init_setup_model:
             self.setup_model()
@@ -307,7 +309,7 @@ class PPO2_augment(ActorCriticRLModel):
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
         for i in range(advs.shape[0]):
             if is_demo[i]:
-                advs[i] = np.max([advs[i], self.aug_clip]) * 0.2
+                advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
         if aug_adv_slice is not None:
             aug_adv_slice = (aug_adv_slice - aug_adv_slice.mean()) / (aug_adv_slice.std() + 1e-8)
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
