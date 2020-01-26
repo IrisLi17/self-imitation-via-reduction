@@ -41,6 +41,7 @@ def arg_parse():
     parser.add_argument('--env', default='FetchPushWallObstacle-v4')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--num_timesteps', type=float, default=1e8)
+    parser.add_argument('--reward_type', type=str, default='sparse')
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--random_ratio', default=1.0, type=float)
@@ -84,13 +85,16 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     else:
         env = gym.make(env_id, reward_type='sparse')
     env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
-    env = DoneOnSuccessWrapper(env)
+    if env_id in PICK_ENTRY_POINT.keys() and kwargs['reward_type'] == 'dense':
+        env = DoneOnSuccessWrapper(env, reward_offset=0.0)
+    else:
+        env = DoneOnSuccessWrapper(env)
     if log_dir is not None:
         env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets, info_keywords=('is_success',))
     # env.seed(seed + 10000 * rank)
     return env
 
-def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio):
+def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, reward_type):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir) 
     
@@ -121,7 +125,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         env_kwargs = dict(random_box=True,
                           random_ratio=random_ratio,
                           random_gripper=True,
-                          max_episode_steps=100, )
+                          max_episode_steps=100,
+                          reward_type=reward_type, )
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -144,7 +149,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         eval_env_kwargs = dict(random_box=True,
                                random_ratio=0.0,
                                random_gripper=True,
-                               max_episode_steps=100, )
+                               max_episode_steps=100,
+                               reward_type=reward_type, )
     elif env_name in ['FetchPickAndPlace-v1']:
         eval_env_kwargs = {}
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
@@ -152,15 +158,21 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     if not play:
         os.makedirs(log_dir, exist_ok=True)
         policy_kwargs = dict(layers=[256, 256])
-        if 'FetchStack' in env_name:
-            policy_kwargs = dict(layers=[512, 512])
+        # if 'FetchStack' in env_name:
+        #     policy_kwargs = dict(layers=[512, 512])
         print(policy_kwargs)
         # policy_kwargs = {}
         # TODO: vectorize env
         n_steps = 2048
         if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
             n_steps = 8192
-        model = PPO2('MlpPolicy', env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
+
+        policy = 'MlpPolicy'
+        if 'FetchStack' in env_name:
+            from utils.attention_policy import AttentionPolicy
+            policy = AttentionPolicy
+
+        model = PPO2(policy, env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
                      ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      )
         def callback(_locals, _globals):
@@ -205,7 +217,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                              ', goal idx ' + str(np.argmax(env.get_attr('goal')[0][3:])))
                 if 'FetchStack' in env_name:
                     tasks = ['pick and place', 'stack']
-                    ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx) 
+                    ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)
                             + ', task: ' + tasks[int(obs[0][-2*goal_dim-1])])
             images.append(img)
             action, _ = model.predict(obs)
@@ -246,4 +258,4 @@ if __name__ == '__main__':
     print('arg parsed')
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
          log_path=args.log_path, load_path=args.load_path, play=args.play, export_gif=args.export_gif,
-         random_ratio=args.random_ratio)
+         random_ratio=args.random_ratio, reward_type=args.reward_type)
