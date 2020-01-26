@@ -176,49 +176,67 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         idx = np.argmax(one_hot)
         # parse the corresponding object position from observation
         achieved_goal = observation[3 + 3 * idx: 3 + 3 * (idx + 1)]
+        previous_achieved_goal = info['previous_obs']['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
         if task_mode == 0:
             r = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal[0:3], info)
+            if self.reward_type == 'dense':
+                r = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(achieved_goal - goal[0:3])
+            success = np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold
+            if self.reward_type == 'dense':
+                r += success
         else:
             r_achieve = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal[0:3], info)
-            if r_achieve < -0.5:
-                r = -1.0
+            if self.reward_type == 'dense':
+                r_achieve = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(achieved_goal - goal[0:3])
+                if np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold:
+                    gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > self.distance_threshold
+                    r = r_achieve
+                    success = gripper_far
+                else:
+                    r = r_achieve
+                    success = 0.0
+                r += success
             else:
-                # Check if stacked
-                other_objects_pos = np.concatenate([observation[3: 3 + 3 * idx],
-                                                    observation[3 + 3 * (idx + 1) : 3 + 3 * self.n_object]])
-                # print('other_objects_pos', other_objects_pos)
-                # print('achieved_goal', achieved_goal)
-                stack = False
-                if achieved_goal[2] < self.height_offset + self.size_object[2]:
-                    stack = True
-                # TODO: if two objects serve together as lower part?
-                else:
-                    for i in range(self.n_object - 1):
-                        if abs(other_objects_pos[3 * i + 2] - (achieved_goal[2] - self.size_object[2] * 2)) < 0.01 \
-                                and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[0] \
-                                and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
-                            stack = True
-                            break
-                gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > self.distance_threshold
-                # print('stack', stack, 'gripper_far', gripper_far)
-                if stack and gripper_far:
-                    r = 0.0
-                else:
+                if r_achieve < -0.5:
                     r = -1.0
-        return r
+                else:
+                    # Check if stacked
+                    other_objects_pos = np.concatenate([observation[3: 3 + 3 * idx],
+                                                        observation[3 + 3 * (idx + 1) : 3 + 3 * self.n_object]])
+                    # print('other_objects_pos', other_objects_pos)
+                    # print('achieved_goal', achieved_goal)
+                    stack = False
+                    if achieved_goal[2] < self.height_offset + self.size_object[2]:
+                        stack = True
+                    # TODO: if two objects serve together as lower part?
+                    else:
+                        for i in range(self.n_object - 1):
+                            if abs(other_objects_pos[3 * i + 2] - (achieved_goal[2] - self.size_object[2] * 2)) < 0.01 \
+                                    and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[0] \
+                                    and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
+                                stack = True
+                                break
+                    gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > self.distance_threshold
+                    # print('stack', stack, 'gripper_far', gripper_far)
+                    if stack and gripper_far:
+                        r = 0.0
+                    else:
+                        r = -1.0
+                success = r > -0.5
+        return r, success
 
     def step(self, action):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         self._set_action(action)
+        previous_obs = self._get_obs()
+        info = {'previous_obs': previous_obs, }
         self.sim.step()
         self._step_callback()
         obs = self._get_obs()
 
         done = False
-        reward = self.compute_reward(obs['observation'], self.goal, None)
-        info = {
-            'is_success': np.array(reward > -0.5).astype(np.float32),
-        }
+        reward, is_success = self.compute_reward(obs['observation'], self.goal, info)
+        info['is_success'] = is_success
         return obs, reward, done, info
 
     def _viewer_setup(self):
