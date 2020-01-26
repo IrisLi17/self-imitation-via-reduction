@@ -49,6 +49,7 @@ class ParallelRunner2(AbstractEnvRunner):
         self.transition_storage = [] # every element is list of tuples. length of every element should match restart steps
         # For filter subgoals
         self.mean_value_buf = deque(maxlen=500)
+        self.self_aug_ratio = deque(maxlen=500)
 
     def run(self):
         """
@@ -515,6 +516,7 @@ class ParallelRunner2(AbstractEnvRunner):
             self.mean_value_buf.append(mean_values[i])
         filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
         good_ind = good_ind[filtered_idx]
+        self.self_aug_ratio.append(np.sum(good_ind < len(sample_t)) / (len(filtered_idx) + 1e-8))
 
         restart_step = sample_t[good_ind % len(sample_t)]
         subgoal = subgoal_obs_buf[good_ind, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim*2]
