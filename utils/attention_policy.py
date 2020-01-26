@@ -37,6 +37,8 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=128):
     objects_in = tf.stack(objects_in, 2) # (*, n_unit, n_object)
     objects_attention = tf.nn.softmax(tf.matmul(tf.expand_dims(self_out, axis=1), objects_in)) # (*, 1, n_object)
     objects_out = tf.squeeze(tf.matmul(objects_attention, tf.transpose(objects_in, [0, 2, 1])), 1) # (*, n_unit)
+    objects_out = tf.contrib.layers.layer_norm(objects_out)
+    objects_out = tf.nn.relu(objects_out)
 
     latent = tf.concat([self_out, objects_out], 1) # (*, 2*n_unit)
 
