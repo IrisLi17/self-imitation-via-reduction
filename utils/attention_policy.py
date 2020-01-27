@@ -27,13 +27,10 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=128):
                                       np.arange(3+12*n_object+2+3*i, 3+12*n_object+2+3*(i+1))])
         object_in = tf.gather(flat_observations, _object_idx, axis=1)
         assert self_in.shape[1] + n_object * object_in.shape[1] == flat_observations.shape[1], (self_out.shape, object_in.shape)
-        # object_in = np.concatenate([flat_observations[:, 3 + 3 * i:3+3*(i+1)], flat_observations[:, 3+3*n_object+3*i:3+3*n_object+3*(i+1)],
-        #                                   flat_observations[:, 3+6*n_object+2+3*i:3+6*n_object+2+3*(i+1)],
-        #                                   flat_observations[:, 3+9*n_object+2+3*i:3+9*n_object+2+3*(i+1)],
-        #                                   flat_observations[:, 3+12*n_object+2+3*i:3+12*n_object+2+3*(i+1)]], axis=1)
-        fc1 = tf.nn.relu(linear(object_in, "object{}_fc{}".format(i, 0), n_units, init_scale=np.sqrt(2)))
-        fc2 = tf.nn.relu(linear(fc1, "object{}_fc{}".format(i, 1), n_units, init_scale=np.sqrt(2)))
-        objects_in.append(fc2)
+        with tf.variable_scope("object", reuse=tf.AUTO_REUSE):
+            fc1 = tf.nn.relu(linear(object_in, "fc0", n_units, init_scale=np.sqrt(2)))
+            fc2 = tf.nn.relu(linear(fc1, "fc1", n_units, init_scale=np.sqrt(2)))
+            objects_in.append(fc2)
     objects_in = tf.stack(objects_in, 2) # (*, n_unit, n_object)
     objects_attention = tf.nn.softmax(tf.matmul(tf.expand_dims(self_out, axis=1), objects_in)) # (*, 1, n_object)
     objects_out = tf.squeeze(tf.matmul(objects_attention, tf.transpose(objects_in, [0, 2, 1])), 1) # (*, n_unit)
