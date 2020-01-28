@@ -116,6 +116,7 @@ class ParallelRunner2(AbstractEnvRunner):
                         for j in range(_restart_steps.shape[0]):
                             self.restart_steps.append(_restart_steps[j])
                             self.subgoals.append([np.array(_subgoals[j]), goal.copy()])
+                            assert len(self.subgoals[-1]) == 2
                             self.restart_states.append(self.ep_state_buf[idx][_restart_steps[j]])
                             self.transition_storage.append(self.ep_transition_buf[idx][:_restart_steps[j]])
                     self.ep_state_buf[idx] = []
@@ -140,7 +141,7 @@ class ParallelRunner2(AbstractEnvRunner):
             while (len(self.restart_steps) >= self.aug_env.num_envs):
                 # TODO Hard work here
                 env_restart_steps = self.restart_steps[:self.aug_env.num_envs]
-                env_subgoals = self.subgoals[:self.aug_env.num_envs]
+                env_subgoals = self.subgoals[:self.aug_env.num_envs].copy()
                 ultimate_goals = [goals[-1] for goals in env_subgoals]
                 env_storage = self.transition_storage[:self.aug_env.num_envs]
                 env_increment_storage = [[] for _ in range(self.aug_env.num_envs)]
@@ -199,6 +200,9 @@ class ParallelRunner2(AbstractEnvRunner):
                 # print('end step', env_end_step)
                 for idx, end_step in enumerate(env_end_step):
                     if end_step <= self.horizon:
+                        assert len(self.subgoals[idx]) == 2
+                        print(self.subgoals[idx])
+                        is_self_aug = self.subgoals[idx][0][3]
                         transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
                         augment_obs_buf, augment_act_buf, augment_done_buf, augment_reward_buf = zip(*transitions)
                         augment_value_buf = self.model.value(np.array(augment_obs_buf))
@@ -216,6 +220,7 @@ class ParallelRunner2(AbstractEnvRunner):
                         assert abs(sum(augment_reward_buf) - 1) < 1e-4
                         if augment_done_buf[0] == 0:
                             augment_done_buf = (True,) + (False,) * (len(augment_done_buf) - 1)
+                        augment_isselfaug_buf = (is_self_aug, ) * len(augment_done_buf)
                         augment_returns = self.compute_adv(augment_value_buf, augment_done_buf, augment_reward_buf)
                         assert augment_returns.shape[0] == end_step
                         # if idx == 0:
@@ -231,6 +236,7 @@ class ParallelRunner2(AbstractEnvRunner):
                             self.model.aug_return[-1] = augment_returns
                             self.model.aug_done[-1] = np.array(augment_done_buf)
                             self.model.aug_reward[-1] = np.array(augment_reward_buf)
+                            self.model.is_selfaug[-1] = np.array(augment_isselfaug_buf)
                             for reuse_idx in range(len(self.model.aug_obs) - 1):
                                 # Update previous data with new value and policy parameters
                                 if self.model.aug_obs[reuse_idx] is not None:
@@ -256,6 +262,8 @@ class ParallelRunner2(AbstractEnvRunner):
                                 [self.model.aug_done[-1], np.array(augment_done_buf)], axis=0)
                             self.model.aug_reward[-1] = np.concatenate(
                                 [self.model.aug_reward[-1], np.array(augment_reward_buf)], axis=0)
+                            self.model.is_selfaug[-1] = np.concatenate(
+                                [self.model.is_selfaug[-1], np.array(augment_isselfaug_buf)], axis=0)
 
 
                 self.restart_steps = self.restart_steps[self.aug_env.num_envs:]
@@ -516,10 +524,11 @@ class ParallelRunner2(AbstractEnvRunner):
             self.mean_value_buf.append(mean_values[i])
         filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
         good_ind = good_ind[filtered_idx]
-        self.self_aug_ratio.append(np.sum(good_ind < len(sample_t)) / (len(filtered_idx) + 1e-8))
+        # self.self_aug_ratio.append(np.sum(good_ind < len(sample_t)) / (len(filtered_idx) + 1e-8))
 
         restart_step = sample_t[good_ind % len(sample_t)]
         subgoal = subgoal_obs_buf[good_ind, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim*2]
+        self.self_aug_ratio.append(np.sum(subgoal[:, 3]) / (len(filtered_idx) + 1e-8))
 
         # print('subgoal', subgoal, 'with value1', normalize_value1[best_idx], 'value2', normalize_value2[best_idx])
         # print('restart step', restart_step)

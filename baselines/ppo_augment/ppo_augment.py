@@ -112,6 +112,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.aug_value = []
         self.aug_done = []
         self.aug_reward = []
+        self.is_selfaug = []
         self.num_aug_steps = 0  # every interaction with simulator should be counted
         self.horizon = horizon
         self.aug_adv_weight = aug_adv_weight
@@ -419,6 +420,17 @@ class PPO2_augment(ActorCriticRLModel):
                     _reuse_times = max(1, _reuse_times)
                 else:
                     _reuse_times = min(self.reuse_times, _reuse_times + 1)
+                # Reuse goalidx=0 only once
+                if len(self.aug_obs) and (self.aug_obs[-1] is not None):
+                    other_aug_idx = np.where(self.is_selfaug[-1] < 0.5)[0]
+                    self.aug_obs[-1] = self.aug_obs[-1][other_aug_idx] if len(other_aug_idx) else None
+                    self.aug_act[-1] = self.aug_act[-1][other_aug_idx] if len(other_aug_idx) else None
+                    self.aug_neglogp[-1] = self.aug_neglogp[-1][other_aug_idx] if len(other_aug_idx) else None
+                    self.aug_return[-1] = self.aug_return[-1][other_aug_idx] if len(other_aug_idx) else None
+                    self.aug_value[-1] = self.aug_value[-1][other_aug_idx] if len(other_aug_idx) else None
+                    self.aug_done[-1] = self.aug_done[-1][other_aug_idx] if len(other_aug_idx) else None
+                    self.aug_reward[-1] = self.aug_reward[-1][other_aug_idx] if len(other_aug_idx) else None
+                # Reuse other data
                 if _reuse_times > 1:
                     self.aug_obs = self.aug_obs[-_reuse_times+1:] + [None]
                     self.aug_act = self.aug_act[-_reuse_times+1:] + [None]
@@ -427,6 +439,7 @@ class PPO2_augment(ActorCriticRLModel):
                     self.aug_value = self.aug_value[-_reuse_times+1:] + [None]
                     self.aug_done = self.aug_done[-_reuse_times+1:] + [None]
                     self.aug_reward = self.aug_reward[-_reuse_times+1:] + [None]
+                    self.is_selfaug = self.is_selfaug[-_reuse_times+1:] + [None]
                 else:
                     self.aug_obs = [None]
                     self.aug_act = [None]
@@ -435,6 +448,7 @@ class PPO2_augment(ActorCriticRLModel):
                     self.aug_value = [None]
                     self.aug_done = [None]
                     self.aug_reward = [None]
+                    self.is_selfaug = [None]
                 # true_reward is the reward without discount
                 temp_time0 = time.time()
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
