@@ -175,6 +175,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         model = PPO2(policy, env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
                      ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      )
+        print(model.get_parameter_list())
         def callback(_locals, _globals):
             num_update = _locals["update"]
             if env_name in ENTRY_POINT.keys() or env_name in MASS_ENTRY_POINT.keys():
