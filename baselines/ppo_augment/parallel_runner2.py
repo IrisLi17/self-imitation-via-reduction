@@ -141,7 +141,8 @@ class ParallelRunner2(AbstractEnvRunner):
             while (len(self.restart_steps) >= self.aug_env.num_envs):
                 # TODO Hard work here
                 env_restart_steps = self.restart_steps[:self.aug_env.num_envs]
-                env_subgoals = self.subgoals[:self.aug_env.num_envs].copy()
+                env_subgoals = self.subgoals[:self.aug_env.num_envs]
+                temp_subgoals = [goals[-2] for goals in env_subgoals].copy()
                 ultimate_goals = [goals[-1] for goals in env_subgoals]
                 env_storage = self.transition_storage[:self.aug_env.num_envs]
                 env_increment_storage = [[] for _ in range(self.aug_env.num_envs)]
@@ -200,9 +201,8 @@ class ParallelRunner2(AbstractEnvRunner):
                 # print('end step', env_end_step)
                 for idx, end_step in enumerate(env_end_step):
                     if end_step <= self.horizon:
-                        assert len(self.subgoals[idx]) == 2
-                        print(self.subgoals[idx])
-                        is_self_aug = self.subgoals[idx][0][3]
+                        # print(temp_subgoals[idx])
+                        is_self_aug = temp_subgoals[idx][3]
                         transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
                         augment_obs_buf, augment_act_buf, augment_done_buf, augment_reward_buf = zip(*transitions)
                         augment_value_buf = self.model.value(np.array(augment_obs_buf))
