@@ -215,6 +215,8 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                     success = 0.0
                 r += success
             else:
+                if abs(achieved_goal[2] - goal[2]) > 0.01:
+                    r_achieve = -1
                 if r_achieve < -0.5:
                     r = -1.0
                 else:
@@ -224,7 +226,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                     # print('other_objects_pos', other_objects_pos)
                     # print('achieved_goal', achieved_goal)
                     stack = False
-                    if achieved_goal[2] < self.height_offset + self.size_object[2]:
+                    if abs(achieved_goal[2] - self.height_offset) < 0.01:
                         stack = True
                     # TODO: if two objects serve together as lower part?
                     else:
@@ -234,7 +236,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                                     and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
                                 stack = True
                                 break
-                    gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > self.distance_threshold
+                    gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > 2 * self.distance_threshold
                     # print('stack', stack, 'gripper_far', gripper_far)
                     if stack and gripper_far:
                         r = 0.0
