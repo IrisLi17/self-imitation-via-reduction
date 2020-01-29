@@ -16,13 +16,13 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             'robot0:slide2': 0.0,
             'object0:joint': [1.25, 0.53, 0.4, 1., 0., 0., 0.],
             'object1:joint': [1.30, 0.53, 0.4, 1., 0., 0., 0.],
-            # 'object2:joint': [1.25, 0.58, 0.4, 1., 0., 0., 0.],
+            'object2:joint': [1.25, 0.58, 0.4, 1., 0., 0., 0.],
             # 'object3:joint': [1.30, 0.58, 0.4, 1., 0., 0., 0.],
         }
         self.random_gripper = random_gripper
         self.random_box = random_box
         self.random_ratio = random_ratio
-        self.n_object = 2
+        self.n_object = 3
         fetch_env.FetchEnv.__init__(
             self, MODEL_XML_PATH, has_object=True, block_gripper=False, n_substeps=20,
             gripper_extra_height=0.2, target_in_the_air=True, target_offset=0.0,
@@ -176,7 +176,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
         goal[2] = self.height_offset
         if self.task_mode == 1:
-            level = np.random.randint(0, self.n_object)
+            level = np.random.randint(0, self.current_nobject)
             goal[2] += self.size_object[2] * 2 * level
         elif self.np_random.uniform() < 0.5:
             # level = np.random.randint(1, self.n_object)
