@@ -39,15 +39,23 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         grip_velp = self.sim.data.get_site_xvelp('robot0:grip') * dt
         robot_qpos, robot_qvel = robotics_utils.robot_get_obs(self.sim)
         if self.has_object:
-            object_pos = [self.sim.data.get_site_xpos('object' + str(i)) for i in range(self.n_object)]
+            object_pos = [self.sim.data.get_site_xpos('object' + str(i)) for i in range(self.current_nobject)] \
+                         + [np.zeros(3) for _ in range(self.current_nobject, self.n_object)]
             # rotations
-            object_rot = [rotations.mat2euler(self.sim.data.get_site_xmat('object' + str(i))) for i in range(self.n_object)]
+            object_rot = [rotations.mat2euler(self.sim.data.get_site_xmat('object' + str(i))) for i in range(self.current_nobject)] \
+                         + [np.zeros(3) for _ in range(self.current_nobject, self.n_object)]
             # velocities
-            object_velp = [self.sim.data.get_site_xvelp('object' + str(i)) * dt for i in range(self.n_object)]
-            object_velr = [self.sim.data.get_site_xvelr('object' + str(i)) * dt for i in range(self.n_object)]
+            object_velp = [self.sim.data.get_site_xvelp('object' + str(i)) * dt for i in range(self.current_nobject)] \
+                          + [np.zeros(3) for _ in range(self.current_nobject, self.n_object)]
+            object_velr = [self.sim.data.get_site_xvelr('object' + str(i)) * dt for i in range(self.current_nobject)] \
+                          + [np.zeros(3) for _ in range(self.current_nobject, self.n_object)]
             # gripper state
-            object_rel_pos = [pos - grip_pos for pos in object_pos]
-            object_velp = [velp - grip_velp for velp in object_velp]
+            # object_rel_pos = [pos - grip_pos for pos in object_pos]
+            object_rel_pos = [object_pos[i] - grip_pos for i in range(self.current_nobject)] \
+                             + [np.zeros(3) for _ in range(self.current_nobject, self.n_object)]
+            # object_velp = [velp - grip_velp for velp in object_velp]
+            object_velp = [object_velp[i] - grip_velp for i in range(self.current_nobject)] \
+                          + [np.zeros(3) for _ in range(self.current_nobject, self.n_object)]
 
             object_pos = np.concatenate(object_pos)
             object_rot = np.concatenate(object_rot)
@@ -117,8 +125,8 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             self._step_callback()
 
         def is_valid(objects_xpos):
-            for id1 in range(self.n_object):
-                for id2 in range(id1 + 1, self.n_object):
+            for id1 in range(len(objects_xpos)):
+                for id2 in range(id1 + 1, len(objects_xpos)):
                     if abs(objects_xpos[id1][0] - objects_xpos[id2][0]) < 2 * self.size_object[0] and \
                                     abs(objects_xpos[id1][1] - objects_xpos[id2][1]) < 2 * self.size_object[1]:
                         return False
@@ -126,13 +134,15 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
 
         # Randomize start position of object.
         if self.has_object:
+            self.current_nobject = np.random.randint(0, self.n_object) + 1
+
             # if self.random_box and self.np_random.uniform() < self.random_ratio:
             if self.random_box:
                 objects_xpos = []
-                for i in range(self.n_object):
+                for i in range(self.current_nobject):
                     objects_xpos.append(self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2))
                 while not is_valid(objects_xpos):
-                    for i in range(self.n_object):
+                    for i in range(self.current_nobject):
                         objects_xpos[i] = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             else:
                 raise NotImplementedError
@@ -140,8 +150,11 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             # Set the position of obstacle. (free joint)
             for i in range(self.n_object):
                 object_qpos = self.sim.data.get_joint_qpos('object%d:joint' % i)
-                object_qpos[:2] = objects_xpos[i]
-                object_qpos[2] = self.height_offset
+                if i < self.current_nobject:
+                    object_qpos[:2] = objects_xpos[i]
+                    object_qpos[2] = self.height_offset
+                else:
+                    object_qpos[:3] = np.array([-1, -1, 0])
                 self.sim.data.set_joint_qpos('object%d:joint' % i, object_qpos)
 
         self.sim.forward()
@@ -150,17 +163,22 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
     def _sample_goal(self):
         if not hasattr(self, 'size_object'):
             self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
+        if not hasattr(self, 'current_nobject'):
+            self.current_nobject = self.n_object
         if self.np_random.uniform() < 0.3:
             self.task_mode = 1
         else:
             self.task_mode = 0
         # self.task_mode = np.random.randint(2)
-        g_idx = np.random.randint(self.n_object)
+        g_idx = np.random.randint(self.current_nobject)
         one_hot = np.zeros(self.n_object)
         one_hot[g_idx] = 1
         goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
         goal[2] = self.height_offset
-        if self.task_mode == 1 or self.np_random.uniform() < 0.3:
+        if self.task_mode == 1:
+            level = np.random.randint(0, self.n_object)
+            goal[2] += self.size_object[2] * 2 * level
+        elif self.np_random.uniform() < 0.5:
             # level = np.random.randint(1, self.n_object)
             goal[2] += self.np_random.uniform(0, 0.45)
             # goal[2] += self.size_object[2] * 2 * level

@@ -5,7 +5,7 @@ from stable_baselines.common.policies import ActorCriticPolicy
 from stable_baselines.a2c.utils import linear
 
 
-def attention_mlp_extractor(flat_observations, n_object=2, n_units=128):
+def attention_mlp_extractor(flat_observations, n_object=2, n_units=256):
     # policy_only_layers = []  # Layer sizes of the network that only belongs to the policy network
     # value_only_layers = []  # Layer sizes of the network that only belongs to the value network
 
