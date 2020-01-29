@@ -461,7 +461,7 @@ class ParallelRunner2(AbstractEnvRunner):
         sample_obs_buf = []
         subgoal_obs_buf = []
         if dim == 2:
-            for object_idx in range(0, self.n_object):
+            for object_idx in range(1, self.n_object):
                 obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
                 sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
                 sample_obs[:, 3*(object_idx+1+self.n_object):3*(object_idx+1+self.n_object)+2] \

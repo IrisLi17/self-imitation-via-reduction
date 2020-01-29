@@ -173,6 +173,7 @@ class PPO2_augment(ActorCriticRLModel):
                     self.aug_action_ph = train_aug_model.pdtype.sample_placeholder([None], name="aug_action_ph")
                     self.aug_advs_ph = tf.placeholder(tf.float32, [None], name="aug_advs_ph")
                     self.aug_old_neglog_pac_ph = tf.placeholder(tf.float32, [None], name="aug_old_neglog_pac_ph")
+                    self.critic_mask_ph = tf.placeholder(tf.float32, [None], name="critic_mask_ph") # (1-is_demo)
 
                     neglogpac = train_model.proba_distribution.neglogp(self.action_ph)
                     aug_neglogpac = train_aug_model.proba_distribution.neglogp(self.aug_action_ph)
@@ -207,7 +208,7 @@ class PPO2_augment(ActorCriticRLModel):
 
                     vf_losses1 = tf.square(vpred - self.rewards_ph)
                     vf_losses2 = tf.square(vpred_clipped - self.rewards_ph)
-                    self.vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+                    self.vf_loss = .5 * tf.reduce_mean(self.critic_mask_ph * tf.maximum(vf_losses1, vf_losses2))
 
                     ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
                     pg_losses = -self.advs_ph * ratio
@@ -316,7 +317,8 @@ class PPO2_augment(ActorCriticRLModel):
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
                   self.advs_ph: advs, self.rewards_ph: returns,
                   self.learning_rate_ph: learning_rate, self.clip_range_ph: cliprange,
-                  self.old_neglog_pac_ph: neglogpacs, self.old_vpred_ph: values}
+                  self.old_neglog_pac_ph: neglogpacs, self.old_vpred_ph: values,
+                  self.critic_mask_ph: (1 - is_demo) / (np.sum(1-is_demo) + 1e-8) * advs.shape[0]}
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
@@ -421,15 +423,15 @@ class PPO2_augment(ActorCriticRLModel):
                 else:
                     _reuse_times = min(self.reuse_times, _reuse_times + 1)
                 # Reuse goalidx=0 only once
-                if len(self.aug_obs) and (self.aug_obs[-1] is not None):
-                    other_aug_idx = np.where(self.is_selfaug[-1] < 0.5)[0]
-                    self.aug_obs[-1] = self.aug_obs[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_act[-1] = self.aug_act[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_neglogp[-1] = self.aug_neglogp[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_return[-1] = self.aug_return[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_value[-1] = self.aug_value[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_done[-1] = self.aug_done[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_reward[-1] = self.aug_reward[-1][other_aug_idx] if len(other_aug_idx) else None
+                # if len(self.aug_obs) and (self.aug_obs[-1] is not None):
+                #     other_aug_idx = np.where(self.is_selfaug[-1] < 0.5)[0]
+                #     self.aug_obs[-1] = self.aug_obs[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_act[-1] = self.aug_act[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_neglogp[-1] = self.aug_neglogp[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_return[-1] = self.aug_return[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_value[-1] = self.aug_value[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_done[-1] = self.aug_done[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_reward[-1] = self.aug_reward[-1][other_aug_idx] if len(other_aug_idx) else None
                 # Reuse other data
                 if _reuse_times > 1:
                     self.aug_obs = self.aug_obs[-_reuse_times+1:] + [None]
