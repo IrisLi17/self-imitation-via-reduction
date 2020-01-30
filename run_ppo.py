@@ -195,8 +195,12 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
         goal_dim = env.get_attr('goal')[0].shape[0]
-        while np.argmax(obs[0][-goal_dim + 3:]) != 0:
-            obs = env.reset()
+        if 'FetchStack' in env_name:
+            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0]:
+                obs = env.reset()
+        else:
+            while np.argmax(obs[0][-goal_dim+3:]) != 0:
+                obs = env.reset()
         print('goal', obs[0][-goal_dim:])
         # while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
         #     obs = env.reset()
@@ -235,8 +239,12 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 # while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
                 #     obs = env.reset()
                 print('episode_reward', episode_reward)
-                while np.argmax(obs[0][-goal_dim + 3:]) != 0:
-                    obs = env.reset()
+                if 'FetchStack' in env_name:
+                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0]:
+                        obs = env.reset()
+                else:
+                    while np.argmax(obs[0][-goal_dim + 3:]) != 0:
+                        obs = env.reset()
                 print('goal', obs[0][-goal_dim:])
                 episode_reward = 0.0
                 frame_idx = 0
