@@ -421,15 +421,15 @@ class PPO2_augment(ActorCriticRLModel):
                 else:
                     _reuse_times = min(self.reuse_times, _reuse_times + 1)
                 # Reuse goalidx=0 only once
-                if len(self.aug_obs) and (self.aug_obs[-1] is not None):
-                    other_aug_idx = np.where(self.is_selfaug[-1] < 0.5)[0]
-                    self.aug_obs[-1] = self.aug_obs[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_act[-1] = self.aug_act[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_neglogp[-1] = self.aug_neglogp[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_return[-1] = self.aug_return[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_value[-1] = self.aug_value[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_done[-1] = self.aug_done[-1][other_aug_idx] if len(other_aug_idx) else None
-                    self.aug_reward[-1] = self.aug_reward[-1][other_aug_idx] if len(other_aug_idx) else None
+                # if len(self.aug_obs) and (self.aug_obs[-1] is not None):
+                #     other_aug_idx = np.where(self.is_selfaug[-1] < 0.5)[0]
+                #     self.aug_obs[-1] = self.aug_obs[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_act[-1] = self.aug_act[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_neglogp[-1] = self.aug_neglogp[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_return[-1] = self.aug_return[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_value[-1] = self.aug_value[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_done[-1] = self.aug_done[-1][other_aug_idx] if len(other_aug_idx) else None
+                #     self.aug_reward[-1] = self.aug_reward[-1][other_aug_idx] if len(other_aug_idx) else None
                 # Reuse other data
                 if _reuse_times > 1:
                     self.aug_obs = self.aug_obs[-_reuse_times+1:] + [None]
