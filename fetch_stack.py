@@ -16,13 +16,13 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             'robot0:slide2': 0.0,
             'object0:joint': [1.25, 0.53, 0.4, 1., 0., 0., 0.],
             'object1:joint': [1.30, 0.53, 0.4, 1., 0., 0., 0.],
-            'object2:joint': [1.25, 0.58, 0.4, 1., 0., 0., 0.],
+            # 'object2:joint': [1.25, 0.58, 0.4, 1., 0., 0., 0.],
             # 'object3:joint': [1.30, 0.58, 0.4, 1., 0., 0., 0.],
         }
         self.random_gripper = random_gripper
         self.random_box = random_box
         self.random_ratio = random_ratio
-        self.n_object = 3
+        self.n_object = 2
         fetch_env.FetchEnv.__init__(
             self, MODEL_XML_PATH, has_object=True, block_gripper=False, n_substeps=20,
             gripper_extra_height=0.2, target_in_the_air=True, target_offset=0.0,
@@ -115,6 +115,12 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         self.sim.set_state(state)
         self.sim.forward()
 
+    def set_current_nobject(self, current_nobject):
+        self.current_nobject = current_nobject
+
+    def set_task_mode(self, task_mode):
+        self.task_mode = task_mode
+
     def _reset_sim(self):
         self.sim.set_state(self.initial_state)
         if self.random_gripper:
@@ -135,15 +141,31 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         # Randomize start position of object.
         if self.has_object:
             self.current_nobject = np.random.randint(0, self.n_object) + 1
-
+            self.sample_easy = False
             # if self.random_box and self.np_random.uniform() < self.random_ratio:
             if self.random_box:
-                objects_xpos = []
-                for i in range(self.current_nobject):
-                    objects_xpos.append(self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2))
-                while not is_valid(objects_xpos):
+                if self.np_random.uniform() < 0.3 and self.current_nobject > 1:
+                    self.sample_easy = True
+                    objects_xpos = []
+                    base_nobject = np.random.randint(1, self.current_nobject)
+                    self.maybe_goal_xy = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+                    for i in range(base_nobject):
+                        objects_xpos.append(np.concatenate([self.maybe_goal_xy.copy(), [self.height_offset + i * 2 * self.size_object[2]]]))
+                    for i in range(base_nobject, self.current_nobject):
+                        objects_xpos.append(np.concatenate([self.initial_gripper_xpos[:2] + self.np_random.uniform(
+                            -self.obj_range, self.obj_range, size=2), [self.height_offset]]))
+                    while not is_valid(objects_xpos[base_nobject - 1:]):
+                        for i in range(base_nobject, self.current_nobject):
+                            objects_xpos[i][:2] = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+                    import random
+                    random.shuffle(objects_xpos)
+                else:
+                    objects_xpos = []
                     for i in range(self.current_nobject):
-                        objects_xpos[i] = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+                        objects_xpos.append(np.concatenate([self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2), [self.height_offset]]))
+                    while not is_valid(objects_xpos):
+                        for i in range(self.current_nobject):
+                            objects_xpos[i][:2] = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             else:
                 raise NotImplementedError
 
@@ -151,8 +173,8 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             for i in range(self.n_object):
                 object_qpos = self.sim.data.get_joint_qpos('object%d:joint' % i)
                 if i < self.current_nobject:
-                    object_qpos[:2] = objects_xpos[i]
-                    object_qpos[2] = self.height_offset
+                    object_qpos[:3] = objects_xpos[i]
+                    # object_qpos[2] = self.height_offset
                 else:
                     object_qpos[:3] = np.array([-1, -1, 0])
                 self.sim.data.set_joint_qpos('object%d:joint' % i, object_qpos)
@@ -165,23 +187,33 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
         if not hasattr(self, 'current_nobject'):
             self.current_nobject = self.n_object
+        if not hasattr(self, 'sample_easy'):
+            self.sample_easy = False
         if self.np_random.uniform() < 0.3:
             self.task_mode = 1
         else:
             self.task_mode = 0
-        # self.task_mode = np.random.randint(2)
-        g_idx = np.random.randint(self.current_nobject)
-        one_hot = np.zeros(self.n_object)
-        one_hot[g_idx] = 1
-        goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
-        goal[2] = self.height_offset
-        if self.task_mode == 1:
-            level = np.random.randint(0, self.current_nobject)
-            goal[2] += self.size_object[2] * 2 * level
-        elif self.np_random.uniform() < 0.5:
-            # level = np.random.randint(1, self.n_object)
-            goal[2] += self.np_random.uniform(0, 0.45)
-            # goal[2] += self.size_object[2] * 2 * level
+        if self.sample_easy:
+            goal = np.concatenate([self.maybe_goal_xy, [self.height_offset + self.size_object[2] * 2 * (self.current_nobject - 1)]])
+            g_idx = np.random.randint(self.current_nobject)
+            while abs(self.sim.data.get_joint_qpos('object%d:joint' % g_idx)[0] - self.maybe_goal_xy[0]) < self.size_object[0] \
+                    and abs(self.sim.data.get_joint_qpos('object%d:joint' % g_idx)[1] - self.maybe_goal_xy[1]) < self.size_object[1]:
+                g_idx = np.random.randint(self.current_nobject)
+            one_hot = np.zeros(self.n_object)
+            one_hot[g_idx] = 1
+        else:
+            g_idx = np.random.randint(self.current_nobject)
+            one_hot = np.zeros(self.n_object)
+            one_hot[g_idx] = 1
+            goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+            goal[2] = self.height_offset
+            if self.task_mode == 1:
+                level = np.random.randint(0, self.current_nobject)
+                goal[2] += self.size_object[2] * 2 * level
+            elif self.np_random.uniform() < 0.5:
+                # level = np.random.randint(1, self.n_object)
+                goal[2] += self.np_random.uniform(0, 0.45)
+                # goal[2] += self.size_object[2] * 2 * level
         goal = np.concatenate([goal, one_hot])
         return goal.copy()
 
@@ -189,15 +221,19 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         raise NotImplementedError
 
     def compute_reward(self, observation, goal, info):
-        task_mode = observation[-1]
+        r, _ = self.compute_reward_and_success(observation, goal, info)
+        return r
+
+    def compute_reward_and_success(self, observation, goal, info):
+        task_mode = observation[self.observation_space['observation'].shape[0] - 1]
         one_hot = goal[3:]
         idx = np.argmax(one_hot)
         # parse the corresponding object position from observation
         achieved_goal = observation[3 + 3 * idx: 3 + 3 * (idx + 1)]
-        previous_achieved_goal = info['previous_obs']['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
         if task_mode == 0:
             r = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal[0:3], info)
             if self.reward_type == 'dense':
+                previous_achieved_goal = info['previous_obs']['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
                 r = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(achieved_goal - goal[0:3])
             success = np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold
             if self.reward_type == 'dense':
@@ -205,7 +241,9 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         else:
             r_achieve = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal[0:3], info)
             if self.reward_type == 'dense':
-                r_achieve = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(achieved_goal - goal[0:3])
+                previous_achieved_goal = info['previous_obs']['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
+                r_achieve = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(
+                    achieved_goal - goal[0:3])
                 if np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold:
                     gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > self.distance_threshold
                     r = r_achieve
@@ -222,7 +260,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                 else:
                     # Check if stacked
                     other_objects_pos = np.concatenate([observation[3: 3 + 3 * idx],
-                                                        observation[3 + 3 * (idx + 1) : 3 + 3 * self.n_object]])
+                                                        observation[3 + 3 * (idx + 1): 3 + 3 * self.n_object]])
                     # print('other_objects_pos', other_objects_pos)
                     # print('achieved_goal', achieved_goal)
                     stack = False
@@ -255,7 +293,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         obs = self._get_obs()
 
         done = False
-        reward, is_success = self.compute_reward(obs['observation'], self.goal, info)
+        reward, is_success = self.compute_reward_and_success(obs['observation'], self.goal, info)
         info['is_success'] = is_success
         return obs, reward, done, info
 

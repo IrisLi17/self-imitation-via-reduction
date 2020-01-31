@@ -158,8 +158,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     set_global_seeds(seed)
 
     n_cpu = 32 if not play else 1
-    if 'MasspointPushDoubleObstacle' in env_name:
-        n_cpu = 64
+    if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
+        n_cpu = 64 if not play else 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1']:
         env_kwargs = dict(reward_type='dense')
         # pass
@@ -182,7 +182,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         env_kwargs = dict(random_box=True,
                           random_ratio=random_ratio,
                           random_gripper=True,
-                          max_episode_steps=150, )
+                          max_episode_steps=100, )
     else:
         raise NotImplementedError("%s not implemented" % env_name)
 
@@ -217,15 +217,23 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         policy_kwargs = dict(layers=[256, 256])
         # policy_kwargs = {}
         # TODO: vectorize env
-        if 'MasspointPushDoubleObstacle' in env_name:
+        if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
             n_steps = 8192
         else:
             n_steps = 2048
-        model = PPO2_augment('MlpPolicy', env, aug_env=aug_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
+        policy = 'MlpPolicy'
+        if 'FetchStack' in env_name:
+            from utils.attention_policy import AttentionPolicy
+            policy = AttentionPolicy
+        if 'FetchStack' in env_name:
+            dim_candidate = 3
+        else:
+            dim_candidate = 2
+        model = PPO2_augment(policy, env, aug_env=aug_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
                              gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
                              cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
                              policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
-                             reuse_times=reuse_times, aug_adv_weight=aug_adv_weight,
+                             reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
                              )
 
         def callback(_locals, _globals):

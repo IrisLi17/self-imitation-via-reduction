@@ -394,7 +394,7 @@ class PPO2_augment(ActorCriticRLModel):
                 #                         n_candidate=self.n_candidate, horizon=self.horizon)
                 runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
                                          gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
-                                         # dim_candidate=self.dim_candidate,
+                                         dim_candidate=self.dim_candidate,
                                          horizon=self.horizon)
             self.episode_reward = np.zeros((self.n_envs,))
 
