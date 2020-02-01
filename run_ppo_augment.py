@@ -123,6 +123,28 @@ def eval_model(eval_env, model):
     return np.mean(ep_rewards)
 
 
+def stack_eval_model(eval_env, model):
+    env = eval_env
+    assert abs(env.unwrapped.random_ratio) < 1e-4
+    n_episode = 0
+    ep_rewards = []
+    while n_episode < 20:
+        ep_reward = 0.0
+        while env.current_nobject != env.n_object or env.task_mode != 1:
+            obs = env.reset()
+        goal_dim = env.goal.shape[0]
+        if goal_dim > 3:
+            while (np.argmax(obs[-goal_dim + 3:]) != 0):
+                obs = env.reset()
+        done = False
+        while not done:
+            action, _ = model.predict(obs)
+            obs, reward, done, info = env.step(action)
+            ep_reward += reward
+        ep_rewards.append(ep_reward)
+        n_episode += 1
+    return np.mean(ep_rewards)
+
 def log_eval(num_update, mean_eval_reward):
     if not os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
         with open(os.path.join(logger.get_dir(), 'eval.csv'), 'a', newline='') as csvfile:
@@ -238,7 +260,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
 
         def callback(_locals, _globals):
             num_update = _locals["update"]
-            mean_eval_reward = eval_model(eval_env, _locals["self"])
+            if 'FetchStack' in env_name:
+                mean_eval_reward = stack_eval_model(eval_env, _locals["self"])
+            else:
+                mean_eval_reward = eval_model(eval_env, _locals["self"])
             log_eval(num_update, mean_eval_reward)
             aug_obs = _locals["self"].aug_obs
             aug_done = _locals["self"].aug_done

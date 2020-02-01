@@ -144,7 +144,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             self.sample_easy = False
             # if self.random_box and self.np_random.uniform() < self.random_ratio:
             if self.random_box:
-                if self.np_random.uniform() < 0.3 and self.current_nobject > 1:
+                if self.np_random.uniform() < self.random_ratio and self.current_nobject > 1:
                     self.sample_easy = True
                     objects_xpos = []
                     base_nobject = np.random.randint(1, self.current_nobject)
@@ -189,7 +189,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             self.current_nobject = self.n_object
         if not hasattr(self, 'sample_easy'):
             self.sample_easy = False
-        if self.np_random.uniform() < 0.3:
+        if self.np_random.uniform() < 0.3 or self.sample_easy:
             self.task_mode = 1
         else:
             self.task_mode = 0

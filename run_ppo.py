@@ -4,7 +4,7 @@ from stable_baselines.bench import Monitor
 from stable_baselines.common import set_global_seeds
 from stable_baselines.common.vec_env import SubprocVecEnv
 from gym.wrappers import FlattenDictWrapper
-from run_ppo_augment import eval_model, log_eval
+from run_ppo_augment import eval_model, log_eval, stack_eval_model
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
@@ -178,9 +178,11 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         print(model.get_parameter_list())
         def callback(_locals, _globals):
             num_update = _locals["update"]
-            if env_name in ENTRY_POINT.keys() or env_name in MASS_ENTRY_POINT.keys():
+            if 'FetchStack' in env_name:
+                mean_eval_reward = stack_eval_model(eval_env, _locals["self"])
+            else:
                 mean_eval_reward = eval_model(eval_env, _locals["self"])
-                log_eval(num_update, mean_eval_reward)
+            log_eval(num_update, mean_eval_reward)
             if num_update % 10 == 0:
                 model_path = os.path.join(log_dir, 'model_' + str(num_update // 10))
                 model.save(model_path)
