@@ -810,6 +810,15 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
         self.sim.model.site_pos[site_id] = self.goal[:3] - sites_offset[0]
         self.sim.forward()
 
+    def _viewer_setup(self):
+        body_id = self.sim.model.body_name2id('robot0:gripper_link')
+        lookat = self.sim.data.body_xpos[body_id]
+        for idx, value in enumerate(lookat):
+            self.viewer.cam.lookat[idx] = value
+        self.viewer.cam.distance = 1.5
+        self.viewer.cam.azimuth = 132.
+        self.viewer.cam.elevation = -20.
+
 class FetchPushWallObstacleEnv_v5(fetch_env.FetchEnv, utils.EzPickle):
     '''
     Universal pushing. Concatenate a one-hot array to the goal space which indicates which object should be moved to the specific location.
