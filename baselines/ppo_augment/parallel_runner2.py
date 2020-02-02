@@ -185,9 +185,13 @@ class ParallelRunner2(AbstractEnvRunner):
                         clipped_actions = np.clip(env_action, self.aug_env.action_space.low, self.aug_env.action_space.high)
                     env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
                     self.model.num_aug_steps += (self.aug_env.num_envs - sum(env_end_flag))
-                    env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals, [None for _ in range(self.aug_env.num_envs)])
-                    if self.aug_env.env_attr('reward_type')[0] == 'dense':
-                        env_reward_and_success = self.aug_env.env_method('compute_reward_and_method', env_next_obs, ultimate_goals, [None for _ in range(self.aug_env.num_envs)])
+                    if self.aug_env.get_attr('reward_type')[0] == 'sparse':
+                        temp_info = [None for _ in range(self.aug_env.num_envs)]
+                    else:
+                        temp_info = [{'previous_obs': env_obs[i]} for i in range(self.aug_env.num_envs)]
+                    env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals, temp_info)
+                    if self.aug_env.get_attr('reward_type')[0] == 'dense':
+                        env_reward_and_success = self.aug_env.env_method('compute_reward_and_success', env_next_obs, ultimate_goals, temp_info)
                     for idx in range(self.aug_env.num_envs):
                         env_increment_storage[idx].append((relabel_env_obs[idx], env_action[idx], False, env_reward[idx]))
                         # if idx == 0:
@@ -198,10 +202,10 @@ class ParallelRunner2(AbstractEnvRunner):
 
                     for idx, info in enumerate(env_info):
                         # Special case, the agent succeeds the final goal half way
-                        if self.aug_env.env_attr('reward_type')[0] == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] == False:
+                        if self.aug_env.get_attr('reward_type')[0] == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] == False:
                             env_end_flag[idx] = True
                             env_end_step[idx] = env_restart_steps[idx] + increment_step
-                        elif self.aug_env.env_attr('reward_type')[0] == 'dense' and env_reward_and_success[idx][1] and env_end_flag[idx] == False:
+                        elif self.aug_env.get_attr('reward_type')[0] == 'dense' and env_reward_and_success[idx][1] and env_end_flag[idx] == False:
                             env_end_flag[idx] = True
                             env_end_step[idx] = env_restart_steps[idx] + increment_step
                         # Exceed time limit
@@ -241,7 +245,7 @@ class ParallelRunner2(AbstractEnvRunner):
                             augment_neglogp_buf = np.concatenate([np.array(neglogp_buf), augment_neglogp_buf], axis=0)
                             augment_done_buf = done_buf + augment_done_buf
                             augment_reward_buf = reward_buf + augment_reward_buf
-                        if self.aug_env.env_attr('reward_type')[0] == "sparse":
+                        if self.aug_env.get_attr('reward_type')[0] == "sparse":
                             assert abs(sum(augment_reward_buf) - 1) < 1e-4
                         if augment_done_buf[0] == 0:
                             augment_done_buf = (True,) + (False,) * (len(augment_done_buf) - 1)

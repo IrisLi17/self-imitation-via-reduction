@@ -242,6 +242,12 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         idx = np.argmax(one_hot)
         # parse the corresponding object position from observation
         achieved_goal = observation[3 + 3 * idx: 3 + 3 * (idx + 1)]
+        if isinstance(info, dict) and isinstance(info['previous_obs'], np.ndarray):
+            observation_dim = self.observation_space['observation'].shape[0]
+            goal_dim = self.observation_space['achieved_goal'].shape[0]
+            info['previous_obs'] = dict(observation=info['previous_obs'][:observation_dim],
+                                        achieved_goal=info['previous_obs'][observation_dim: observation_dim + goal_dim],
+                                        desired_goal=info['previous_obs'][observation_dim + goal_dim:])
         if task_mode == 0:
             raise NotImplementedError
             r = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal[0:3], info)
