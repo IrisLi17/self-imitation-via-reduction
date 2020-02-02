@@ -579,9 +579,9 @@ class MasspointMazeEnv(MasspointPushEnv, utils.EzPickle):
         masspoint_jointx_i = self.sim.model.get_joint_qpos_addr('masspoint:slidex')
         masspoint_jointy_i = self.sim.model.get_joint_qpos_addr('masspoint:slidey')
         if self.random_pusher:
-            masspoint_pos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            masspoint_pos = np.array([2.5, 2.5]) + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             while self.inside_wall(masspoint_pos):
-                masspoint_pos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+                masspoint_pos = np.array([2.5, 2.5]) + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
         else:
             masspoint_pos = self.initial_masspoint_xpos[:2]
         sim_state.qpos[masspoint_jointx_i] = masspoint_pos[0]
@@ -599,7 +599,7 @@ class MasspointMazeEnv(MasspointPushEnv, utils.EzPickle):
         # g_idx = np.random.randint(self.n_object)
         # one_hot = np.zeros(self.n_object)
         # one_hot[g_idx] = 1
-        goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+        goal = np.array([2.5, 2.5]) + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
 
         def same_side(pos0, pos1, sep):
             if (pos0 - sep) * (pos1 - sep) > 0:
