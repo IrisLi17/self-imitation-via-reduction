@@ -388,14 +388,20 @@ class PPO2_augment(ActorCriticRLModel):
                 runner = Runner(env=self.env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
                                 aug_env=self.aug_env, n_candidate=self.n_candidate)
             else:
-                from baselines.ppo_augment.parallel_runner import ParallelRunner
-                from baselines.ppo_augment.parallel_runner2 import ParallelRunner2
-                # runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
-                #                         n_candidate=self.n_candidate, horizon=self.horizon)
-                runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
-                                         gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
-                                         dim_candidate=self.dim_candidate,
-                                         horizon=self.horizon)
+                if self.env.get_attr('n_object')[0] > 0:
+                    from baselines.ppo_augment.parallel_runner2 import ParallelRunner2
+                    # runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
+                    #                         n_candidate=self.n_candidate, horizon=self.horizon)
+                    runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                             gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                             dim_candidate=self.dim_candidate,
+                                             horizon=self.horizon)
+                else:
+                    # Maze.
+                    from baselines.ppo_augment.parallel_runner2_maze import ParallelRunner2
+                    runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                             gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                             dim_candidate=self.dim_candidate, horizon=self.horizon)
             self.episode_reward = np.zeros((self.n_envs,))
 
             ep_info_buf = deque(maxlen=100)

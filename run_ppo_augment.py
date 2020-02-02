@@ -8,6 +8,7 @@ from gym.wrappers import FlattenDictWrapper
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from masspoint_env import MasspointPushSingleObstacleEnv_v2, MasspointPushDoubleObstacleEnv
+from masspoint_env import MasspointMazeEnv
 from fetch_stack import FetchStackEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
@@ -29,6 +30,8 @@ MASS_ENTRY_POINT = {
     'MasspointPushSingleObstacleUnlimit-v2': MasspointPushSingleObstacleEnv_v2,
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
     'MasspointPushDoubleObstacleUnlimit-v1': MasspointPushDoubleObstacleEnv,
+    'MasspointMaze-v1': MasspointMazeEnv,
+    'MasspointMazeUnlimit-v1': MasspointMazeEnv,
 }
 
 PICK_ENTRY_POINT = {
@@ -188,6 +191,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     n_cpu = 32 if not play else 1
     if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
         n_cpu = 64 if not play else 1
+    elif 'MasspointMaze' in env_name:
+        n_cpu = 8 if not play else 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1']:
         env_kwargs = dict(reward_type='dense')
         # pass
@@ -232,7 +237,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         aug_env = make_env(env_id=aug_env_name, seed=seed, rank=0, kwargs=aug_env_kwargs)
     else:
         # aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_subgoal)])
-        aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(32)])
+        aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(min(32, n_cpu))])
     print(aug_env)
     if os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
         os.remove(os.path.join(logger.get_dir(), 'eval.csv'))

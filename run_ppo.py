@@ -9,6 +9,7 @@ from run_ppo_augment import eval_model, log_eval, stack_eval_model
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
+from masspoint_env import MasspointMazeEnv
 from fetch_stack import FetchStackEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
@@ -30,6 +31,7 @@ MASS_ENTRY_POINT = {
     'MasspointPushSingleObstacle-v1': MasspointPushSingleObstacleEnv,
     'MasspointPushSingleObstacle-v2': MasspointPushSingleObstacleEnv_v2,
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
+    'MasspointMaze-v1': MasspointMazeEnv,
 }
 
 PICK_ENTRY_POINT = {
@@ -104,6 +106,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     n_cpu = 32 if not play else 1
     if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
         n_cpu = 64 if not play else 1
+    elif 'MasspointMaze' in env_name:
+        n_cpu = 8 if not play else 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1', 'FetchPickAndPlace-v1']:
         env_kwargs = {}
         # pass
