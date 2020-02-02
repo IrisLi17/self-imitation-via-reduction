@@ -663,6 +663,10 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
     def set_goal(self, goal):
         self.goal = goal.copy()
 
+
+    def set_random_ratio(self, random_ratio):
+        self.random_ratio = random_ratio
+
     def switch_obs_goal(self, obs, goal):
         obs = obs.copy()
         if isinstance(obs, dict):

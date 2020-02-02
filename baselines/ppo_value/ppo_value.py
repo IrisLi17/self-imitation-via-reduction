@@ -49,6 +49,7 @@ class PPO2(ActorCriticRLModel):
 
     def __init__(self, policy, env, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4, vf_coef=0.5,
                  max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2, cliprange_vf=None,
+                 curriculum=False,
                  verbose=0, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
                  full_tensorboard_log=False):
 
@@ -66,6 +67,7 @@ class PPO2(ActorCriticRLModel):
         self.lam = lam
         self.nminibatches = nminibatches
         self.noptepochs = noptepochs
+        self.curriculum = curriculum
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
 
@@ -330,6 +332,10 @@ class PPO2(ActorCriticRLModel):
                 lr_now = self.learning_rate(frac)
                 cliprange_now = self.cliprange(frac)
                 cliprange_vf_now = cliprange_vf(frac)
+                if self.curriculum:
+                    _ratio = max(1.0 - 2 * (update - 1.0) / n_updates, 0.0)
+                    self.env.env_method('set_random_ratio', _ratio)
+                    print('Set random_ratio to', self.env.get_attr('random_ratio')[0])
                 # true_reward is the reward without discount
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
                 self.num_timesteps += self.n_batch

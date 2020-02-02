@@ -55,6 +55,7 @@ def arg_parse():
     parser.add_argument('--reuse_times', default=1, type=int)
     parser.add_argument('--reward_type', default="sparse", type=str)
     parser.add_argument('--n_object', default=2, type=int)
+    parser.add_argument('--curriculum', action="store_true", default=False)
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
@@ -182,7 +183,7 @@ def log_traj(aug_obs, aug_done, index, goal_dim=5, n_obstacle=1):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, aug_clip, n_subgoal,
-         parallel, start_augment, reuse_times, aug_adv_weight, reward_type, n_object):
+         parallel, start_augment, reuse_times, aug_adv_weight, reward_type, n_object, curriculum):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir)
 
@@ -271,6 +272,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                              cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
                              policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
                              reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
+                             curriculum=curriculum,
                              )
 
         def callback(_locals, _globals):
@@ -360,4 +362,5 @@ if __name__ == '__main__':
          log_path=args.log_path, load_path=args.load_path, play=args.play, export_gif=args.export_gif,
          random_ratio=args.random_ratio, aug_clip=args.aug_clip, n_subgoal=args.n_subgoal,
          parallel=args.parallel, start_augment=int(args.start_augment), reuse_times=args.reuse_times,
-         aug_adv_weight=args.aug_adv_weight, reward_type=args.reward_type, n_object=args.n_object)
+         aug_adv_weight=args.aug_adv_weight, reward_type=args.reward_type, n_object=args.n_object,
+         curriculum=args.curriculum)
