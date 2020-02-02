@@ -6,10 +6,11 @@ import gym.envs.robotics.utils as robotics_utils
 
 
 MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'pick_and_place_stack.xml')
+MODEL_XML_PATH3 = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'pick_and_place_stack3.xml')
 
 
 class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
-    def __init__(self, reward_type='sparse', random_gripper=True, random_box=True, random_ratio=1.0):
+    def __init__(self, reward_type='sparse', random_gripper=True, random_box=True, random_ratio=1.0, n_object=2):
         initial_qpos = {
             'robot0:slide0': 0.405,
             'robot0:slide1': 0.48,
@@ -19,19 +20,27 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             # 'object2:joint': [1.25, 0.58, 0.4, 1., 0., 0., 0.],
             # 'object3:joint': [1.30, 0.58, 0.4, 1., 0., 0., 0.],
         }
+        if n_object == 3:
+            initial_qpos['object2:joint'] = [1.25, 0.58, 0.4, 1., 0., 0., 0.]
         self.random_gripper = random_gripper
         self.random_box = random_box
         self.random_ratio = random_ratio
-        self.n_object = 2
+        self.n_object = n_object
+        if n_object == 2:
+            model_path = MODEL_XML_PATH
+        elif n_object == 3:
+            model_path = MODEL_XML_PATH3
+        else:
+            raise NotImplementedError
         fetch_env.FetchEnv.__init__(
-            self, MODEL_XML_PATH, has_object=True, block_gripper=False, n_substeps=20,
+            self, model_path, has_object=True, block_gripper=False, n_substeps=20,
             gripper_extra_height=0.2, target_in_the_air=True, target_offset=0.0,
             obj_range=0.15, target_range=0.15, distance_threshold=0.05,
             initial_qpos=initial_qpos, reward_type=reward_type)
         utils.EzPickle.__init__(self)
         self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
         self.size_obstacle = np.array([0.15, 0.15, 0.15])
-        self.task_mode = 0 # 0: pick and place, 1: stack
+        self.task_mode = 1 # 0: pick and place, 1: stack
 
     def _get_obs(self):
         grip_pos = self.sim.data.get_site_xpos('robot0:grip')
@@ -75,7 +84,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             achieved_goal = np.concatenate([object_pos[3 * idx: 3 * (idx + 1)], one_hot])
         obs = np.concatenate([
             grip_pos, object_pos.ravel(), object_rel_pos.ravel(), gripper_state, object_rot.ravel(),
-            object_velp.ravel(), object_velr.ravel(), grip_velp, gripper_vel, [self.task_mode],
+            object_velp.ravel(), object_velr.ravel(), grip_velp, gripper_vel,
         ])
 
         return {
@@ -189,10 +198,11 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             self.current_nobject = self.n_object
         if not hasattr(self, 'sample_easy'):
             self.sample_easy = False
-        if self.np_random.uniform() < 0.3 or self.sample_easy:
-            self.task_mode = 1
-        else:
-            self.task_mode = 0
+        # if self.np_random.uniform() < 0.3 or self.sample_easy:
+        #     self.task_mode = 1
+        # else:
+        #     self.task_mode = 0
+        # All stacking
         if self.sample_easy:
             goal = np.concatenate([self.maybe_goal_xy, [self.height_offset + self.size_object[2] * 2 * (self.current_nobject - 1)]])
             g_idx = np.random.randint(self.current_nobject)
@@ -207,13 +217,15 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             one_hot[g_idx] = 1
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
             goal[2] = self.height_offset
-            if self.task_mode == 1:
-                level = np.random.randint(0, self.current_nobject)
-                goal[2] += self.size_object[2] * 2 * level
-            elif self.np_random.uniform() < 0.5:
-                # level = np.random.randint(1, self.n_object)
-                goal[2] += self.np_random.uniform(0, 0.45)
-                # goal[2] += self.size_object[2] * 2 * level
+            level = np.random.randint(0, self.current_nobject)
+            goal[2] += self.size_object[2] * 2 * level
+            # if self.task_mode == 1:
+            #     level = np.random.randint(0, self.current_nobject)
+            #     goal[2] += self.size_object[2] * 2 * level
+            # elif self.np_random.uniform() < 0.5:
+            #     # level = np.random.randint(1, self.n_object)
+            #     goal[2] += self.np_random.uniform(0, 0.45)
+            #     # goal[2] += self.size_object[2] * 2 * level
         goal = np.concatenate([goal, one_hot])
         return goal.copy()
 
@@ -230,7 +242,14 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         idx = np.argmax(one_hot)
         # parse the corresponding object position from observation
         achieved_goal = observation[3 + 3 * idx: 3 + 3 * (idx + 1)]
+        if isinstance(info, dict) and isinstance(info['previous_obs'], np.ndarray):
+            observation_dim = self.observation_space['observation'].shape[0]
+            goal_dim = self.observation_space['achieved_goal'].shape[0]
+            info['previous_obs'] = dict(observation=info['previous_obs'][:observation_dim],
+                                        achieved_goal=info['previous_obs'][observation_dim: observation_dim + goal_dim],
+                                        desired_goal=info['previous_obs'][observation_dim + goal_dim:])
         if task_mode == 0:
+            raise NotImplementedError
             r = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal[0:3], info)
             if self.reward_type == 'dense':
                 previous_achieved_goal = info['previous_obs']['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
@@ -245,9 +264,22 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                 r_achieve = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(
                     achieved_goal - goal[0:3])
                 if np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold:
-                    gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > self.distance_threshold
                     r = r_achieve
-                    success = gripper_far
+                    gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > self.distance_threshold
+                    other_objects_pos = np.concatenate([observation[3: 3 + 3 * idx],
+                                                        observation[3 + 3 * (idx + 1): 3 + 3 * self.n_object]])
+                    stack = False
+                    if abs(achieved_goal[2] - self.height_offset) < 0.01:
+                        # on the ground
+                        stack = True
+                    else:
+                        for i in range(self.n_object - 1):
+                            if abs(other_objects_pos[3 * i + 2] - (achieved_goal[2] - self.size_object[2] * 2)) < 0.01 \
+                                    and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[0] \
+                                    and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
+                                stack = True
+                                break
+                    success = gripper_far and stack
                 else:
                     r = r_achieve
                     success = 0.0

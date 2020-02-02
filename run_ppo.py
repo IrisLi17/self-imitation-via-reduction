@@ -42,6 +42,7 @@ def arg_parse():
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--num_timesteps', type=float, default=1e8)
     parser.add_argument('--reward_type', type=str, default='sparse')
+    parser.add_argument('--n_object', type=int, default=2) # Only used for stacking
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--random_ratio', default=1.0, type=float)
@@ -94,7 +95,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     # env.seed(seed + 10000 * rank)
     return env
 
-def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, reward_type):
+def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, reward_type, n_object):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir) 
     
@@ -126,7 +127,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                           random_ratio=random_ratio,
                           random_gripper=True,
                           max_episode_steps=100,
-                          reward_type=reward_type, )
+                          reward_type=reward_type,
+                          n_object=n_object, )
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -150,7 +152,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                                random_ratio=0.0,
                                random_gripper=True,
                                max_episode_steps=100,
-                               reward_type=reward_type, )
+                               reward_type=reward_type,
+                               n_object=n_object, )
     elif env_name in ['FetchPickAndPlace-v1']:
         eval_env_kwargs = {}
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
@@ -160,7 +163,6 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         policy_kwargs = dict(layers=[256, 256])
         # if 'FetchStack' in env_name:
         #     policy_kwargs = dict(layers=[512, 512])
-        print(policy_kwargs)
         # policy_kwargs = {}
         # TODO: vectorize env
         n_steps = 2048
@@ -171,6 +173,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         if 'FetchStack' in env_name:
             from utils.attention_policy import AttentionPolicy
             policy = AttentionPolicy
+            policy_kwargs["n_object"] = n_object
+            policy_kwargs["feature_extraction"] = "self_attention_mlp"
+        print(policy_kwargs)
 
         model = PPO2(policy, env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
                      ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
@@ -269,4 +274,4 @@ if __name__ == '__main__':
     print('arg parsed')
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
          log_path=args.log_path, load_path=args.load_path, play=args.play, export_gif=args.export_gif,
-         random_ratio=args.random_ratio, reward_type=args.reward_type)
+         random_ratio=args.random_ratio, reward_type=args.reward_type, n_object=args.n_object)
