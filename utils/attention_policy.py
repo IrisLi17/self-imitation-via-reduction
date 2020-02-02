@@ -10,7 +10,7 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=256):
     # value_only_layers = []  # Layer sizes of the network that only belongs to the value network
 
     agent_idx = np.concatenate([np.arange(3), np.arange(3+6*n_object, 3+6*n_object+2),
-                                np.arange(3+6*n_object+2+9*n_object, 3+6*n_object+2+9*n_object+6+2*(3+n_object))])
+                                np.arange(3+6*n_object+2+9*n_object, 3+6*n_object+2+9*n_object+5+2*(3+n_object))])
     self_in = tf.gather(flat_observations, agent_idx, axis=1)
     # self_in = np.concatenate([flat_observations[:, :3], flat_observations[:, 3 + 6 * n_object:3 + 6 * n_object + 2],
     #                           flat_observations[:, 3+6*n_object+2+9*n_object:]], axis=1)
@@ -71,6 +71,57 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=256):
     return latent_policy, latent_value
 
 
+def self_attention_mlp_extractor(flat_observations, n_object=3, n_units=256):
+    agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
+                                np.arange(3 + 6 * n_object + 2 + 9 * n_object,
+                                          3 + 6 * n_object + 2 + 9 * n_object + 5 + 2 * (3 + n_object))])
+    self_in = tf.gather(flat_observations, agent_idx, axis=1)
+    self_out = self_in
+    # Maybe nonlinear and more layers
+    for i in range(2):
+        self_out = tf.nn.relu(
+            linear(self_out, "shared_agent_fc{}".format(i), n_units, init_scale=np.sqrt(2)))  # (*, n_units)
+
+    objects_in = []
+    for i in range(n_object):
+        _object_idx = np.concatenate(
+            [np.arange(3 + 3 * i, 3 + 3 * (i + 1)), np.arange(3 + 3 * n_object + 3 * i, 3 + 3 * n_object + 3 * (i + 1)),
+             np.arange(3 + 6 * n_object + 2 + 3 * i, 3 + 6 * n_object + 2 + 3 * (i + 1)),
+             np.arange(3 + 9 * n_object + 2 + 3 * i, 3 + 9 * n_object + 2 + 3 * (i + 1)),
+             np.arange(3 + 12 * n_object + 2 + 3 * i, 3 + 12 * n_object + 2 + 3 * (i + 1)),
+             np.arange(3 + 15 * n_object + 2 + 5 + 3 + n_object, 3 + 15 * n_object + 2 + 5 + 2 * (3 + n_object))])
+        object_in = tf.gather(flat_observations, _object_idx, axis=1)
+        assert self_in.shape[1] + n_object * (object_in.shape[1] - (3 + n_object)) == flat_observations.shape[1], (
+        self_out.shape, object_in.shape)
+        with tf.variable_scope("object", reuse=tf.AUTO_REUSE):
+            fc1 = tf.nn.relu(linear(object_in, "fc0", n_units, init_scale=np.sqrt(2)))
+            fc2 = tf.nn.relu(linear(fc1, "fc1", n_units, init_scale=np.sqrt(2)))
+            objects_in.append(fc2)
+    # Do self-attention on objects
+    objects_attention_latent = []
+    for i in range(len(objects_in)):
+        other_objects_in = tf.stack(objects_in[:i] + objects_in[i+1:], 2) # (*, n_unit, n_object-1)
+        objects_self_attention = tf.nn.softmax(tf.matmul(tf.expand_dims(objects_in[i], axis=1), other_objects_in)) # (*, 1, n_object-1)
+        objects_self_attention_out = tf.squeeze(tf.matmul(objects_self_attention, tf.transpose(other_objects_in, [0, 2, 1])), 1) # (*, n_unit)
+        objects_inner_in = tf.concat([objects_in[i], objects_self_attention_out], 1)
+        with tf.variable_scope("object_inner", reuse=tf.AUTO_REUSE):
+            objects_inner_out = tf.nn.relu(linear(objects_inner_in, "fc0", n_units, init_scale=np.sqrt(2)))
+            objects_attention_latent.append(objects_inner_out)
+    objects_attention_in = tf.stack(objects_attention_latent, 2)  # (*, n_unit, n_object)
+    objects_attention = tf.nn.softmax(tf.matmul(tf.expand_dims(self_out, axis=1), objects_attention_in))  # (*, 1, n_object)
+    objects_out = tf.squeeze(tf.matmul(objects_attention, tf.transpose(objects_attention_in, [0, 2, 1])), 1)  # (*, n_unit)
+    objects_out = tf.contrib.layers.layer_norm(objects_out)
+    objects_out = tf.nn.relu(objects_out)
+
+    latent = tf.concat([self_out, objects_out], 1)  # (*, 2*n_unit)
+
+    # Build the non-shared part of the network
+    latent_policy = latent
+    latent_value = latent
+
+    return latent_policy, latent_value
+
+
 class AttentionPolicy(ActorCriticPolicy):
     """
     Policy object that implements actor critic, using a feed forward neural network.
@@ -93,7 +144,7 @@ class AttentionPolicy(ActorCriticPolicy):
     """
 
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=False, layers=None, net_arch=None,
-                 act_fun=tf.tanh, feature_extraction="attention_mlp", **kwargs):
+                 act_fun=tf.tanh, feature_extraction="attention_mlp", n_object=2, **kwargs):
         super(AttentionPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=reuse,
                                               scale=(feature_extraction == "cnn"))
 
@@ -112,8 +163,13 @@ class AttentionPolicy(ActorCriticPolicy):
             net_arch = [dict(vf=layers, pi=layers)]
 
         with tf.variable_scope("model", reuse=reuse):
-            assert feature_extraction == 'attention_mlp'
-            pi_latent, vf_latent = attention_mlp_extractor(tf.layers.flatten(self.processed_obs), n_object=2)
+            # assert feature_extraction == 'attention_mlp'
+            if feature_extraction == 'attention_mlp':
+                pi_latent, vf_latent = attention_mlp_extractor(tf.layers.flatten(self.processed_obs), n_object=n_object)
+            elif feature_extraction == 'self_attention_mlp':
+                pi_latent, vf_latent = self_attention_mlp_extractor(tf.layers.flatten(self.processed_obs), n_object=n_object)
+            else:
+                raise NotImplementedError
             # if feature_extraction == "cnn":
             #     pi_latent = vf_latent = cnn_extractor(self.processed_obs, **kwargs)
             # else:

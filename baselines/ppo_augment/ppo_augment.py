@@ -558,8 +558,8 @@ class PPO2_augment(ActorCriticRLModel):
                     for (loss_val, loss_name) in zip(loss_vals, self.loss_names):
                         logger.logkv(loss_name, loss_val)
                     logger.logkv("augment_steps", augment_steps)
-                    logger.logkv("original_success", original_success)
-                    logger.logkv("total_success", total_success)
+                    # logger.logkv("original_success", original_success)
+                    # logger.logkv("total_success", total_success)
                     logger.logkv("self_aug_ratio", np.mean(runner.self_aug_ratio))
                     logger.dumpkvs()
 
