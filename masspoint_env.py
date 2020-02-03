@@ -547,7 +547,7 @@ class MasspointMazeEnv(MasspointPushEnv, utils.EzPickle):
         self.random_ratio = random_ratio
         self.random_pusher = random_pusher
         MasspointPushEnv.__init__(
-            self, XML_PATH, n_substeps=10,
+            self, XML_PATH, n_substeps=5,
             target_in_the_air=False, target_offset=0.0,
             obj_range=2.0, target_range=2.0, distance_threshold=0.30,
             initial_qpos=initial_qpos, reward_type=reward_type, n_object=0)
@@ -653,6 +653,6 @@ class MasspointMazeEnv(MasspointPushEnv, utils.EzPickle):
         self.viewer.cam.elevation = -60.
 
     def inside_wall(self, pos):
-        if abs(pos[0] - self.pos_wall0[0]) < self.size_wall[0] and abs(pos[1] - 1.5) < 1.5:
+        if abs(pos[0] - self.pos_wall0[0]) < self.size_wall[0] and abs(pos[1] - 2.0) < 2.0:
             return True
         return False

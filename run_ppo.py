@@ -174,6 +174,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         n_steps = 2048
         if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
             n_steps = 8192
+        elif 'MasspointMaze' in env_name:
+            n_steps = 1024
 
         policy = 'MlpPolicy'
         if 'FetchStack' in env_name:

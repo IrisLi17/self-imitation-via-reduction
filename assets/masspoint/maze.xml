@@ -22,7 +22,7 @@
 		<geom name="bound1" pos="5.2 2.5 0.25" size="0.2 2.9 0.25" type="box" mass="2000" material="table_mat"></geom>
 		<geom name="bound2" pos="2.5 -0.2 0.25" size="2.5 0.2 0.25" type="box" mass="2000" material="table_mat"></geom>
 		<geom name="bound3" pos="2.5 5.2 0.25" size="2.5 0.2 0.25" type="box" mass="2000" material="table_mat"></geom>
-		<geom name="wall0" pos="2.5 1.5 0.25" size="0.15 1.5 0.25" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
+		<geom name="wall0" pos="2.5 2.0 0.25" size="0.15 2.0 0.25" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
         <!--geom name="wall1" pos="2.5 4.0 0.25" size="0.15 1.0 0.25" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom!-->
 
 		<body pos="0 0 0" name="masspoint">
