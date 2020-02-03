@@ -174,6 +174,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         n_steps = 2048
         if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
             n_steps = 8192
+        elif 'MasspointMaze' in env_name:
+            n_steps = 1024
 
         policy = 'MlpPolicy'
         if 'FetchStack' in env_name:
@@ -237,7 +239,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 if 'FetchStack' in env_name:
                     tasks = ['pick and place', 'stack']
                     ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)
-                            + ', task: ' + tasks[int(obs[0][-2*goal_dim-1])])
+                            + ', task: ' + tasks[np.argmax(obs[0][-2*goal_dim-2:-2*goal_dim])])
             images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)

@@ -10,7 +10,7 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=256):
     # value_only_layers = []  # Layer sizes of the network that only belongs to the value network
 
     agent_idx = np.concatenate([np.arange(3), np.arange(3+6*n_object, 3+6*n_object+2),
-                                np.arange(3+6*n_object+2+9*n_object, 3+6*n_object+2+9*n_object+5+2*(3+n_object))])
+                                np.arange(3+6*n_object+2+9*n_object, 3+6*n_object+2+9*n_object+7+2*(3+n_object))])
     self_in = tf.gather(flat_observations, agent_idx, axis=1)
     # self_in = np.concatenate([flat_observations[:, :3], flat_observations[:, 3 + 6 * n_object:3 + 6 * n_object + 2],
     #                           flat_observations[:, 3+6*n_object+2+9*n_object:]], axis=1)
@@ -74,7 +74,7 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=256):
 def self_attention_mlp_extractor(flat_observations, n_object=3, n_units=256):
     agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
                                 np.arange(3 + 6 * n_object + 2 + 9 * n_object,
-                                          3 + 6 * n_object + 2 + 9 * n_object + 5 + 2 * (3 + n_object))])
+                                          3 + 6 * n_object + 2 + 9 * n_object + 7 + 2 * (3 + n_object))])
     self_in = tf.gather(flat_observations, agent_idx, axis=1)
     self_out = self_in
     # Maybe nonlinear and more layers
@@ -89,7 +89,7 @@ def self_attention_mlp_extractor(flat_observations, n_object=3, n_units=256):
              np.arange(3 + 6 * n_object + 2 + 3 * i, 3 + 6 * n_object + 2 + 3 * (i + 1)),
              np.arange(3 + 9 * n_object + 2 + 3 * i, 3 + 9 * n_object + 2 + 3 * (i + 1)),
              np.arange(3 + 12 * n_object + 2 + 3 * i, 3 + 12 * n_object + 2 + 3 * (i + 1)),
-             np.arange(3 + 15 * n_object + 2 + 5 + 3 + n_object, 3 + 15 * n_object + 2 + 5 + 2 * (3 + n_object))])
+             np.arange(3 + 15 * n_object + 2 + 7 + 3 + n_object, 3 + 15 * n_object + 2 + 7 + 2 * (3 + n_object))])
         object_in = tf.gather(flat_observations, _object_idx, axis=1)
         assert self_in.shape[1] + n_object * (object_in.shape[1] - (3 + n_object)) == flat_observations.shape[1], (
         self_out.shape, object_in.shape)
