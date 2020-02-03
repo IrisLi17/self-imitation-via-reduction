@@ -243,7 +243,7 @@ class ParallelRunner2(AbstractEnvRunner):
                         is_self_aug = temp_subgoals[idx][3]
                         transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
                         augment_obs_buf, augment_act_buf, augment_done_buf, augment_reward_buf = zip(*transitions)
-                        print(augment_obs_buf)
+                        # print(augment_obs_buf)
                         augment_value_buf = self.model.value(np.array(augment_obs_buf))
                         augment_neglogp_buf = self.model.sess.run(self.model.aug_neglogpac_op,
                                                                   {self.model.train_aug_model.obs_ph: np.array(augment_obs_buf),
