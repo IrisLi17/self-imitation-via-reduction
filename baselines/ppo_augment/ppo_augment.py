@@ -421,7 +421,7 @@ class PPO2_augment(ActorCriticRLModel):
                 cliprange_now = self.cliprange(frac)
                 cliprange_vf_now = cliprange_vf(frac)
                 if self.curriculum:
-                    _ratio = max(1.0 - 2 * (update - 1.0) / n_updates, 0.0)
+                    _ratio = max(1.0 - (update - 1.0) / n_updates, 0.0)
                     self.env.env_method('set_random_ratio', _ratio)
                     print('Set random_ratio to', self.env.get_attr('random_ratio')[0])
                 aug_success_ratio = (total_success - original_success) / (total_success + 1e-8)
