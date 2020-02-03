@@ -50,7 +50,7 @@ class PPO2_augment(ActorCriticRLModel):
     def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
                  cliprange_vf=None, n_candidate=4, dim_candidate=2, parallel=False, reuse_times=1, start_augment=0,
-                 horizon=100, aug_adv_weight=1.0,
+                 horizon=100, aug_adv_weight=1.0, curriculum=False,
                  verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
@@ -74,6 +74,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.dim_candidate = dim_candidate
         self.parallel = parallel
         self.start_augment = start_augment
+        self.curriculum = curriculum
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
 
@@ -388,14 +389,20 @@ class PPO2_augment(ActorCriticRLModel):
                 runner = Runner(env=self.env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
                                 aug_env=self.aug_env, n_candidate=self.n_candidate)
             else:
-                from baselines.ppo_augment.parallel_runner import ParallelRunner
-                from baselines.ppo_augment.parallel_runner2 import ParallelRunner2
-                # runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
-                #                         n_candidate=self.n_candidate, horizon=self.horizon)
-                runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
-                                         gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
-                                         dim_candidate=self.dim_candidate,
-                                         horizon=self.horizon)
+                if self.env.get_attr('n_object')[0] > 0:
+                    from baselines.ppo_augment.parallel_runner2 import ParallelRunner2
+                    # runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
+                    #                         n_candidate=self.n_candidate, horizon=self.horizon)
+                    runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                             gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                             dim_candidate=self.dim_candidate,
+                                             horizon=self.horizon)
+                else:
+                    # Maze.
+                    from baselines.ppo_augment.parallel_runner2_maze import ParallelRunner2
+                    runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                             gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                             dim_candidate=self.dim_candidate, horizon=self.horizon)
             self.episode_reward = np.zeros((self.n_envs,))
 
             ep_info_buf = deque(maxlen=100)
@@ -413,6 +420,10 @@ class PPO2_augment(ActorCriticRLModel):
                 lr_now = self.learning_rate(frac)
                 cliprange_now = self.cliprange(frac)
                 cliprange_vf_now = cliprange_vf(frac)
+                if self.curriculum:
+                    _ratio = max(1.0 - 2 * (update - 1.0) / n_updates, 0.0)
+                    self.env.env_method('set_random_ratio', _ratio)
+                    print('Set random_ratio to', self.env.get_attr('random_ratio')[0])
                 aug_success_ratio = (total_success - original_success) / (total_success + 1e-8)
                 if aug_success_ratio > 1.0:
                 # if aug_success_ratio > 0.25:

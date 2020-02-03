@@ -9,6 +9,7 @@ from run_ppo_augment import eval_model, log_eval, stack_eval_model
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
+from masspoint_env import MasspointMazeEnv
 from fetch_stack import FetchStackEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
@@ -30,6 +31,7 @@ MASS_ENTRY_POINT = {
     'MasspointPushSingleObstacle-v1': MasspointPushSingleObstacleEnv,
     'MasspointPushSingleObstacle-v2': MasspointPushSingleObstacleEnv_v2,
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
+    'MasspointMaze-v1': MasspointMazeEnv,
 }
 
 PICK_ENTRY_POINT = {
@@ -46,6 +48,7 @@ def arg_parse():
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--random_ratio', default=1.0, type=float)
+    parser.add_argument('--curriculum', action="store_true", default=False)
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
@@ -95,7 +98,8 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     # env.seed(seed + 10000 * rank)
     return env
 
-def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, reward_type, n_object):
+def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, reward_type, n_object,
+         curriculum):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir) 
     
@@ -104,6 +108,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     n_cpu = 32 if not play else 1
     if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
         n_cpu = 64 if not play else 1
+    elif 'MasspointMaze' in env_name:
+        n_cpu = 8 if not play else 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1', 'FetchPickAndPlace-v1']:
         env_kwargs = {}
         # pass
@@ -179,6 +185,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
 
         model = PPO2(policy, env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
                      ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
+                     curriculum=curriculum,
                      )
         print(model.get_parameter_list())
         def callback(_locals, _globals):
@@ -274,4 +281,5 @@ if __name__ == '__main__':
     print('arg parsed')
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
          log_path=args.log_path, load_path=args.load_path, play=args.play, export_gif=args.export_gif,
-         random_ratio=args.random_ratio, reward_type=args.reward_type, n_object=args.n_object)
+         random_ratio=args.random_ratio, reward_type=args.reward_type, n_object=args.n_object,
+         curriculum=args.curriculum)
