@@ -8,7 +8,7 @@ from gym.wrappers import FlattenDictWrapper
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from masspoint_env import MasspointPushSingleObstacleEnv_v2, MasspointPushDoubleObstacleEnv
-from masspoint_env import MasspointMazeEnv
+from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv
 from fetch_stack import FetchStackEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
@@ -32,6 +32,8 @@ MASS_ENTRY_POINT = {
     'MasspointPushDoubleObstacleUnlimit-v1': MasspointPushDoubleObstacleEnv,
     'MasspointMaze-v1': MasspointMazeEnv,
     'MasspointMazeUnlimit-v1': MasspointMazeEnv,
+    'MasspointMaze-v2': MasspointSMazeEnv,
+    'MasspointMazeUnlimit-v2': MasspointSMazeEnv,
 }
 
 PICK_ENTRY_POINT = {
