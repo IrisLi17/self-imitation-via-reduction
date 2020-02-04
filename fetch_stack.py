@@ -175,7 +175,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             else:
                 task_array = [(1, 0), (2, 0), (2, 1), (3, 0), (3, 1), (3, 2)]
                 self.current_nobject, base_nobject = task_array[int(task_rand * len(task_array))]
-            self.tower_height = self.height_offset + base_nobject * self.size_object[2] * 2
+            self.tower_height = self.height_offset + (base_nobject - 1) * self.size_object[2] * 2
             # if self.random_box and self.np_random.uniform() < self.random_ratio:
             if self.random_box:
                 if base_nobject > 0:
@@ -361,7 +361,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         if len(intower_idx):
             self.tower_height = np.max(obs['observation'][3 + 3 * np.array(intower_idx) + 2])
         else:
-            self.tower_height = self.height_offset
+            self.tower_height = self.height_offset - self.size_object[2] * 2
         done = False
         reward, is_success = self.compute_reward_and_success(obs['observation'], self.goal, info)
         info['is_success'] = is_success
