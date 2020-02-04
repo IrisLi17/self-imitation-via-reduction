@@ -390,13 +390,21 @@ class PPO2_augment(ActorCriticRLModel):
                                 aug_env=self.aug_env, n_candidate=self.n_candidate)
             else:
                 if self.env.get_attr('n_object')[0] > 0:
-                    from baselines.ppo_augment.parallel_runner2 import ParallelRunner2
-                    # runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
-                    #                         n_candidate=self.n_candidate, horizon=self.horizon)
-                    runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
-                                             gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
-                                             dim_candidate=self.dim_candidate,
-                                             horizon=self.horizon)
+                    if self.dim_candidate != 3:
+                        from baselines.ppo_augment.parallel_runner2 import ParallelRunner2
+                        # runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
+                        #                         n_candidate=self.n_candidate, horizon=self.horizon)
+                        runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                                 gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                                 dim_candidate=self.dim_candidate,
+                                                 horizon=self.horizon)
+                    else:
+                        # Stacking.
+                        from baselines.ppo_augment.parallel_runner2_stack import ParallelRunner2
+                        runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                                 gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                                 dim_candidate=self.dim_candidate,
+                                                 horizon=self.horizon)
                 else:
                     # Maze.
                     from baselines.ppo_augment.parallel_runner2_maze import ParallelRunner2
@@ -421,7 +429,13 @@ class PPO2_augment(ActorCriticRLModel):
                 cliprange_now = self.cliprange(frac)
                 cliprange_vf_now = cliprange_vf(frac)
                 if self.curriculum:
-                    _ratio = max(1.0 - 2 * (update - 1.0) / n_updates, 0.0)
+                    if 'FetchStack' in self.env.get_attr('spec')[0].id:
+                        # Stacking
+                        _ratio = max(0.7 - 0.8 * (update - 1.0) / n_updates, 0.3) # from 0.7 to 0.3
+                    elif 'FetchPushWallObstacle' in self.env.get_attr('spec')[0].id:
+                        _ratio = max(1.0 - (update - 1.0) / n_updates, 0.0)
+                    else:
+                        raise NotImplementedError
                     self.env.env_method('set_random_ratio', _ratio)
                     print('Set random_ratio to', self.env.get_attr('random_ratio')[0])
                 aug_success_ratio = (total_success - original_success) / (total_success + 1e-8)

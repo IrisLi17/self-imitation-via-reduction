@@ -9,7 +9,7 @@ from run_ppo_augment import eval_model, log_eval, stack_eval_model
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
-from masspoint_env import MasspointMazeEnv
+from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv
 from fetch_stack import FetchStackEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
@@ -32,6 +32,7 @@ MASS_ENTRY_POINT = {
     'MasspointPushSingleObstacle-v2': MasspointPushSingleObstacleEnv_v2,
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
     'MasspointMaze-v1': MasspointMazeEnv,
+    'MasspointMaze-v2': MasspointSMazeEnv,
 }
 
 PICK_ENTRY_POINT = {
@@ -212,7 +213,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         obs = env.reset()
         goal_dim = env.get_attr('goal')[0].shape[0]
         if 'FetchStack' in env_name:
-            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0]:
+            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
         else:
             while np.argmax(obs[0][-goal_dim+3:]) != 0:
@@ -239,7 +240,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 if 'FetchStack' in env_name:
                     tasks = ['pick and place', 'stack']
                     ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)
-                            + ', task: ' + tasks[int(obs[0][-2*goal_dim-1])])
+                            + ', task: ' + tasks[np.argmax(obs[0][-2*goal_dim-2:-2*goal_dim])])
             images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
@@ -256,7 +257,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 #     obs = env.reset()
                 print('episode_reward', episode_reward)
                 if 'FetchStack' in env_name:
-                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0]:
+                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                         obs = env.reset()
                 else:
                     while np.argmax(obs[0][-goal_dim + 3:]) != 0:

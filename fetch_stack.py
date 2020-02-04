@@ -32,6 +32,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             model_path = MODEL_XML_PATH3
         else:
             raise NotImplementedError
+        self.task_mode = 0  # 0: pick and place, 1: stack
         fetch_env.FetchEnv.__init__(
             self, model_path, has_object=True, block_gripper=False, n_substeps=20,
             gripper_extra_height=0.2, target_in_the_air=True, target_offset=0.0,
@@ -40,7 +41,6 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         utils.EzPickle.__init__(self)
         self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
         self.size_obstacle = np.array([0.15, 0.15, 0.15])
-        self.task_mode = 1 # 0: pick and place, 1: stack
 
     def _get_obs(self):
         grip_pos = self.sim.data.get_site_xpos('robot0:grip')
@@ -82,9 +82,11 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             one_hot = self.goal[3:]
             idx = np.argmax(one_hot)
             achieved_goal = np.concatenate([object_pos[3 * idx: 3 * (idx + 1)], one_hot])
+        task_one_hot = np.zeros(2)
+        task_one_hot[self.task_mode] = 1
         obs = np.concatenate([
             grip_pos, object_pos.ravel(), object_rel_pos.ravel(), gripper_state, object_rot.ravel(),
-            object_velp.ravel(), object_velr.ravel(), grip_velp, gripper_vel,
+            object_velp.ravel(), object_velr.ravel(), grip_velp, gripper_vel, task_one_hot,
         ])
 
         return {
@@ -100,12 +102,15 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
     def set_goal(self, goal):
         self.goal = goal.copy()
 
-    def switch_obs_goal(self, obs, goal):
+    def switch_obs_goal(self, obs, goal, task):
         obs = obs.copy()
         if isinstance(obs, dict):
             goal_idx = np.argmax(goal[3:])
             obs['achieved_goal'] = np.concatenate([obs['observation'][3 + 3 * goal_idx: 3 + 3 * (goal_idx + 1)], goal[3:]])
             obs['desired_goal'] = goal
+            assert task is not None
+            obs['observation'][-2:] = 0
+            obs['observation'][-2 + task] = 1
         elif isinstance(obs, np.ndarray):
             goal_idx = np.argmax(goal[3:])
             obs_dim = self.observation_space['observation'].shape[0]
@@ -113,6 +118,9 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             obs[obs_dim:obs_dim+3] = obs[3 + goal_idx * 3: 3 + (goal_idx + 1) * 3]
             obs[obs_dim+3:obs_dim+goal_dim] = goal[3:]
             obs[obs_dim+goal_dim:obs_dim+goal_dim*2] = goal[:]
+            assert task is not None
+            obs[obs_dim - 2:obs_dim] = 0
+            obs[obs_dim - 2 + task] = 1
         else:
             raise TypeError
         return obs
@@ -128,7 +136,10 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         self.current_nobject = current_nobject
 
     def set_task_mode(self, task_mode):
-        self.task_mode = task_mode
+        self.task_mode = int(task_mode)
+
+    def set_random_ratio(self, random_ratio):
+        self.random_ratio = random_ratio
 
     def _reset_sim(self):
         self.sim.set_state(self.initial_state)
@@ -147,17 +158,32 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                         return False
             return True
 
+        # Set task.
+        if self.np_random.uniform() < self.random_ratio:
+            self.task_mode = 0 # pick and place
+        else:
+            self.task_mode = 1
         # Randomize start position of object.
         if self.has_object:
-            self.current_nobject = np.random.randint(0, self.n_object) + 1
-            self.sample_easy = False
+            # self.current_nobject = np.random.randint(0, self.n_object) + 1
+            # self.sample_easy = (self.task_mode == 1)
+            self.has_base = False
+            task_rand = self.np_random.uniform()
+            if self.n_object == 2:
+                task_array = [(1, 0), (2, 0), (2, 1)]
+                self.current_nobject, base_nobject = task_array[int(task_rand * len(task_array))]
+            else:
+                task_array = [(1, 0), (2, 0), (2, 1), (3, 0), (3, 1), (3, 2)]
+                self.current_nobject, base_nobject = task_array[int(task_rand * len(task_array))]
+            self.tower_height = self.height_offset + (base_nobject - 1) * self.size_object[2] * 2
             # if self.random_box and self.np_random.uniform() < self.random_ratio:
             if self.random_box:
-                if self.np_random.uniform() < self.random_ratio and self.current_nobject > 1:
-                    self.sample_easy = True
+                if base_nobject > 0:
+                    self.has_base = True
                     objects_xpos = []
-                    base_nobject = np.random.randint(1, self.current_nobject)
-                    self.maybe_goal_xy = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+                    # base_nobject = np.random.randint(1, self.current_nobject)
+                    self.maybe_goal_xy = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
+                                                                                                self.obj_range, size=2)
                     for i in range(base_nobject):
                         objects_xpos.append(np.concatenate([self.maybe_goal_xy.copy(), [self.height_offset + i * 2 * self.size_object[2]]]))
                     for i in range(base_nobject, self.current_nobject):
@@ -196,36 +222,38 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
         if not hasattr(self, 'current_nobject'):
             self.current_nobject = self.n_object
-        if not hasattr(self, 'sample_easy'):
-            self.sample_easy = False
-        # if self.np_random.uniform() < 0.3 or self.sample_easy:
-        #     self.task_mode = 1
-        # else:
-        #     self.task_mode = 0
-        # All stacking
-        if self.sample_easy:
-            goal = np.concatenate([self.maybe_goal_xy, [self.height_offset + self.size_object[2] * 2 * (self.current_nobject - 1)]])
-            g_idx = np.random.randint(self.current_nobject)
-            while abs(self.sim.data.get_joint_qpos('object%d:joint' % g_idx)[0] - self.maybe_goal_xy[0]) < self.size_object[0] \
-                    and abs(self.sim.data.get_joint_qpos('object%d:joint' % g_idx)[1] - self.maybe_goal_xy[1]) < self.size_object[1]:
+        # if not hasattr(self, 'sample_easy'):
+        #     self.sample_easy = False
+
+        if self.task_mode == 1:
+            if self.has_base:
+                # base_nobject > 1
+                goal = np.concatenate([self.maybe_goal_xy, [self.height_offset + self.size_object[2] * 2 * (self.current_nobject - 1)]])
+                g_idx = np.random.randint(self.current_nobject)
+                _count = 0
+                while abs(self.sim.data.get_joint_qpos('object%d:joint' % g_idx)[0] - self.maybe_goal_xy[0]) < self.size_object[0] \
+                        and abs(self.sim.data.get_joint_qpos('object%d:joint' % g_idx)[1] - self.maybe_goal_xy[1]) < self.size_object[1]:
+                    _count += 1
+                    if _count > 100:
+                        print(self.maybe_goal_xy, self.sim.data.get_joint_qpos('object0:joint'), self.sim.data.get_joint_qpos('object1:joint'))
+                        print(self.current_nobject, self.n_object)
+                        raise RuntimeError
+                    g_idx = np.random.randint(self.current_nobject)
+            else:
+                goal = np.concatenate([self.initial_gripper_xpos[:2] + self.np_random.uniform(
+                    -self.target_range, self.target_range, size=2), [self.height_offset]])
                 g_idx = np.random.randint(self.current_nobject)
             one_hot = np.zeros(self.n_object)
             one_hot[g_idx] = 1
         else:
+            # Pick and place
             g_idx = np.random.randint(self.current_nobject)
             one_hot = np.zeros(self.n_object)
             one_hot[g_idx] = 1
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
             goal[2] = self.height_offset
-            level = np.random.randint(0, self.current_nobject)
-            goal[2] += self.size_object[2] * 2 * level
-            # if self.task_mode == 1:
-            #     level = np.random.randint(0, self.current_nobject)
-            #     goal[2] += self.size_object[2] * 2 * level
-            # elif self.np_random.uniform() < 0.5:
-            #     # level = np.random.randint(1, self.n_object)
-            #     goal[2] += self.np_random.uniform(0, 0.45)
-            #     # goal[2] += self.size_object[2] * 2 * level
+            if self.np_random.uniform() < 0.5:
+                goal[2] += self.np_random.uniform(0, 0.45)
         goal = np.concatenate([goal, one_hot])
         return goal.copy()
 
@@ -237,24 +265,26 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         return r
 
     def compute_reward_and_success(self, observation, goal, info):
-        task_mode = observation[self.observation_space['observation'].shape[0] - 1]
+        observation_dim = self.observation_space['observation'].shape[0]
+        goal_dim = self.observation_space['achieved_goal'].shape[0]
+        task_mode = np.argmax(observation[observation_dim - 2: observation_dim])
         one_hot = goal[3:]
         idx = np.argmax(one_hot)
         # parse the corresponding object position from observation
         achieved_goal = observation[3 + 3 * idx: 3 + 3 * (idx + 1)]
         if isinstance(info, dict) and isinstance(info['previous_obs'], np.ndarray):
-            observation_dim = self.observation_space['observation'].shape[0]
-            goal_dim = self.observation_space['achieved_goal'].shape[0]
             info['previous_obs'] = dict(observation=info['previous_obs'][:observation_dim],
                                         achieved_goal=info['previous_obs'][observation_dim: observation_dim + goal_dim],
                                         desired_goal=info['previous_obs'][observation_dim + goal_dim:])
         if task_mode == 0:
-            raise NotImplementedError
             r = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal[0:3], info)
             if self.reward_type == 'dense':
                 previous_achieved_goal = info['previous_obs']['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
                 r = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(achieved_goal - goal[0:3])
-            success = np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold
+            else:
+                if abs(achieved_goal[2] - goal[2]) > 0.01:
+                    r = -1
+            success = np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold and (achieved_goal[2] - goal[2]) < 0.01
             if self.reward_type == 'dense':
                 r += success
         else:
@@ -324,6 +354,14 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         self._step_callback()
         obs = self._get_obs()
 
+        intower_idx = list(filter(lambda idx: np.linalg.norm(obs['observation'][3 + 3 * idx : 3 + 3 * idx + 2] - obs['desired_goal'][:2]) < 0.025
+                                              and abs((obs['observation'][3 + 3 * idx + 2] - self.height_offset)
+                                                      - 0.05 * round((obs['observation'][3 + 3 * idx + 2] - self.height_offset) / 0.05)) < 0.01,
+                                  np.arange(self.n_object)))
+        if len(intower_idx):
+            self.tower_height = np.max(obs['observation'][3 + 3 * np.array(intower_idx) + 2])
+        else:
+            self.tower_height = self.height_offset - self.size_object[2] * 2
         done = False
         reward, is_success = self.compute_reward_and_success(obs['observation'], self.goal, info)
         info['is_success'] = is_success
