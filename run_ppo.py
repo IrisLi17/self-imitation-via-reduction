@@ -216,6 +216,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
         else:
+            if 'FetchPush' in env_name:
+                env.env_method('set_goal', np.array([1.2, 0.75, 0.425, 1, 0]))
+                obs = env.env_method('get_obs')
+                obs[0] = np.concatenate([obs[0][key] for key in ['observation', 'achieved_goal', 'desired_goal']])
             while np.argmax(obs[0][-goal_dim+3:]) != 0:
                 obs = env.reset()
         print('goal', obs[0][-goal_dim:])
@@ -250,7 +254,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             if not export_gif:
                 plt.pause(0.1)
             else:
-                plt.savefig(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % i))
+                plt.imsave(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % i), img)
+                # plt.savefig(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % i))
             if done:
                 # obs = env.reset()
                 # while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
@@ -266,9 +271,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 episode_reward = 0.0
                 frame_idx = 0
                 num_episode += 1
-                if num_episode >= 10:
+                if num_episode >= 1:
                     break
         # imageio.mimsave(env_name + '.gif', images)
+        exit()
         if export_gif:
             os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
