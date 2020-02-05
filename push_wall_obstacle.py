@@ -820,7 +820,7 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
         for idx, value in enumerate(lookat):
             self.viewer.cam.lookat[idx] = value
         self.viewer.cam.distance = 1.0
-        self.viewer.cam.azimuth = 120.
+        self.viewer.cam.azimuth = 100.
         self.viewer.cam.elevation = -45.
 
 class FetchPushWallObstacleEnv_v5(fetch_env.FetchEnv, utils.EzPickle):

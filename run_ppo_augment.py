@@ -266,7 +266,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             from utils.attention_policy import AttentionPolicy
             policy = AttentionPolicy
             policy_kwargs["n_object"] = n_object
-            policy_kwargs["feature_extraction"] = "self_attention_mlp"
+            policy_kwargs["feature_extraction"] = "attention_mlp"
         if 'FetchStack' in env_name:
             dim_candidate = 3
         else:

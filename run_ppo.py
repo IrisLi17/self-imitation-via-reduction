@@ -183,7 +183,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             from utils.attention_policy import AttentionPolicy
             policy = AttentionPolicy
             policy_kwargs["n_object"] = n_object
-            policy_kwargs["feature_extraction"] = "self_attention_mlp"
+            policy_kwargs["feature_extraction"] = "attention_mlp"
         print(policy_kwargs)
 
         model = PPO2(policy, env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
@@ -217,6 +217,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 obs = env.reset()
         else:
             if 'FetchPush' in env_name:
+                obs = env.reset()
+                while not (obs[0][6] > 1.25 and obs[0][6] < 1.33 and obs[0][7] < 0.61 and obs[0][4] > 0.7 and obs[0][4] < 0.8):
+                    obs = env.reset()
                 env.env_method('set_goal', np.array([1.2, 0.75, 0.425, 1, 0]))
                 obs = env.env_method('get_obs')
                 obs[0] = np.concatenate([obs[0][key] for key in ['observation', 'achieved_goal', 'desired_goal']])
@@ -271,10 +274,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 episode_reward = 0.0
                 frame_idx = 0
                 num_episode += 1
-                if num_episode >= 1:
+                if num_episode >= 10:
                     break
         # imageio.mimsave(env_name + '.gif', images)
-        exit()
         if export_gif:
             os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
