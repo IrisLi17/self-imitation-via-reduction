@@ -19,12 +19,19 @@ def smooth(array, window):
 
 if __name__ == '__main__':
     folder_name = sys.argv[1]
-    mode = sys.argv[2]
-    assert mode in ['success_rate', 'augment', 'eval']
+    # mode = sys.argv[2]
+    # assert mode in ['success_rate', 'augment', 'eval']
     plt.style.use("ggplot")
-    plt.rcParams.update({'font.size': 20, 'legend.fontsize': 20,
-                         'axes.formatter.limits': [-5, 3]})
-    fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+    # plt.rcParams.update({'font.size': 20, 'legend.fontsize': 20,
+    #                      'axes.formatter.limits': [-5, 3]})
+    wspace = .3
+    bottom = .3
+    margin = .1
+    left = .08
+    width = 3.5 / ((1. - left) / (2 + wspace + margin / 2))
+    height = 1.5 / ((1. - bottom) / (1 + margin / 2))
+
+    fig, axes = plt.subplots(1, 3, figsize=(width, height))
     for subfolder in ['sir_re1', 'sir_re4', 'sir_re8', 'sir_re16']:
         progress_file = os.path.join(folder_name, subfolder, '0', 'progress.csv')
         eval_file = os.path.join(folder_name, subfolder, '0', 'eval.csv')
@@ -40,18 +47,33 @@ if __name__ == '__main__':
         augment_ratio = smooth(augment_ratio[:L], 20)
         augment_number = smooth(augment_steps[:L], 20)
         eval_reward = smooth(eval_reward[:L], 20)
-        if mode == 'success_rate':
-            ax.plot(total_timesteps, success_rate, label=subfolder.upper())
-            ax.set_ylabel('success rate')
-        elif mode == 'augment':
-            ax.plot(total_timesteps, augment_number, label=subfolder.upper())
-            ax.set_ylabel('number of augmented data')
-        elif mode == 'eval':
-            ax.plot(total_timesteps, eval_reward, label=subfolder.upper())
-            ax.set_ylabel('success rate')
-        ax.set_xlabel('samples')
-    if mode == 'augment':
-        plt.legend(loc="lower right", bbox_to_anchor=(1.0, 0.0), ncol=1)
-    plt.savefig('reuse_' + mode + '.png')
+        # if mode == 'success_rate':
+        #     ax.plot(total_timesteps, success_rate, label=subfolder.upper())
+        #     ax.set_ylabel('success rate')
+        # elif mode == 'augment':
+        #     ax.plot(total_timesteps, augment_number, label=subfolder.upper())
+        #     ax.set_ylabel('number of augmented data')
+        # elif mode == 'eval':
+        #     ax.plot(total_timesteps, eval_reward, label=subfolder.upper())
+        #     ax.set_ylabel('success rate')
+        # ax.set_xlabel('samples')
+        axes[0].plot(total_timesteps, success_rate, label=subfolder.upper())
+        axes[0].set_xlabel('samples')
+        axes[0].set_ylabel('success rate')
+        axes[1].set_xlabel('samples')
+        axes[1].plot(total_timesteps, eval_reward, label=subfolder.upper())
+        axes[1].set_ylabel('success rate')
+        axes[2].plot(total_timesteps, augment_ratio, label=subfolder.upper())
+        axes[2].set_xlabel('samples')
+        axes[2].set_ylabel('ratio of aug. data')
+    # axes[0].get_legend().remove()
+    # axes[1].get_legend().remove()
+    # axes[2].get_legend().remove()
+
+    # if mode == 'augment':
+    #     plt.legend(loc="lower right", bbox_to_anchor=(1.0, 0.0), ncol=1)
+    fig.legend(labels=['RE1', 'RE4', 'RE8', 'RE16'], loc="lower center", bbox_to_anchor=(0.5, -0.03), ncol=4)
+    fig.subplots_adjust(top=1. - margin / height, bottom=0.31, wspace=wspace, left=left, right=1. - margin / width)
+    plt.savefig('reuse_ablation' + '.pdf')
 
 
