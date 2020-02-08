@@ -50,7 +50,7 @@ class PPO2_augment(ActorCriticRLModel):
     def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
                  cliprange_vf=None, n_candidate=4, dim_candidate=2, parallel=False, reuse_times=1, start_augment=0,
-                 horizon=100, aug_adv_weight=1.0, curriculum=False,
+                 horizon=100, aug_adv_weight=1.0, curriculum=False, self_imitate=False,
                  verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
@@ -75,6 +75,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.parallel = parallel
         self.start_augment = start_augment
         self.curriculum = curriculum
+        self.self_imitate = self_imitate
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
 
@@ -388,6 +389,11 @@ class PPO2_augment(ActorCriticRLModel):
             if not self.parallel:
                 runner = Runner(env=self.env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
                                 aug_env=self.aug_env, n_candidate=self.n_candidate)
+            elif self.self_imitate:
+                from baselines.ppo_augment.sil_runner import SILRunner
+                runner = SILRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                                 gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                                 dim_candidate=self.dim_candidate, horizon=self.horizon)
             else:
                 if self.env.get_attr('n_object')[0] > 0:
                     if self.dim_candidate != 3:

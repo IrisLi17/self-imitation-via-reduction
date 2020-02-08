@@ -53,6 +53,7 @@ def arg_parse():
     parser.add_argument('--aug_adv_weight', default=1.0, type=float)
     parser.add_argument('--n_subgoal', default=4, type=int)
     parser.add_argument('--parallel', action="store_true", default=False)
+    parser.add_argument('--self_imitate', action="store_true", default=False)
     parser.add_argument('--start_augment', type=float, default=0)
     parser.add_argument('--reuse_times', default=1, type=int)
     parser.add_argument('--reward_type', default="sparse", type=str)
@@ -185,7 +186,7 @@ def log_traj(aug_obs, aug_done, index, goal_dim=5, n_obstacle=1):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, aug_clip, n_subgoal,
-         parallel, start_augment, reuse_times, aug_adv_weight, reward_type, n_object, curriculum):
+         parallel, start_augment, reuse_times, aug_adv_weight, reward_type, n_object, curriculum, self_imitate):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir)
 
@@ -241,7 +242,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     else:
         # aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_subgoal)])
         if 'FetchStack' in env_name:
-            aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(64)])
+            aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(32)])
         else:
             aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(min(32, n_cpu))])
     print(aug_env)
@@ -279,7 +280,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                              cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
                              policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
                              reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
-                             curriculum=curriculum,
+                             curriculum=curriculum, self_imitate=self_imitate,
                              )
 
         def callback(_locals, _globals):
@@ -370,4 +371,4 @@ if __name__ == '__main__':
          random_ratio=args.random_ratio, aug_clip=args.aug_clip, n_subgoal=args.n_subgoal,
          parallel=args.parallel, start_augment=int(args.start_augment), reuse_times=args.reuse_times,
          aug_adv_weight=args.aug_adv_weight, reward_type=args.reward_type, n_object=args.n_object,
-         curriculum=args.curriculum)
+         curriculum=args.curriculum, self_imitate=args.self_imitate)
