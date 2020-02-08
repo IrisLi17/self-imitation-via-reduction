@@ -465,10 +465,10 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
                 return True
             return False
 
-        if hasattr(self, 'sample_hard') and self.sample_hard:
-            g_idx = 0
-            one_hot = np.zeros(self.n_object)
-            one_hot[g_idx] = 1
+        if hasattr(self, 'sample_hard') and self.sample_hard and g_idx == 0:
+            # g_idx = 0
+            # one_hot = np.zeros(self.n_object)
+            # one_hot[g_idx] = 1
             if hasattr(self, 'sample_harder') and self.sample_harder:
                 # print('sample harder')
                 masspoint_pos = self.sim.data.get_site_xpos('masspoint')
