@@ -214,6 +214,8 @@ class PPO2_augment(ActorCriticRLModel):
                     self.vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
 
                     ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
+                    if self.self_imitate:
+                        ratio = tf.exp(self.old_neglog_pac_ph - tf.minimum(neglogpac, 100))
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
                                                                   self.clip_range_ph)
@@ -536,6 +538,8 @@ class PPO2_augment(ActorCriticRLModel):
                                 neglogpacs[_recompute_inds] = self.sess.run(
                                     self.aug_neglogpac_op, {self.train_aug_model.obs_ph: obs[_recompute_inds],
                                                             self.aug_action_ph: actions[_recompute_inds]})
+                                if self.self_imitate:
+                                    neglogpacs[_recompute_inds] = np.minimum(neglogpacs[_recompute_inds], 100)
                             slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs, is_demo))
                             # if len(self.aug_obs) > batch_size:
                             #     aug_inds = np.random.choice(len(self.aug_obs), batch_size)
