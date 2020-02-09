@@ -241,7 +241,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                     g_idx = np.random.randint(self.current_nobject)
             else:
                 goal = np.concatenate([self.initial_gripper_xpos[:2] + self.np_random.uniform(
-                    -self.target_range, self.target_range, size=2), [self.height_offset]])
+                    -self.target_range, self.target_range, size=2), [self.height_offset + self.size_object[2] * 2 * (self.current_nobject - 1)]])
                 g_idx = np.random.randint(self.current_nobject)
             one_hot = np.zeros(self.n_object)
             one_hot[g_idx] = 1
