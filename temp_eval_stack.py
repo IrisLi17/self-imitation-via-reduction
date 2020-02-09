@@ -10,8 +10,9 @@ def eval_model(n_obj, is_stack):
     success_count = 0
     for i in range(20):
         obs = env.reset()
-        while not (env.unwrapped.current_nobject != n_obj):
+        while not (env.unwrapped.current_nobject == n_obj):
             obs = env.reset()
+        # print('goal', obs[-goal_dim:], 'has base', env.has_base)
         done = False
         while not done:
             action, _ = model.predict(obs)
