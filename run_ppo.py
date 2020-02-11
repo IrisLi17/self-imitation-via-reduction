@@ -186,7 +186,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             policy_kwargs["feature_extraction"] = "attention_mlp"
         print(policy_kwargs)
 
-        model = PPO2(policy, env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
+        model = PPO2(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
                      ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      curriculum=curriculum,
                      )

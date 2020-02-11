@@ -12,6 +12,7 @@ from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_u
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
 from stable_baselines.a2c.utils import total_episode_reward_logger
+from utils.eval_stack import pp_eval_model
 
 
 class PPO2(ActorCriticRLModel):
@@ -47,7 +48,7 @@ class PPO2(ActorCriticRLModel):
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, policy, env, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4, vf_coef=0.5,
+    def __init__(self, policy, env, eval_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4, vf_coef=0.5,
                  max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2, cliprange_vf=None,
                  curriculum=False,
                  verbose=0, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
@@ -56,6 +57,7 @@ class PPO2(ActorCriticRLModel):
         super(PPO2, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
                                    _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs)
 
+        self.eval_env = eval_env
         self.learning_rate = learning_rate
         self.cliprange = cliprange
         self.cliprange_vf = cliprange_vf
@@ -324,6 +326,7 @@ class PPO2(ActorCriticRLModel):
             t_first_start = time.time()
 
             n_updates = total_timesteps // self.n_batch
+            start_decay = n_updates
             for update in range(1, n_updates + 1):
                 assert self.n_batch % self.nminibatches == 0
                 batch_size = self.n_batch // self.nminibatches
@@ -335,7 +338,11 @@ class PPO2(ActorCriticRLModel):
                 if self.curriculum:
                     if 'FetchStack' in self.env.get_attr('spec')[0].id:
                         # Stacking
-                        _ratio = max(0.7 - 0.8 * (update - 1.0) / n_updates, 0.3) # from 0.7 to 0.3
+                        pp_sr = pp_eval_model(self.eval_env, self)
+                        print('Pick-and-place success rate', pp_sr)
+                        if start_decay == n_updates and pp_sr > 0.5:
+                            start_decay = update
+                        _ratio = np.clip(0.7 - 0.8 * (update - start_decay) / n_updates, 0.3, 0.7)  # from 0.7 to 0.3
                     elif 'FetchPushWallObstacle' in self.env.get_attr('spec')[0].id:
                         _ratio = max(1.0 - (update - 1.0) / n_updates, 0.0)
                     else:

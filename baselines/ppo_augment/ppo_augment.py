@@ -12,6 +12,7 @@ from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_u
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
 from stable_baselines.a2c.utils import total_episode_reward_logger
+from utils.eval_stack import pp_eval_model
 
 
 class PPO2_augment(ActorCriticRLModel):
@@ -47,7 +48,7 @@ class PPO2_augment(ActorCriticRLModel):
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
+    def __init__(self, policy, env, aug_env=None, eval_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
                  cliprange_vf=None, n_candidate=4, dim_candidate=2, parallel=False, reuse_times=1, start_augment=0,
                  horizon=100, aug_adv_weight=1.0, curriculum=False, self_imitate=False,
@@ -58,6 +59,7 @@ class PPO2_augment(ActorCriticRLModel):
                                            _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs)
 
         self.aug_env = aug_env
+        self.eval_env = eval_env
         self.learning_rate = learning_rate
         self.cliprange = cliprange
         self.cliprange_vf = cliprange_vf
@@ -212,6 +214,8 @@ class PPO2_augment(ActorCriticRLModel):
                     self.vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
 
                     ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
+                    if self.self_imitate:
+                        ratio = tf.exp(self.old_neglog_pac_ph - tf.minimum(neglogpac, 100))
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
                                                                   self.clip_range_ph)
@@ -426,6 +430,7 @@ class PPO2_augment(ActorCriticRLModel):
             total_success = 0
             original_success = 0
             _reuse_times = self.reuse_times
+            start_decay = n_updates
             for update in range(1, n_updates + 1):
                 assert self.n_batch % self.nminibatches == 0
                 batch_size = self.n_batch // self.nminibatches
@@ -437,7 +442,11 @@ class PPO2_augment(ActorCriticRLModel):
                 if self.curriculum:
                     if 'FetchStack' in self.env.get_attr('spec')[0].id:
                         # Stacking
-                        _ratio = max(0.7 - 0.8 * (update - 1.0) / n_updates, 0.3) # from 0.7 to 0.3
+                        pp_sr = pp_eval_model(self.eval_env, self)
+                        print('Pick-and-place success rate', pp_sr)
+                        if start_decay == n_updates and pp_sr > 0.5:
+                            start_decay = update
+                        _ratio = np.clip(0.7 - 0.8 * (update - start_decay) / n_updates, 0.3, 0.7) # from 0.7 to 0.3
                     elif 'FetchPushWallObstacle' in self.env.get_attr('spec')[0].id:
                         _ratio = max(1.0 - (update - 1.0) / n_updates, 0.0)
                     else:
@@ -529,6 +538,8 @@ class PPO2_augment(ActorCriticRLModel):
                                 neglogpacs[_recompute_inds] = self.sess.run(
                                     self.aug_neglogpac_op, {self.train_aug_model.obs_ph: obs[_recompute_inds],
                                                             self.aug_action_ph: actions[_recompute_inds]})
+                                if self.self_imitate:
+                                    neglogpacs[_recompute_inds] = np.minimum(neglogpacs[_recompute_inds], 100)
                             slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs, is_demo))
                             # if len(self.aug_obs) > batch_size:
                             #     aug_inds = np.random.choice(len(self.aug_obs), batch_size)

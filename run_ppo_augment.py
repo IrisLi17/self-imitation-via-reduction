@@ -137,6 +137,7 @@ def eval_model(eval_env, model):
 
 def stack_eval_model(eval_env, model):
     env = eval_env
+    env.unwrapped.random_ratio = 0.0
     assert abs(env.unwrapped.random_ratio) < 1e-4
     n_episode = 0
     ep_rewards = []
@@ -275,7 +276,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             dim_candidate = 3
         else:
             dim_candidate = 2
-        model = PPO2_augment(policy, env, aug_env=aug_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
+        model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
                              gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
                              cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
                              policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
