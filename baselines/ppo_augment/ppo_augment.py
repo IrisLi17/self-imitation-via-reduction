@@ -444,7 +444,7 @@ class PPO2_augment(ActorCriticRLModel):
                         # Stacking
                         pp_sr = pp_eval_model(self.eval_env, self)
                         print('Pick-and-place success rate', pp_sr)
-                        if start_decay == n_updates and pp_sr > 0.5:
+                        if start_decay == n_updates and pp_sr > 0.8:
                             start_decay = update
                         _ratio = np.clip(0.7 - 0.8 * (update - start_decay) / n_updates, 0.3, 0.7) # from 0.7 to 0.3
                     elif 'FetchPushWallObstacle' in self.env.get_attr('spec')[0].id:
@@ -504,19 +504,40 @@ class PPO2_augment(ActorCriticRLModel):
                 print([item.shape[0] if item is not None else 0 for item in self.aug_obs])
                 # if self.aug_obs is not None:
                 if augment_steps > 0:
+                    if self.self_imitate and augment_steps / self.n_batch > 0.5:
+                        aug_sample_idx = np.random.randint(0, augment_steps, int(self.n_batch * 0.5))
+                    else:
+                        aug_sample_idx = np.arange(augment_steps)
                     _aug_return = np.concatenate(list(filter(lambda v:v is not None, self.aug_return)), axis=0)
                     _aug_value = np.concatenate(list(filter(lambda v: v is not None, self.aug_value)), axis=0)
                     adv_clip_frac = np.sum((_aug_return - _aug_value) < (np.mean(returns - values) + self.aug_clip * np.std(returns - values))) / _aug_return.shape[0]
                     print('demo adv below average + %f std' % self.aug_clip, adv_clip_frac)
-                    obs = np.concatenate([obs, *(list(filter(lambda v:v is not None, self.aug_obs)))], axis=0)
-                    returns = np.concatenate([returns, *(list(filter(lambda v:v is not None, self.aug_return)))], axis=0)
-                    masks = np.concatenate([masks, *(list(filter(lambda v:v is not None, self.aug_done)))], axis=0)
-                    actions = np.concatenate([actions, *(list(filter(lambda v:v is not None, self.aug_act)))], axis=0)
-                    values = np.concatenate([values, *(list(filter(lambda v:v is not None, self.aug_value)))], axis=0)
-                    neglogpacs = np.concatenate([neglogpacs, *(list(filter(lambda v:v is not None, self.aug_neglogp)))], axis=0)
-                    is_demo = np.concatenate([is_demo, np.ones(augment_steps)], axis=0)
-                    _aug_reward = np.concatenate(list(filter(lambda v:v is not None, self.aug_reward)), axis=0)
-                    total_success += np.sum(_aug_reward)
+                    if self.self_imitate:
+                        _aug_obs = np.concatenate(list(filter(lambda  v: v is not None, self.aug_obs)), axis=0)[aug_sample_idx]
+                        obs = np.concatenate([obs, _aug_obs], axis=0)
+                        _aug_return = _aug_return[aug_sample_idx]
+                        returns = np.concatenate([returns, _aug_return], axis=0)
+                        _aug_mask = np.concatenate(list(filter(lambda v: v is not None, self.aug_done)), axis=0)[aug_sample_idx]
+                        masks = np.concatenate([masks, _aug_mask], axis=0)
+                        _aug_action = np.concatenate(list(filter(lambda v: v is not None, self.aug_act)), axis=0)[aug_sample_idx]
+                        actions = np.concatenate([actions, _aug_action], axis=0)
+                        _aug_value = np.concatenate(list(filter(lambda v: v is not None, self.aug_value)), axis=0)[aug_sample_idx]
+                        values = np.concatenate([values, _aug_value], axis=0)
+                        _aug_neglogpac = np.concatenate(list(filter(lambda v: v is not None, self.aug_neglogp)), axis=0)[aug_sample_idx]
+                        neglogpacs = np.concatenate([neglogpacs, _aug_neglogpac], axis=0)
+                        is_demo = np.concatenate([is_demo, np.ones(len(aug_sample_idx))], axis=0)
+                        _aug_reward = np.concatenate(list(filter(lambda v: v is not None, self.aug_reward)), axis=0)[aug_sample_idx]
+                        total_success += np.sum(_aug_reward)
+                    else:
+                        obs = np.concatenate([obs, *(list(filter(lambda v:v is not None, self.aug_obs)))], axis=0)
+                        returns = np.concatenate([returns, *(list(filter(lambda v:v is not None, self.aug_return)))], axis=0)
+                        masks = np.concatenate([masks, *(list(filter(lambda v:v is not None, self.aug_done)))], axis=0)
+                        actions = np.concatenate([actions, *(list(filter(lambda v:v is not None, self.aug_act)))], axis=0)
+                        values = np.concatenate([values, *(list(filter(lambda v:v is not None, self.aug_value)))], axis=0)
+                        neglogpacs = np.concatenate([neglogpacs, *(list(filter(lambda v:v is not None, self.aug_neglogp)))], axis=0)
+                        is_demo = np.concatenate([is_demo, np.ones(augment_steps)], axis=0)
+                        _aug_reward = np.concatenate(list(filter(lambda v:v is not None, self.aug_reward)), axis=0)
+                        total_success += np.sum(_aug_reward)
                     print('augmented data length', obs.shape[0])
                 self.num_timesteps += self.n_batch
                 ep_info_buf.extend(ep_infos)
