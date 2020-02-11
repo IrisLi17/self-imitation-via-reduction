@@ -8,7 +8,7 @@ def eval_model(n_obj, is_stack):
     env.unwrapped.random_ratio = 0.0 if is_stack else 1.0
     print('Random ratio set to', env.random_ratio)
     success_count = 0
-    for i in range(20):
+    for i in range(50):
         obs = env.reset()
         while not (env.unwrapped.current_nobject == n_obj):
             obs = env.reset()
@@ -18,7 +18,7 @@ def eval_model(n_obj, is_stack):
             action, _ = model.predict(obs)
             obs, _, done, info = env.step(action)
             success_count += info['is_success']
-    return success_count / 20
+    return success_count / 50
 
 if __name__ == '__main__':
     model_path = sys.argv[1]
