@@ -528,6 +528,7 @@ class PPO2_augment(ActorCriticRLModel):
                         is_demo = np.concatenate([is_demo, np.ones(len(aug_sample_idx))], axis=0)
                         _aug_reward = np.concatenate(list(filter(lambda v: v is not None, self.aug_reward)), axis=0)[aug_sample_idx]
                         total_success += np.sum(_aug_reward)
+                        augment_steps = len(aug_sample_idx)
                     else:
                         obs = np.concatenate([obs, *(list(filter(lambda v:v is not None, self.aug_obs)))], axis=0)
                         returns = np.concatenate([returns, *(list(filter(lambda v:v is not None, self.aug_return)))], axis=0)
