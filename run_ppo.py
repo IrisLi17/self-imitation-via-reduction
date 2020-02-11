@@ -186,7 +186,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             policy_kwargs["feature_extraction"] = "attention_mlp"
         print(policy_kwargs)
 
-        model = PPO2(policy, env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
+        model = PPO2(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
                      ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      curriculum=curriculum,
                      )
@@ -213,7 +213,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         obs = env.reset()
         goal_dim = env.get_attr('goal')[0].shape[0]
         if 'FetchStack' in env_name:
-            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
+            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 0:
                 obs = env.reset()
         else:
             if 'FetchPush' in env_name:
@@ -271,7 +271,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 #     obs = env.reset()
                 print('episode_reward', episode_reward)
                 if 'FetchStack' in env_name:
-                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
+                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 0:
                         obs = env.reset()
                 else:
                     while np.argmax(obs[0][-goal_dim + 3:]) != 0:
@@ -280,10 +280,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 episode_reward = 0.0
                 frame_idx = 0
                 num_episode += 1
-                if num_episode >= 1:
+                if num_episode >= 10:
                     break
         # imageio.mimsave(env_name + '.gif', images)
-        exit()
+        # exit()
         if export_gif:
             os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))

@@ -12,6 +12,7 @@ from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_u
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
 from stable_baselines.a2c.utils import total_episode_reward_logger
+from utils.eval_stack import pp_eval_model
 
 
 class PPO2_augment(ActorCriticRLModel):
@@ -47,7 +48,7 @@ class PPO2_augment(ActorCriticRLModel):
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, policy, env, aug_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
+    def __init__(self, policy, env, aug_env=None, eval_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
                  cliprange_vf=None, n_candidate=4, dim_candidate=2, parallel=False, reuse_times=1, start_augment=0,
                  horizon=100, aug_adv_weight=1.0, curriculum=False, self_imitate=False,
@@ -58,6 +59,7 @@ class PPO2_augment(ActorCriticRLModel):
                                            _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs)
 
         self.aug_env = aug_env
+        self.eval_env = eval_env
         self.learning_rate = learning_rate
         self.cliprange = cliprange
         self.cliprange_vf = cliprange_vf
@@ -212,6 +214,8 @@ class PPO2_augment(ActorCriticRLModel):
                     self.vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
 
                     ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
+                    if self.self_imitate:
+                        ratio = tf.exp(self.old_neglog_pac_ph - tf.minimum(neglogpac, 100))
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
                                                                   self.clip_range_ph)
@@ -426,6 +430,7 @@ class PPO2_augment(ActorCriticRLModel):
             total_success = 0
             original_success = 0
             _reuse_times = self.reuse_times
+            start_decay = n_updates
             for update in range(1, n_updates + 1):
                 assert self.n_batch % self.nminibatches == 0
                 batch_size = self.n_batch // self.nminibatches
@@ -437,7 +442,11 @@ class PPO2_augment(ActorCriticRLModel):
                 if self.curriculum:
                     if 'FetchStack' in self.env.get_attr('spec')[0].id:
                         # Stacking
-                        _ratio = max(0.7 - 0.8 * (update - 1.0) / n_updates, 0.3) # from 0.7 to 0.3
+                        pp_sr = pp_eval_model(self.eval_env, self)
+                        print('Pick-and-place success rate', pp_sr)
+                        if start_decay == n_updates and pp_sr > 0.8:
+                            start_decay = update
+                        _ratio = np.clip(0.7 - 0.8 * (update - start_decay) / n_updates, 0.3, 0.7) # from 0.7 to 0.3
                     elif 'FetchPushWallObstacle' in self.env.get_attr('spec')[0].id:
                         _ratio = max(1.0 - (update - 1.0) / n_updates, 0.0)
                     else:
@@ -495,19 +504,40 @@ class PPO2_augment(ActorCriticRLModel):
                 print([item.shape[0] if item is not None else 0 for item in self.aug_obs])
                 # if self.aug_obs is not None:
                 if augment_steps > 0:
+                    if self.self_imitate and augment_steps / self.n_batch > 0.5:
+                        aug_sample_idx = np.random.randint(0, augment_steps, int(self.n_batch * 0.5))
+                    else:
+                        aug_sample_idx = np.arange(augment_steps)
                     _aug_return = np.concatenate(list(filter(lambda v:v is not None, self.aug_return)), axis=0)
                     _aug_value = np.concatenate(list(filter(lambda v: v is not None, self.aug_value)), axis=0)
                     adv_clip_frac = np.sum((_aug_return - _aug_value) < (np.mean(returns - values) + self.aug_clip * np.std(returns - values))) / _aug_return.shape[0]
                     print('demo adv below average + %f std' % self.aug_clip, adv_clip_frac)
-                    obs = np.concatenate([obs, *(list(filter(lambda v:v is not None, self.aug_obs)))], axis=0)
-                    returns = np.concatenate([returns, *(list(filter(lambda v:v is not None, self.aug_return)))], axis=0)
-                    masks = np.concatenate([masks, *(list(filter(lambda v:v is not None, self.aug_done)))], axis=0)
-                    actions = np.concatenate([actions, *(list(filter(lambda v:v is not None, self.aug_act)))], axis=0)
-                    values = np.concatenate([values, *(list(filter(lambda v:v is not None, self.aug_value)))], axis=0)
-                    neglogpacs = np.concatenate([neglogpacs, *(list(filter(lambda v:v is not None, self.aug_neglogp)))], axis=0)
-                    is_demo = np.concatenate([is_demo, np.ones(augment_steps)], axis=0)
-                    _aug_reward = np.concatenate(list(filter(lambda v:v is not None, self.aug_reward)), axis=0)
-                    total_success += np.sum(_aug_reward)
+                    if self.self_imitate:
+                        _aug_obs = np.concatenate(list(filter(lambda  v: v is not None, self.aug_obs)), axis=0)[aug_sample_idx]
+                        obs = np.concatenate([obs, _aug_obs], axis=0)
+                        _aug_return = _aug_return[aug_sample_idx]
+                        returns = np.concatenate([returns, _aug_return], axis=0)
+                        _aug_mask = np.concatenate(list(filter(lambda v: v is not None, self.aug_done)), axis=0)[aug_sample_idx]
+                        masks = np.concatenate([masks, _aug_mask], axis=0)
+                        _aug_action = np.concatenate(list(filter(lambda v: v is not None, self.aug_act)), axis=0)[aug_sample_idx]
+                        actions = np.concatenate([actions, _aug_action], axis=0)
+                        _aug_value = np.concatenate(list(filter(lambda v: v is not None, self.aug_value)), axis=0)[aug_sample_idx]
+                        values = np.concatenate([values, _aug_value], axis=0)
+                        _aug_neglogpac = np.concatenate(list(filter(lambda v: v is not None, self.aug_neglogp)), axis=0)[aug_sample_idx]
+                        neglogpacs = np.concatenate([neglogpacs, _aug_neglogpac], axis=0)
+                        is_demo = np.concatenate([is_demo, np.ones(len(aug_sample_idx))], axis=0)
+                        _aug_reward = np.concatenate(list(filter(lambda v: v is not None, self.aug_reward)), axis=0)[aug_sample_idx]
+                        total_success += np.sum(_aug_reward)
+                    else:
+                        obs = np.concatenate([obs, *(list(filter(lambda v:v is not None, self.aug_obs)))], axis=0)
+                        returns = np.concatenate([returns, *(list(filter(lambda v:v is not None, self.aug_return)))], axis=0)
+                        masks = np.concatenate([masks, *(list(filter(lambda v:v is not None, self.aug_done)))], axis=0)
+                        actions = np.concatenate([actions, *(list(filter(lambda v:v is not None, self.aug_act)))], axis=0)
+                        values = np.concatenate([values, *(list(filter(lambda v:v is not None, self.aug_value)))], axis=0)
+                        neglogpacs = np.concatenate([neglogpacs, *(list(filter(lambda v:v is not None, self.aug_neglogp)))], axis=0)
+                        is_demo = np.concatenate([is_demo, np.ones(augment_steps)], axis=0)
+                        _aug_reward = np.concatenate(list(filter(lambda v:v is not None, self.aug_reward)), axis=0)
+                        total_success += np.sum(_aug_reward)
                     print('augmented data length', obs.shape[0])
                 self.num_timesteps += self.n_batch
                 ep_info_buf.extend(ep_infos)
@@ -529,6 +559,8 @@ class PPO2_augment(ActorCriticRLModel):
                                 neglogpacs[_recompute_inds] = self.sess.run(
                                     self.aug_neglogpac_op, {self.train_aug_model.obs_ph: obs[_recompute_inds],
                                                             self.aug_action_ph: actions[_recompute_inds]})
+                                if self.self_imitate:
+                                    neglogpacs[_recompute_inds] = np.minimum(neglogpacs[_recompute_inds], 100)
                             slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs, is_demo))
                             # if len(self.aug_obs) > batch_size:
                             #     aug_inds = np.random.choice(len(self.aug_obs), batch_size)
