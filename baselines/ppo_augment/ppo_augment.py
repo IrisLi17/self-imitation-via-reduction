@@ -431,6 +431,7 @@ class PPO2_augment(ActorCriticRLModel):
             original_success = 0
             _reuse_times = self.reuse_times
             start_decay = n_updates
+            pp_sr_buf = deque(maxlen=5)
             for update in range(1, n_updates + 1):
                 assert self.n_batch % self.nminibatches == 0
                 batch_size = self.n_batch // self.nminibatches
@@ -443,8 +444,9 @@ class PPO2_augment(ActorCriticRLModel):
                     if 'FetchStack' in self.env.get_attr('spec')[0].id:
                         # Stacking
                         pp_sr = pp_eval_model(self.eval_env, self)
-                        print('Pick-and-place success rate', pp_sr)
-                        if start_decay == n_updates and pp_sr > 0.8:
+                        pp_sr_buf.append(pp_sr)
+                        print('Pick-and-place success rate', np.mean(pp_sr_buf))
+                        if start_decay == n_updates and np.mean(pp_sr_buf) > 0.8:
                             start_decay = update
                         _ratio = np.clip(0.7 - 0.8 * (update - start_decay) / n_updates, 0.3, 0.7) # from 0.7 to 0.3
                     elif 'FetchPushWallObstacle' in self.env.get_attr('spec')[0].id:
