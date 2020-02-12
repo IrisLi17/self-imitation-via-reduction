@@ -304,7 +304,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             else:
                 if abs(achieved_goal[2] - goal[2]) > 0.01:
                     r = -1
-            success = np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold and (achieved_goal[2] - goal[2]) < 0.01
+            success = np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold and abs(achieved_goal[2] - goal[2]) < 0.01
             if self.reward_type == 'dense':
                 r += success
         else:
