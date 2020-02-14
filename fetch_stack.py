@@ -146,6 +146,9 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
     def set_current_nobject(self, current_nobject):
         self.current_nobject = current_nobject
 
+    def set_selected_objects(self, selected_objects):
+        self.selected_objects = selected_objects
+
     def set_task_mode(self, task_mode):
         self.task_mode = int(task_mode)
 
