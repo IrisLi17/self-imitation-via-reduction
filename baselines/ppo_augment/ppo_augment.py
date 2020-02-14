@@ -504,8 +504,8 @@ class PPO2_augment(ActorCriticRLModel):
                 print([item.shape[0] if item is not None else 0 for item in self.aug_obs])
                 # if self.aug_obs is not None:
                 if augment_steps > 0:
-                    if self.self_imitate and augment_steps / self.n_batch > 0.5:
-                        aug_sample_idx = np.random.randint(0, augment_steps, int(self.n_batch * 0.5))
+                    if self.self_imitate and augment_steps / self.n_batch > 0.2:
+                        aug_sample_idx = np.random.randint(0, augment_steps, int(self.n_batch * 0.2))
                     else:
                         aug_sample_idx = np.arange(augment_steps)
                     _aug_return = np.concatenate(list(filter(lambda v:v is not None, self.aug_return)), axis=0)
