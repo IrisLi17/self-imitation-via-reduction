@@ -34,6 +34,7 @@ class ParallelRunner2(AbstractEnvRunner):
         self.ep_state_buf = [[] for _ in range(self.model.n_envs)]
         self.ep_transition_buf = [[] for _ in range(self.model.n_envs)]
         self.ep_current_nobject = [[] for _ in range(self.model.n_envs)]
+        self.ep_selected_objects = [[] for _ in range(self.model.n_envs)]
         self.ep_task_mode = [[] for _ in range(self.model.n_envs)]
         self.ep_tower_height = [[] for _ in range(self.model.n_envs)]
         self.goal_dim = self.env.get_attr('goal')[0].shape[0]
@@ -51,6 +52,7 @@ class ParallelRunner2(AbstractEnvRunner):
         self.restart_states = [] # list of (n_candidate) states
         self.transition_storage = [] # every element is list of tuples. length of every element should match restart steps
         self.current_nobject = []
+        self.selected_objects = []
         self.task_mode = []
         # For filter subgoals
         self.mean_value_buf = deque(maxlen=500)
@@ -81,11 +83,13 @@ class ParallelRunner2(AbstractEnvRunner):
         for _ in range(self.n_steps):
             internal_states = self.env.env_method('get_state')
             current_nobjects = self.env.get_attr('current_nobject')
+            selected_objects = self.env.get_attr('selected_objects')
             task_modes = self.env.get_attr('task_mode')
             tower_height = self.env.get_attr('tower_height')
             for i in range(self.model.n_envs):
                 self.ep_state_buf[i].append(internal_states[i])
                 self.ep_current_nobject[i].append(current_nobjects[i])
+                self.ep_selected_objects[i].append(selected_objects[i])
                 self.ep_task_mode[i].append(task_modes[i])
                 self.ep_tower_height[i].append(tower_height[i])
             actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones)
@@ -133,11 +137,13 @@ class ParallelRunner2(AbstractEnvRunner):
                             self.transition_storage.append(self.ep_transition_buf[idx][:_restart_steps[j]])
                             if self.dim_candidate == 3:
                                 self.current_nobject.append(self.ep_current_nobject[idx][0])
+                                self.selected_objects.append(self.ep_selected_objects[idx][0])
                                 self.task_mode.append(self.ep_task_mode[idx][0])
                 if done:
                     self.ep_state_buf[idx] = []
                     self.ep_transition_buf[idx] = []
                     self.ep_current_nobject[idx] = []
+                    self.ep_selected_objects[idx] = []
                     self.ep_task_mode[idx] = []
                     self.ep_tower_height[idx] = []
 
@@ -176,6 +182,7 @@ class ParallelRunner2(AbstractEnvRunner):
                 self.aug_env.env_method('set_state', env_restart_state)
                 if self.dim_candidate == 3:
                     self.aug_env.env_method('set_current_nobject', self.current_nobject[:self.aug_env.num_envs])
+                    self.aug_env.env_method('set_selected_objects', self.selected_objects[:self.aug_env.num_envs])
                     # Use pick and place as sub-task
                     self.aug_env.env_method('set_task_mode', np.zeros(self.aug_env.num_envs))
                 env_obs = self.aug_env.env_method('get_obs')
@@ -311,6 +318,7 @@ class ParallelRunner2(AbstractEnvRunner):
                 self.restart_states = self.restart_states[self.aug_env.num_envs:]
                 self.transition_storage = self.transition_storage[self.aug_env.num_envs:]
                 self.current_nobject = self.current_nobject[self.aug_env.num_envs:]
+                self.selected_objects = self.selected_objects[self.aug_env.num_envs:]
                 self.task_mode = self.task_mode[self.aug_env.num_envs:]
 
             temp_time1 = time.time()
@@ -498,6 +506,7 @@ class ParallelRunner2(AbstractEnvRunner):
         obs_buf = np.asarray(obs_buf)
         sample_t = np.random.randint(0, len(transition_buf), 4096)
         sample_obs = obs_buf[sample_t]
+        ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
         noise = np.random.uniform(low=-self.noise_mag, high=self.noise_mag, size=(len(sample_t), 2))
         # TODO: if there are more than one obstacle
         sample_obs_buf = []
@@ -536,12 +545,14 @@ class ParallelRunner2(AbstractEnvRunner):
             # print('towerheight', tower_height[-1])
             # print('goalheight', obs_buf[-1, self.obs_dim + self.goal_dim + 2])
             if tower_height[-1] + 0.05 - obs_buf[-1][self.obs_dim + self.goal_dim + 2] > 0.01:
+                # Tower height is equal to (or higher than) goal height.
                 # print('towerheight exceed goalheight')
                 return np.array([]), np.array([])
             sample_height = np.array(tower_height)[sample_t]
             for object_idx in range(0, self.n_object):
-                if object_idx == np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:]):
-                    # We don't perturb self position
+                if abs(sample_height[0] + 0.05 - sample_obs[0][self.obs_dim + self.goal_dim + 2]) > 0.01 \
+                        and object_idx == np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:]):
+                    # If the goal is not 1 floor above towerheight, we don't perturb self position
                     continue
                 if np.linalg.norm(sample_obs[0][3 + object_idx * 3 : 3 + (object_idx + 1) * 3]) < 1e-3:
                     # This object is masked
@@ -558,6 +569,7 @@ class ParallelRunner2(AbstractEnvRunner):
                 sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 3] = obstacle_xy
                 sample_obs[:, 3 * (object_idx + 1 + self.n_object):3 * (object_idx + 1 + self.n_object) + 3] \
                     = sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 3] - sample_obs[:, 0:3]
+                sample_obs[:, self.obs_dim:self.obs_dim + 3] = sample_obs[:, 3 * (ultimate_idx + 1):3 * (ultimate_idx + 1) + 3]
                 sample_obs_buf.append(sample_obs.copy())
 
                 subgoal_obs = obs_buf[sample_t]

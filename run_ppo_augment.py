@@ -194,8 +194,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     set_global_seeds(seed)
 
     n_cpu = 32 if not play else 1
-    if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
+    if 'MasspointPushDoubleObstacle' in env_name:
         n_cpu = 64 if not play else 1
+    elif 'FetchStack' in env_name:
+        n_cpu = 128 if not play else 1
     elif 'MasspointMaze' in env_name:
         n_cpu = 8 if not play else 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1']:
@@ -309,6 +311,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         # For debug only.
         # model.load_parameters('./logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/ppo/0/model_70.zip')
         # model.load_parameters('./logs/MasspointPushDoubleObstacle-v1/ppo/6/model_71.zip')
+        model.load_parameters('./logs/FetchStack-v1_adapt/ppo_attention/stack2_v2/sp0/model_25.zip')
         model.learn(total_timesteps=num_timesteps, callback=callback, seed=seed, log_interval=1)
         model.save(os.path.join(log_dir, 'final'))
 
