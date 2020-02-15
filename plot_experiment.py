@@ -24,19 +24,23 @@ if __name__ == '__main__':
     assert env_name in ['push', 'particle', 'maze', 'stacking']
     # assert mode in ['train', 'hard', 'iteration']
     max_timesteps = {'push': 4.99e7,
-                     'particle': 2e8,
+                     'particle': 3e8,
                      'maze': 1.5e6,
                      'stacking': 2e8,}
     max_iterationss = {'push': 750,
-                       'particle': 380,
+                       'particle': 570,
                        'maze': 245,}
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_eval_iteration, df_legend_iteration = [], [], [], [], [], [], []
     subfolders = ['ppo', 'sir_re8']
     if 'particle_random0.7' in folder_name:
-        subfolders = ['ppo', 'sir_re4']
+        subfolders = ['ppo', 'sir_re1-8']
     elif 'particle_random1.0' in folder_name:
         subfolders = ['ppo', 'sir_re1-8']
+    elif 'push_random0.7' in folder_name:
+        subfolders = ['ppo', 'sir_re8', 'ppo_sil_clip0.2']
     for subfolder in subfolders:
+        last_sr = []
+        last_eval = []
         for i in range(3):
             if not os.path.exists(os.path.join(folder_name, subfolder, str(i), 'progress.csv')):
                 continue
@@ -45,6 +49,7 @@ if __name__ == '__main__':
             raw_success_rate = get_item(progress_file, 'ep_reward_mean')
             raw_total_timesteps = get_item(progress_file, 'total_timesteps')
             raw_eval_reward = get_item(eval_file, 'mean_eval_reward')
+            print(raw_total_timesteps.shape, raw_eval_reward.shape)
             sr_f = interpolate.interp1d(raw_total_timesteps, raw_success_rate, fill_value="extrapolate")
             eval_f = interpolate.interp1d(raw_total_timesteps, raw_eval_reward, fill_value="extrapolate")
             timesteps = np.arange(0, max_timesteps[env_name], max_timesteps[env_name] // 500)
@@ -57,6 +62,8 @@ if __name__ == '__main__':
             df_timesteps.append(timesteps)
             df_sr.append(success_rate)
             df_eval.append(eval_reward)
+            last_sr.append(success_rate[-1])
+            last_eval.append(eval_reward[-1])
             df_legend.append(np.array([subfolder.upper()] * len(timesteps)))
 
             raw_iterations = get_item(progress_file, 'n_updates')
@@ -66,6 +73,7 @@ if __name__ == '__main__':
             df_iteration.append(iterations)
             df_eval_iteration.append(eval_iteration)
             df_legend_iteration.append(np.array([subfolder.upper()] * len(iterations)))
+        print(subfolder, 'sr', np.mean(last_sr), 'eval', np.mean(last_eval))
     df_timesteps = np.concatenate(df_timesteps, axis=0).tolist()
     df_sr = np.concatenate(df_sr, axis=0).tolist()
     df_eval = np.concatenate(df_eval, axis=0).tolist()
@@ -90,7 +98,7 @@ if __name__ == '__main__':
     plt.style.use("ggplot")
     # plt.rcParams.update({'legend.fontsize': 14})
     p = sns.color_palette()
-    sns.set_palette([p[0], p[1]])
+    sns.set_palette([p[0], p[1], p[2]])
     f, axes = plt.subplots(1, 3, figsize=(width, height))
     sns.lineplot(x='samples', y='success_rate', hue='algo', ax=axes[0], data=sr_timesteps)
     axes[0].set_xlabel('samples')
@@ -117,7 +125,7 @@ if __name__ == '__main__':
     # axes.set_ylabel('success rate')
     # axes.get_legend().remove()
     # handles, labels = axes.get_legend_handles_labels()
-    f.legend(handles[1:], ['PPO', 'SIR'], loc="lower right", ncol=1, bbox_to_anchor=(0.99, 0.18), title='')
+    f.legend(handles[1:], ['PPO', 'SIR', 'SIL'], loc="lower right", ncol=1, bbox_to_anchor=(0.99, 0.18), title='')
     f.subplots_adjust(top=1. - margin / height, bottom=0.21, wspace=wspace, left=left, right=1. - margin / width)
     plt.savefig(os.path.join(folder_name, '../', os.path.basename(folder_name) + '.pdf'))
     # plt.show()

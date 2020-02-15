@@ -29,6 +29,7 @@ if __name__ == '__main__':
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_success_rate_iteration, df_legend_iteration = [], [], [], [], [], [], []
     subfolders = ['ppo', 'sir_re2']
     for subfolder in subfolders:
+        last_sr = []
         for i in range(3):
             if not os.path.exists(os.path.join(folder_name, subfolder, str(i), 'progress.csv')):
                 continue
@@ -50,6 +51,7 @@ if __name__ == '__main__':
             # eval_reward = smooth(eval_reward, 20)
             df_timesteps.append(timesteps)
             df_sr.append(success_rate)
+            last_sr.append(success_rate[-1])
             # df_eval.append(eval_reward)
             df_legend.append(np.array([subfolder.upper()] * len(timesteps)))
 
@@ -61,6 +63,7 @@ if __name__ == '__main__':
             df_iteration.append(iterations)
             df_success_rate_iteration.append(success_rate_iteration)
             df_legend_iteration.append(np.array([subfolder.upper()] * len(iterations)))
+        print(subfolder, np.mean(last_sr))
     df_timesteps = np.concatenate(df_timesteps, axis=0).tolist()
     df_sr = np.concatenate(df_sr, axis=0).tolist()
     # df_eval = np.concatenate(df_eval, axis=0).tolist()
