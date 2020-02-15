@@ -121,7 +121,7 @@ class ParallelRunner2(AbstractEnvRunner):
             for idx, done in enumerate(self.dones):
                 if self.model.num_timesteps >= self.model.start_augment and done:
                     goal = self.ep_transition_buf[idx][0][0][-self.goal_dim:]
-                    if (not infos[idx]['is_success']) and task_modes[idx] == 1:
+                    if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] == 2:
                         # Do augmentation
                         # Sample start step and perturbation
                         _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate,

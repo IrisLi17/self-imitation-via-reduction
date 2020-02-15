@@ -311,7 +311,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         # For debug only.
         # model.load_parameters('./logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/ppo/0/model_70.zip')
         # model.load_parameters('./logs/MasspointPushDoubleObstacle-v1/ppo/6/model_71.zip')
-        model.load_parameters('./logs/FetchStack-v1_adapt/ppo_attention/stack2_v2/sp0/model_25.zip')
+        model.load_parameters('./logs/FetchStack-v1_adapt/ppo_attention/stack2_v2/sp0/model_31.zip')
         model.learn(total_timesteps=num_timesteps, callback=callback, seed=seed, log_interval=1)
         model.save(os.path.join(log_dir, 'final'))
 
