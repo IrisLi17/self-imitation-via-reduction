@@ -43,6 +43,7 @@ class ParallelRunner2(AbstractEnvRunner):
         self.n_object = self.env.get_attr('n_object')[0]
         self.dim_candidate = dim_candidate
         self.horizon = horizon
+        self.reward_type = self.aug_env.get_attr('reward_type')[0]
         # self.reuse_times = reuse_times
         print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
               'n_object', self.n_object, 'horizon', self.horizon)
@@ -79,6 +80,14 @@ class ParallelRunner2(AbstractEnvRunner):
         mb_goals = self.env.get_attr('goal')
 
         duration = 0.0
+        select_subgoal_time1 = 0.0
+        switch_goal_time1 = 0.0
+        step_env_time1 = 0.0
+        compute_adv_time1 = 0.0
+        predict_act_time1 = 0.0
+        compute_reward_time1 = 0.0
+        compute_value_and_logp_time1 = 0.0
+        data_manip_time1 = 0.0
         # step_env_duration = 0.0
         for _ in range(self.n_steps):
             internal_states = self.env.env_method('get_state')
@@ -124,9 +133,11 @@ class ParallelRunner2(AbstractEnvRunner):
                     if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] == 2:
                         # Do augmentation
                         # Sample start step and perturbation
+                        select_subgoal_time0 = time.time()
                         _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate,
                                                                         dim=self.dim_candidate, env_idx=idx,
                                                                         tower_height=self.ep_tower_height[idx])
+                        select_subgoal_time1 += time.time() - select_subgoal_time0
                         assert isinstance(_restart_steps, np.ndarray)
                         assert isinstance(_subgoals, np.ndarray)
                         for j in range(_restart_steps.shape[0]):
@@ -199,7 +210,7 @@ class ParallelRunner2(AbstractEnvRunner):
                         clipped_actions = np.clip(env_action, self.aug_env.action_space.low, self.aug_env.action_space.high)
                     env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
                     self.model.num_aug_steps += (self.aug_env.num_envs - sum(env_end_flag))
-                    if self.aug_env.get_attr('reward_type')[0] == 'sparse':
+                    if self.reward_type == 'sparse':
                         temp_info = [None for _ in range(self.aug_env.num_envs)]
                     else:
                         temp_info = [{'previous_obs': env_obs[i]} for i in range(self.aug_env.num_envs)]
@@ -207,7 +218,7 @@ class ParallelRunner2(AbstractEnvRunner):
                     _retask_env_next_obs[:, self.obs_dim - 2:self.obs_dim] = 0
                     _retask_env_next_obs[:, self.obs_dim - 1] = 1 # Stack
                     env_reward = self.aug_env.env_method('compute_reward', _retask_env_next_obs, ultimate_goals, temp_info)
-                    if self.aug_env.get_attr('reward_type')[0] == 'dense':
+                    if self.reward_type == 'dense':
                         env_reward_and_success = self.aug_env.env_method('compute_reward_and_success', _retask_env_next_obs, ultimate_goals, temp_info)
                     for idx in range(self.aug_env.num_envs):
                         env_increment_storage[idx].append((relabel_env_obs[idx], env_action[idx], False, env_reward[idx]))
@@ -219,10 +230,10 @@ class ParallelRunner2(AbstractEnvRunner):
 
                     for idx, info in enumerate(env_info):
                         # Special case, the agent succeeds the final goal half way
-                        if self.aug_env.get_attr('reward_type')[0] == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] == False:
+                        if self.reward_type == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] == False:
                             env_end_flag[idx] = True
                             env_end_step[idx] = env_restart_steps[idx] + increment_step
-                        elif self.aug_env.get_attr('reward_type')[0] == 'dense' and env_reward_and_success[idx][1] and env_end_flag[idx] == False:
+                        elif self.reward_type == 'dense' and env_reward_and_success[idx][1] and env_end_flag[idx] == False:
                             env_end_flag[idx] = True
                             env_end_step[idx] = env_restart_steps[idx] + increment_step
                         # Exceed time limit
@@ -263,7 +274,7 @@ class ParallelRunner2(AbstractEnvRunner):
                             augment_neglogp_buf = np.concatenate([np.array(neglogp_buf), augment_neglogp_buf], axis=0)
                             augment_done_buf = done_buf + augment_done_buf
                             augment_reward_buf = reward_buf + augment_reward_buf
-                        if self.aug_env.get_attr('reward_type')[0] == "sparse":
+                        if self.reward_type == "sparse":
                             assert abs(sum(augment_reward_buf) - 1) < 1e-4
                         if augment_done_buf[0] == 0:
                             augment_done_buf = (True,) + (False,) * (len(augment_done_buf) - 1)
@@ -323,6 +334,15 @@ class ParallelRunner2(AbstractEnvRunner):
 
             temp_time1 = time.time()
             duration += (temp_time1 - temp_time0)
+            # print('select subgoal takes', select_subgoal_time1)
+            # print('switch goal takes', switch_goal_time1)
+            # print('step env takes', step_env_time1)
+            # print('compute adv takes', compute_adv_time1)
+            # print('predict act takes', predict_act_time1)
+            # print('compute reward takes', compute_reward_time1)
+            # print('compute value and neglogp takes', compute_value_and_logp_time1)
+            # print('data manip takes', data_manip_time1)
+            # print('augment total takes', duration)
             # Decrepated code.
             # for env_idx in range(self.model.n_envs):
             #     if len(restart_steps[env_idx]) == 0:
@@ -470,6 +490,14 @@ class ParallelRunner2(AbstractEnvRunner):
 
 
         print('augment takes', duration)
+        print('select subgoal takes', select_subgoal_time1)
+        print('switch goal takes', switch_goal_time1)
+        print('step env takes', step_env_time1)
+        print('compute adv takes', compute_adv_time1)
+        print('predict act takes', predict_act_time1)
+        print('compute reward takes', compute_reward_time1)
+        print('compute value and neglogp takes', compute_value_and_logp_time1)
+        print('data manip takes', data_manip_time1)
         # print('augment stepping env takes', step_env_duration)
         # batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
@@ -504,6 +532,10 @@ class ParallelRunner2(AbstractEnvRunner):
         # self.ep_transition_buf, self.model.value
         obs_buf, *_ = zip(*transition_buf)
         obs_buf = np.asarray(obs_buf)
+        if tower_height[-1] + 0.05 - obs_buf[-1][self.obs_dim + self.goal_dim + 2] > 0.01:
+            # Tower height is equal to (or higher than) goal height.
+            # print('towerheight exceed goalheight')
+            return np.array([]), np.array([])
         sample_t = np.random.randint(0, len(transition_buf), 4096)
         sample_obs = obs_buf[sample_t]
         ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
@@ -544,10 +576,6 @@ class ParallelRunner2(AbstractEnvRunner):
             #         height_buf.append(height_offset)
             # print('towerheight', tower_height[-1])
             # print('goalheight', obs_buf[-1, self.obs_dim + self.goal_dim + 2])
-            if tower_height[-1] + 0.05 - obs_buf[-1][self.obs_dim + self.goal_dim + 2] > 0.01:
-                # Tower height is equal to (or higher than) goal height.
-                # print('towerheight exceed goalheight')
-                return np.array([]), np.array([])
             sample_height = np.array(tower_height)[sample_t]
             for object_idx in range(0, self.n_object):
                 if abs(sample_height[0] + 0.05 - sample_obs[0][self.obs_dim + self.goal_dim + 2]) > 0.01 \
@@ -590,9 +618,13 @@ class ParallelRunner2(AbstractEnvRunner):
         if len(sample_obs_buf) == 0:
             return np.array([]), np.array([])
         sample_obs_buf = np.concatenate(sample_obs_buf, axis=0)
-        value2 = self.model.value(sample_obs_buf)
+        # value2 = self.model.value(sample_obs_buf)
         subgoal_obs_buf = np.concatenate(subgoal_obs_buf)
-        value1 = self.model.value(subgoal_obs_buf)
+        # value1 = self.model.value(subgoal_obs_buf)
+
+        _values = self.model.value(np.concatenate([sample_obs_buf, subgoal_obs_buf], axis=0))
+        value2 = _values[:sample_obs_buf.shape[0]]
+        value1 = _values[sample_obs_buf.shape[0]:]
         normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
         normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
         # best_idx = np.argmax(normalize_value1 * normalize_value2)

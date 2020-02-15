@@ -245,7 +245,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     else:
         # aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_subgoal)])
         if 'FetchStack' in env_name:
-            aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(32)])
+            aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(24)])
         else:
             aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(min(32, n_cpu))])
     print(aug_env)
