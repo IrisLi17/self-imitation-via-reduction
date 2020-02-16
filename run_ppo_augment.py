@@ -147,9 +147,9 @@ def stack_eval_model(eval_env, model):
         while env.current_nobject != env.n_object or env.task_mode != 1:
             obs = env.reset()
         goal_dim = env.goal.shape[0]
-        if goal_dim > 3:
-            while (np.argmax(obs[-goal_dim + 3:]) != 0):
-                obs = env.reset()
+        # if goal_dim > 3:
+        #     while (np.argmax(obs[-goal_dim + 3:]) != 0):
+        #         obs = env.reset()
         done = False
         while not done:
             action, _ = model.predict(obs)
@@ -245,7 +245,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     else:
         # aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_subgoal)])
         if 'FetchStack' in env_name:
-            aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(24)])
+            aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(32)])
         else:
             aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(min(32, n_cpu))])
     print(aug_env)

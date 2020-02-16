@@ -215,7 +215,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         obs = env.reset()
         goal_dim = env.get_attr('goal')[0].shape[0]
         if 'FetchStack' in env_name:
-            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 0:
+            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
         else:
             if 'FetchPush' in env_name:
@@ -273,7 +273,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 #     obs = env.reset()
                 print('episode_reward', episode_reward)
                 if 'FetchStack' in env_name:
-                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 0:
+                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                         obs = env.reset()
                 else:
                     while np.argmax(obs[0][-goal_dim + 3:]) != 0:

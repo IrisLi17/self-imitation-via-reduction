@@ -490,14 +490,14 @@ class ParallelRunner2(AbstractEnvRunner):
 
 
         print('augment takes', duration)
-        print('select subgoal takes', select_subgoal_time1)
-        print('switch goal takes', switch_goal_time1)
-        print('step env takes', step_env_time1)
-        print('compute adv takes', compute_adv_time1)
-        print('predict act takes', predict_act_time1)
-        print('compute reward takes', compute_reward_time1)
-        print('compute value and neglogp takes', compute_value_and_logp_time1)
-        print('data manip takes', data_manip_time1)
+        # print('select subgoal takes', select_subgoal_time1)
+        # print('switch goal takes', switch_goal_time1)
+        # print('step env takes', step_env_time1)
+        # print('compute adv takes', compute_adv_time1)
+        # print('predict act takes', predict_act_time1)
+        # print('compute reward takes', compute_reward_time1)
+        # print('compute value and neglogp takes', compute_value_and_logp_time1)
+        # print('data manip takes', data_manip_time1)
         # print('augment stepping env takes', step_env_duration)
         # batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
