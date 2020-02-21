@@ -217,9 +217,10 @@ class ParallelRunner2(AbstractEnvRunner):
                     _retask_env_next_obs = env_next_obs.copy()
                     _retask_env_next_obs[:, self.obs_dim - 2:self.obs_dim] = 0
                     _retask_env_next_obs[:, self.obs_dim - 1] = 1 # Stack
-                    env_reward = self.aug_env.env_method('compute_reward', _retask_env_next_obs, ultimate_goals, temp_info)
-                    if self.reward_type == 'dense':
-                        env_reward_and_success = self.aug_env.env_method('compute_reward_and_success', _retask_env_next_obs, ultimate_goals, temp_info)
+                    # env_reward = self.aug_env.env_method('compute_reward', _retask_env_next_obs, ultimate_goals, temp_info)
+                    # if self.reward_type == 'dense':
+                    env_reward_and_success = self.aug_env.env_method('compute_reward_and_success', _retask_env_next_obs, ultimate_goals, temp_info)
+                    env_reward = [item[0] for item in env_reward_and_success]
                     for idx in range(self.aug_env.num_envs):
                         env_increment_storage[idx].append((relabel_env_obs[idx], env_action[idx], False, env_reward[idx]))
                         # if idx == 0:
@@ -230,10 +231,11 @@ class ParallelRunner2(AbstractEnvRunner):
 
                     for idx, info in enumerate(env_info):
                         # Special case, the agent succeeds the final goal half way
-                        if self.reward_type == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] == False:
-                            env_end_flag[idx] = True
-                            env_end_step[idx] = env_restart_steps[idx] + increment_step
-                        elif self.reward_type == 'dense' and env_reward_and_success[idx][1] and env_end_flag[idx] == False:
+                        # if self.reward_type == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] == False:
+                        #     env_end_flag[idx] = True
+                        #     env_end_step[idx] = env_restart_steps[idx] + increment_step
+                        # elif self.reward_type == 'dense' and env_reward_and_success[idx][1] and env_end_flag[idx] == False:
+                        if env_reward_and_success[idx][1] and env_end_flag[idx] == False and env_restart_steps[idx] + increment_step >= self.horizon:
                             env_end_flag[idx] = True
                             env_end_step[idx] = env_restart_steps[idx] + increment_step
                         # Exceed time limit
@@ -245,8 +247,8 @@ class ParallelRunner2(AbstractEnvRunner):
                                 switch_goal_flag[idx] = True
                                 # if idx == 0:
                                 #     print('switch goal')
-                            elif env_end_flag[idx] == False:
-                                # this is the end
+                            elif env_end_flag[idx] == False and env_restart_steps[idx] + increment_step >= self.horizon:
+                                # this is the end. We now ensure augmented episode has fixed length
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
                             else:
@@ -274,8 +276,8 @@ class ParallelRunner2(AbstractEnvRunner):
                             augment_neglogp_buf = np.concatenate([np.array(neglogp_buf), augment_neglogp_buf], axis=0)
                             augment_done_buf = done_buf + augment_done_buf
                             augment_reward_buf = reward_buf + augment_reward_buf
-                        if self.reward_type == "sparse":
-                            assert abs(sum(augment_reward_buf) - 1) < 1e-4
+                        # if self.reward_type == "sparse":
+                        #     assert abs(sum(augment_reward_buf) - 1) < 1e-4
                         if augment_done_buf[0] == 0:
                             augment_done_buf = (True,) + (False,) * (len(augment_done_buf) - 1)
                         augment_isselfaug_buf = (is_self_aug, ) * len(augment_done_buf)
@@ -343,151 +345,6 @@ class ParallelRunner2(AbstractEnvRunner):
             # print('compute value and neglogp takes', compute_value_and_logp_time1)
             # print('data manip takes', data_manip_time1)
             # print('augment total takes', duration)
-            # Decrepated code.
-            # for env_idx in range(self.model.n_envs):
-            #     if len(restart_steps[env_idx]) == 0:
-            #         continue
-            #     env_restart_steps = restart_steps[env_idx].tolist()
-            #     env_subgoals = subgoals[env_idx].tolist()
-            #     env_storage = [self.ep_transition_buf[env_idx][:_restart_step] for _restart_step in env_restart_steps]
-            #     env_increment_storage = [[] for _ in env_restart_steps]
-            #     ultimate_goal = self.ep_transition_buf[env_idx][0][0][-self.goal_dim:]
-            #     for i in range(self.n_candidate): # len(env_subgoals) should be equal to n_candidates
-            #         env_subgoals[i] = [np.array(env_subgoals[i]), ultimate_goal]
-            #     # print('env_subgoals', env_subgoals)
-            #     # switch_goal_flag = [True for _ in range(len(env_subgoals))]
-            #     self.aug_env.env_method('set_goal', [env_subgoals[idx][0] for idx in range(self.n_candidate)])
-            #     switch_goal_flag = [False for _ in range(self.n_candidate)]
-            #     env_end_flag = [False for _ in range(self.n_candidate)]
-            #     env_end_step = [np.inf for _ in range(self.n_candidate)]
-            #     env_restart_state = [self.ep_state_buf[env_idx][step] for step in env_restart_steps]
-            #     # temp_time2 = time.time()
-            #     self.aug_env.env_method('set_state', env_restart_state)
-            #     # step_env_duration += (time.time() - temp_time2)
-            #     env_obs = self.aug_env.env_method('get_obs')
-            #     env_obs = [convert_dict_to_obs(d) for d in env_obs]
-            #     # print('checking goal', self.aug_env.get_attr('goal'))
-            #     # print('getting obs', env_obs[0])
-            #     # Parallel rollout subtask
-            #     increment_step = 0
-            #     # print('restart step', env_restart_steps)
-            #     while not sum(env_end_flag) == self.n_candidate:
-            #         # Switch subgoal according to switch_goal_flag, and update observation
-            #         switch_subgoal(switch_goal_flag, env_obs)
-            #         # Update env_subgoals.
-            #         # switch_subgoal(switch_goal_flag)
-            #         # print(env_obs)
-            #         env_action, _, _, _ = self.model.step(np.array(env_obs))
-            #         relabel_env_obs = self.aug_env.env_method('switch_obs_goal', env_obs, [ultimate_goal for _ in range(self.n_candidate)])
-            #         clipped_actions = env_action
-            #         # Clip the actions to avoid out of bound error
-            #         if isinstance(self.aug_env.action_space, gym.spaces.Box):
-            #             clipped_actions = np.clip(env_action, self.aug_env.action_space.low, self.aug_env.action_space.high)
-            #         # temp_time2 = time.time()
-            #         env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
-            #         self.model.num_aug_steps += (self.n_candidate - sum(env_end_flag))
-            #         # step_env_duration += (time.time() - temp_time2)
-            #         # for i, info in enumerate(env_info):
-            #         #     if 'terminal_observation' in info.keys():
-            #         #         assert 'terminal_state' in info.keys()
-            #         #         env_next_obs[i] = info['terminal_observation']
-            #         #         self.aug_env.env_method('set_state', [info['terminal_state']], indices=i)
-            #         env_reward = self.aug_env.env_method('compute_reward', env_next_obs, [ultimate_goal for _ in range(self.n_candidate)], [None for _ in range(self.n_candidate)])
-            #         for idx in range(self.n_candidate):
-            #             env_increment_storage[idx].append((relabel_env_obs[idx], env_action[idx], False, env_reward[idx]))
-            #             # if idx == 0:
-            #             #     print(increment_step, env_obs[idx][:9], env_next_obs[idx][:9], env_reward[idx])
-            #         env_obs = env_next_obs
-            #         increment_step += 1
-            #         # print('increment step', increment_step)
-            #
-            #         for idx, info in enumerate(env_info):
-            #             # Special case, the agent succeeds the final goal half way
-            #             if env_reward[idx] > 0 and env_end_flag[idx] == False:
-            #                 env_end_flag[idx] = True
-            #                 env_end_step[idx] = env_restart_steps[idx] + increment_step
-            #             if info['is_success']:
-            #                 if len(env_subgoals[idx]) >= 2:
-            #                     switch_goal_flag[idx] = True
-            #                     # if idx == 0:
-            #                     #     print('switch goal')
-            #                 elif env_end_flag[idx] == False:
-            #                     # this is the end
-            #                     env_end_flag[idx] = True
-            #                     env_end_step[idx] = env_restart_steps[idx] + increment_step
-            #                 else:
-            #                     pass
-            #         if increment_step >= self.horizon - min(env_restart_steps):
-            #             break
-            #
-            #     # print(env_idx, 'end step', env_end_step)
-            #     # DEBUG: log values and indicator of success
-            #     if not os.path.exists(os.path.join(logger.get_dir(), 'debug_value.csv')):
-            #         with open(os.path.join(logger.get_dir(), 'debug_value.csv'), 'a', newline='') as csvfile:
-            #             csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
-            #             title = ['reference_value', 'value1', 'value2', 'is_success']
-            #             csvwriter.writerow(title)
-            #     with open(os.path.join(logger.get_dir(), 'debug_value.csv'), 'a', newline='') as csvfile:
-            #         csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
-            #         for i in range(len(env_end_step)):
-            #             data = [self.debug_reference_value[env_idx][i], self.debug_value1[env_idx][i],
-            #                     self.debug_value2[env_idx][i], int(env_end_step[i] <= self.horizon)]
-            #             csvwriter.writerow(data)
-            #     # End DEBUG
-            #
-            #     for idx, end_step in enumerate(env_end_step):
-            #         if end_step <= self.horizon:
-            #             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
-            #             augment_obs_buf, augment_act_buf, augment_done_buf, augment_reward_buf = zip(*transitions)
-            #             augment_value_buf = self.model.value(np.array(augment_obs_buf))
-            #             augment_neglogp_buf = self.model.sess.run(self.model.aug_neglogpac_op,
-            #                                                       {self.model.train_aug_model.obs_ph: np.array(augment_obs_buf),
-            #                                                        self.model.aug_action_ph: np.array(augment_act_buf)})
-            #             if len(env_storage[idx]):
-            #                 obs_buf, act_buf, value_buf, neglogp_buf, done_buf, reward_buf = zip(*(env_storage[idx]))
-            #                 augment_obs_buf = obs_buf + augment_obs_buf
-            #                 augment_act_buf = act_buf + augment_act_buf
-            #                 augment_value_buf = np.concatenate([np.array(value_buf), augment_value_buf], axis=0)
-            #                 augment_neglogp_buf = np.concatenate([np.array(neglogp_buf), augment_neglogp_buf], axis=0)
-            #                 augment_done_buf = done_buf + augment_done_buf
-            #                 augment_reward_buf = reward_buf + augment_reward_buf
-            #             assert abs(sum(augment_reward_buf) - 1) < 1e-4
-            #             if augment_done_buf[0] == 0:
-            #                 augment_done_buf = (True,) + (False,) * (len(augment_done_buf) - 1)
-            #             augment_returns = self.compute_adv(augment_value_buf, augment_done_buf, augment_reward_buf)
-            #             assert augment_returns.shape[0] == end_step
-            #             # if idx == 0:
-            #             #     print('augment value', augment_value_buf)
-            #             #     print('augment done', augment_done_buf)
-            #             #     print('augment_reward', augment_reward_buf)
-            #             #     print('augment return', augment_returns)
-            #             if self.model.aug_obs is None:
-            #                 self.model.aug_obs = np.array(augment_obs_buf)
-            #                 self.model.aug_act = np.array(augment_act_buf)
-            #                 self.model.aug_neglogp = np.array(augment_neglogp_buf)
-            #                 self.model.aug_value = np.array(augment_value_buf)
-            #                 self.model.aug_return = augment_returns
-            #                 self.model.aug_done = np.array(augment_done_buf)
-            #             else:
-            #                 self.model.aug_obs = np.concatenate([self.model.aug_obs, np.array(augment_obs_buf)], axis=0)
-            #                 self.model.aug_act = np.concatenate([self.model.aug_act, np.array(augment_act_buf)], axis=0)
-            #                 self.model.aug_neglogp = np.concatenate(
-            #                     [self.model.aug_neglogp, np.array(augment_neglogp_buf)], axis=0)
-            #                 self.model.aug_value = np.concatenate([self.model.aug_value, np.array(augment_value_buf)],
-            #                                                       axis=0)
-            #                 self.model.aug_return = np.concatenate([self.model.aug_return, augment_returns], axis=0)
-            #                 self.model.aug_done = np.concatenate([self.model.aug_done, np.array(augment_done_buf)],
-            #                                                      axis=0)
-            #
-            # for idx, done in enumerate(self.dones):
-            #     if done:
-            #         self.ep_state_buf[idx] = []
-            #         self.ep_transition_buf[idx] = []
-            # temp_time1 = time.time()
-            # duration += (temp_time1 - temp_time0)
-            # print('end')
-            # exit()
-
 
         print('augment takes', duration)
         # print('select subgoal takes', select_subgoal_time1)

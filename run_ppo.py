@@ -10,7 +10,7 @@ from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 # from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
 from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv
-from fetch_stack import FetchStackEnv
+from fetch_stack import FetchStackEnv, FetchStackEnv_v2
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
@@ -37,6 +37,7 @@ MASS_ENTRY_POINT = {
 
 PICK_ENTRY_POINT = {
     'FetchStack-v1': FetchStackEnv,
+    'FetchStack-v2': FetchStackEnv_v2,
 }
 
 def arg_parse():
@@ -90,8 +91,10 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     else:
         env = gym.make(env_id, reward_type='sparse')
     env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
-    if env_id in PICK_ENTRY_POINT.keys() and kwargs['reward_type'] == 'dense':
-        env = DoneOnSuccessWrapper(env, reward_offset=0.0)
+    # if env_id in PICK_ENTRY_POINT.keys() and kwargs['reward_type'] == 'dense':
+    #     env = DoneOnSuccessWrapper(env, reward_offset=0.0)
+    if env_id in PICK_ENTRY_POINT.keys():
+        pass
     else:
         env = DoneOnSuccessWrapper(env)
     if log_dir is not None:
@@ -215,7 +218,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         obs = env.reset()
         goal_dim = env.get_attr('goal')[0].shape[0]
         if 'FetchStack' in env_name:
-            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
+            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 0:
                 obs = env.reset()
         else:
             if 'FetchPush' in env_name:
@@ -273,7 +276,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 #     obs = env.reset()
                 print('episode_reward', episode_reward)
                 if 'FetchStack' in env_name:
-                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
+                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 0:
                         obs = env.reset()
                 else:
                     while np.argmax(obs[0][-goal_dim + 3:]) != 0:
