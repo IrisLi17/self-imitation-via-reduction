@@ -144,7 +144,7 @@ def stack_eval_model(eval_env, model):
     while n_episode < 20:
         ep_reward = 0.0
         obs = env.reset()
-        while env.current_nobject != env.n_object or env.task_mode != 1:
+        while env.current_nobject != env.n_object or (hasattr(env, 'task_mode') and env.task_mode != 1):
             obs = env.reset()
         goal_dim = env.goal.shape[0]
         # if goal_dim > 3:
