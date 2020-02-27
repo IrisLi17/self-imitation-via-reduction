@@ -9,8 +9,10 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=256):
     # policy_only_layers = []  # Layer sizes of the network that only belongs to the policy network
     # value_only_layers = []  # Layer sizes of the network that only belongs to the value network
 
-    agent_idx = np.concatenate([np.arange(3), np.arange(3+6*n_object, 3+6*n_object+2),
-                                np.arange(3+6*n_object+2+9*n_object, 3+6*n_object+2+9*n_object+7+2*(3+n_object))])
+    # agent_idx = np.concatenate([np.arange(3), np.arange(3+6*n_object, 3+6*n_object+2),
+    #                             np.arange(3+6*n_object+2+9*n_object, 3+6*n_object+2+9*n_object+7+2*(3+n_object))])
+    agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
+                                np.arange(3 + 6 * n_object + 2 + 9 * n_object, int(flat_observations.shape[1]))])
     self_in = tf.gather(flat_observations, agent_idx, axis=1)
     # self_in = np.concatenate([flat_observations[:, :3], flat_observations[:, 3 + 6 * n_object:3 + 6 * n_object + 2],
     #                           flat_observations[:, 3+6*n_object+2+9*n_object:]], axis=1)

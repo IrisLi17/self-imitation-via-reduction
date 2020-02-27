@@ -10,7 +10,7 @@ from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 # from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
 from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv
-from fetch_stack import FetchStackEnv
+from fetch_stack import FetchStackEnv, FetchPureStackEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
@@ -37,6 +37,7 @@ MASS_ENTRY_POINT = {
 
 PICK_ENTRY_POINT = {
     'FetchStack-v1': FetchStackEnv,
+    'FetchStack-v0': FetchPureStackEnv,
 }
 
 def arg_parse():
