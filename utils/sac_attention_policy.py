@@ -37,7 +37,7 @@ class AttentionPolicy(SACPolicy):
         self.cnn_extractor = cnn_extractor
         self.reuse = reuse
         if layers is None:
-            layers = [64, 64]
+            layers = [256, 256]
         self.layers = layers
         self.reg_loss = None
         self.reg_weight = reg_weight
@@ -55,15 +55,12 @@ class AttentionPolicy(SACPolicy):
         with tf.variable_scope(scope, reuse=reuse):
             if self.feature_extraction == "cnn":
                 pi_h = self.cnn_extractor(obs, **self.cnn_kwargs)
-            # elif self.feature_extraction == "attention_mlp":
-            #     pi_h, _ = attention_mlp_extractor(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+            elif self.feature_extraction == "attention_mlp":
+                pi_h = attention_mlp_extractor(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
             else:
                 pi_h = tf.layers.flatten(obs)
 
-            if self.feature_extraction == "attention_mlp":
-                pi_h, _ = attention_mlp_extractor(pi_h, n_object=self.n_object, n_units=128)
-            else:
-                pi_h = mlp(pi_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
+            pi_h = mlp(pi_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
 
             self.act_mu = mu_ = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
             # Important difference with SAC and other algo such as PPO:
@@ -102,18 +99,15 @@ class AttentionPolicy(SACPolicy):
         with tf.variable_scope(scope, reuse=reuse):
             if self.feature_extraction == "cnn":
                 critics_h = self.cnn_extractor(obs, **self.cnn_kwargs)
-            # elif self.feature_extraction == "attention_mlp":
-            #     critics_h, _ = attention_mlp_extractor(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+            elif self.feature_extraction == "attention_mlp":
+                critics_h = attention_mlp_extractor(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
             else:
                 critics_h = tf.layers.flatten(obs)
 
             if create_vf:
                 # Value function
                 with tf.variable_scope('vf', reuse=reuse):
-                    if self.feature_extraction == "attention_mlp":
-                        vf_h, _ = attention_mlp_extractor(critics_h, n_object=self.n_object, n_units=128)
-                    else:
-                        vf_h = mlp(critics_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
+                    vf_h = mlp(critics_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
                     value_fn = tf.layers.dense(vf_h, 1, name="vf")
                 self.value_fn = value_fn
 
@@ -123,17 +117,11 @@ class AttentionPolicy(SACPolicy):
 
                 # Double Q values to reduce overestimation
                 with tf.variable_scope('qf1', reuse=reuse):
-                    if self.feature_extraction == "attention_mlp":
-                        qf1_h, _ = attention_mlp_extractor(qf_h, n_object=self.n_object, n_units=128)
-                    else:
-                        qf1_h = mlp(qf_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
+                    qf1_h = mlp(qf_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
                     qf1 = tf.layers.dense(qf1_h, 1, name="qf1")
 
                 with tf.variable_scope('qf2', reuse=reuse):
-                    if self.feature_extraction == "attention_mlp":
-                        qf2_h, _ = attention_mlp_extractor(qf_h, n_object=self.n_object, n_units=128)
-                    else:
-                        qf2_h = mlp(qf_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
+                    qf2_h = mlp(qf_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
                     qf2 = tf.layers.dense(qf2_h, 1, name="qf2")
 
                 self.qf1 = qf1

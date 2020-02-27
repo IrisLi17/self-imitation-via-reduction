@@ -149,7 +149,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                 action_noise=parsed_action_noise,
                                 )
             if 'FetchStack' in env_name:
-                train_kwargs['ent_coef'] = 0.01
+                train_kwargs['tau'] = 0.001
+                train_kwargs['gamma'] = 0.98
+                train_kwargs['batch_size'] = 256
             policy_kwargs = {}
 
             def callback(_locals, _globals):
@@ -187,7 +189,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         print(model.get_parameter_list())
 
         # Train the model
-        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=20)
+        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=100)
 
         if rank == 0:
             model.save(os.path.join(log_dir, 'final'))
