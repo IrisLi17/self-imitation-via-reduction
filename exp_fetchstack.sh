@@ -9,6 +9,7 @@ CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchStack-v1 --curriculu
 
 # Adaptive schedule
 CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchStack-v1 --curriculum --reward_type sparse --n_object 2 --num_timesteps 4e8 --log_path logs/FetchStack-v1_adapt/ppo_attention/stack2_v2/sp0
+CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchStack-v1 --curriculum --reward_type sparse --n_object 2 --gamma 0.97 --num_timesteps 1e9 --log_path logs/FetchStack-v1_adapt/ppo_attention/stack2_v2/sp0_gamma0.97
 CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchStack-v1 --curriculum --reward_type sparse --n_object 2 --num_timesteps 4e8 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 4 --log_path logs/FetchStack-v1_adapt/ppo_augment/stack2_v2/pretrain_reuse4
 CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchStack-v1 --random_ratio 0.3 --reward_type sparse --n_object 2 --num_timesteps 4e8 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 4 --log_path logs/FetchStack-v1_0.3fix/ppo_augment/stack2_v2/pretrain_reuse4
 CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchStack-v1 --random_ratio 0.3 --reward_type sparse --n_object 2 --num_timesteps 4e8 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 8 --log_path logs/FetchStack-v1_0.3fix/ppo_augment/stack2_v2/pretrain_reuse8

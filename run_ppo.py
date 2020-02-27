@@ -50,6 +50,7 @@ def arg_parse():
     parser.add_argument('--load_path', default=None, type=str)
     parser.add_argument('--random_ratio', default=1.0, type=float)
     parser.add_argument('--curriculum', action="store_true", default=False)
+    parser.add_argument('--gamma', default=0.99, type=float)
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
@@ -100,7 +101,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     return env
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, reward_type, n_object,
-         curriculum):
+         curriculum, gamma):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir) 
     
@@ -188,7 +189,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             policy_kwargs["feature_extraction"] = "attention_mlp"
         print(policy_kwargs)
 
-        model = PPO2(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
+        model = PPO2(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=gamma, noptepochs=10,
                      ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      curriculum=curriculum,
                      )
@@ -302,4 +303,4 @@ if __name__ == '__main__':
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
          log_path=args.log_path, load_path=args.load_path, play=args.play, export_gif=args.export_gif,
          random_ratio=args.random_ratio, reward_type=args.reward_type, n_object=args.n_object,
-         curriculum=args.curriculum)
+         curriculum=args.curriculum, gamma=args.gamma)

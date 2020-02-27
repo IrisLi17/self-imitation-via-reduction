@@ -448,7 +448,7 @@ class PPO2_augment(ActorCriticRLModel):
                         print('Pick-and-place success rate', np.mean(pp_sr_buf))
                         if start_decay == n_updates and np.mean(pp_sr_buf) > 0.8:
                             start_decay = update
-                        _ratio = np.clip(0.7 - 0.8 * (update - start_decay) / n_updates, 0.3, 0.7) # from 0.7 to 0.3
+                        _ratio = np.clip(0.7 - 0.8 * (update - start_decay) / 380, 0.3, 0.7) # from 0.7 to 0.3
                     elif 'FetchPushWallObstacle' in self.env.get_attr('spec')[0].id:
                         _ratio = max(1.0 - (update - 1.0) / n_updates, 0.0)
                     else:
