@@ -3,9 +3,11 @@ import numpy as np
 import warnings
 from stable_baselines.common.policies import ActorCriticPolicy
 from stable_baselines.a2c.utils import linear
+from stable_baselines.common.policies import mlp_extractor
+from itertools import zip_longest
 
 
-def attention_mlp_extractor(flat_observations, n_object=2, n_units=256):
+def attention_mlp_extractor(flat_observations, n_object=2, n_units=128):
     # policy_only_layers = []  # Layer sizes of the network that only belongs to the policy network
     # value_only_layers = []  # Layer sizes of the network that only belongs to the value network
 
@@ -40,6 +42,7 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=256):
     objects_out = tf.nn.relu(objects_out)
 
     latent = tf.concat([self_out, objects_out], 1) # (*, 2*n_unit)
+    return latent
 
     # Old code
     # # Iterate through the shared layers and build the shared parts of the network
@@ -59,8 +62,8 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=256):
     #         break  # From here on the network splits up in policy and value network
 
     # Build the non-shared part of the network
-    latent_policy = latent
-    latent_value = latent
+    # latent_policy = latent
+    # latent_value = latent
     # for idx, (pi_layer_size, vf_layer_size) in enumerate(zip_longest(policy_only_layers, value_only_layers)):
     #     if pi_layer_size is not None:
     #         assert isinstance(pi_layer_size, int), "Error: net_arch[-1]['pi'] must only contain integers."
@@ -69,8 +72,8 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=256):
     #     if vf_layer_size is not None:
     #         assert isinstance(vf_layer_size, int), "Error: net_arch[-1]['vf'] must only contain integers."
     #         latent_value = act_fun(linear(latent_value, "vf_fc{}".format(idx), vf_layer_size, init_scale=np.sqrt(2)))
-
-    return latent_policy, latent_value
+    #
+    # return latent_policy, latent_value
 
 
 def self_attention_mlp_extractor(flat_observations, n_object=3, n_units=256):
@@ -161,13 +164,15 @@ class AttentionPolicy(ActorCriticPolicy):
 
         if net_arch is None:
             if layers is None:
-                layers = [64, 64]
+                layers = [256, 256]
             net_arch = [dict(vf=layers, pi=layers)]
 
         with tf.variable_scope("model", reuse=reuse):
             # assert feature_extraction == 'attention_mlp'
             if feature_extraction == 'attention_mlp':
-                pi_latent, vf_latent = attention_mlp_extractor(tf.layers.flatten(self.processed_obs), n_object=n_object)
+                latent = attention_mlp_extractor(tf.layers.flatten(self.processed_obs), n_object=n_object,
+                                                 n_units=128)
+                pi_latent, vf_latent = mlp_extractor(latent, net_arch, act_fun)
             elif feature_extraction == 'self_attention_mlp':
                 pi_latent, vf_latent = self_attention_mlp_extractor(tf.layers.flatten(self.processed_obs), n_object=n_object)
             else:
