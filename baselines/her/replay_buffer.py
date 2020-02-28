@@ -1,5 +1,7 @@
 import copy
 from enum import Enum
+from utils.replay_buffer import MultiWorkerReplayBuffer, PrioritizedMultiWorkerReplayBuffer
+from stable_baselines.common.vec_env import VecEnv
 
 import numpy as np
 
@@ -55,11 +57,13 @@ class HindsightExperienceReplayWrapper(object):
                                                                            "please use one of {}".format(
             list(GoalSelectionStrategy))
 
+        assert isinstance(replay_buffer, MultiWorkerReplayBuffer) or isinstance(replay_buffer, PrioritizedMultiWorkerReplayBuffer)
+
         self.n_sampled_goal = n_sampled_goal
         self.goal_selection_strategy = goal_selection_strategy
         self.env = wrapped_env
-        # Buffer for storing transitions of the current episode
-        self.episode_transitions = []
+        # Buffer for storing transitions of the current episode is implemented inside replay_buffer now
+        # self.episode_transitions = []
         self.replay_buffer = replay_buffer
 
     def add(self, obs_t, action, reward, obs_tp1, done):
@@ -72,14 +76,12 @@ class HindsightExperienceReplayWrapper(object):
         :param done: (bool) is the episode done
         """
         assert self.replay_buffer is not None
-        # Update current episode buffer
-        self.episode_transitions.append((obs_t, action, reward, obs_tp1, done))
-        if done:
-            # Add transitions (and imagined ones) to buffer only when an episode is over
-            # print('episode transition len', len(self.episode_transitions))
-            self._store_episode()
-            # Reset episode buffer
-            self.episode_transitions = []
+        assert obs_t.shape[0] == self.replay_buffer.num_workers
+        for i in range(self.replay_buffer.num_workers):
+            self.replay_buffer.local_transitions[i].append((obs_t[i], action[i], reward[i], obs_tp1[i], done[i]))
+            if done[i]:
+                self._store_episode(i)
+                self.replay_buffer.local_transitions[i] = []
 
     def sample(self, *args, **kwargs):
         return self.replay_buffer.sample(*args, **kwargs)
@@ -92,6 +94,11 @@ class HindsightExperienceReplayWrapper(object):
         :return: (bool)
         """
         return self.replay_buffer.can_sample(n_samples)
+
+    def update_priorities(self, idxes, priorities):
+        if isinstance(self.replay_buffer, MultiWorkerReplayBuffer):
+            raise NotImplementedError
+        return self.replay_buffer.update_priorities(idxes, priorities)
 
     def __len__(self):
         return len(self.replay_buffer)
@@ -147,7 +154,7 @@ class HindsightExperienceReplayWrapper(object):
             for _ in range(self.n_sampled_goal)
         ]
 
-    def _store_episode(self):
+    def _store_episode(self, i):
         """
         Sample artificial goals and store transition of the current
         episode in the replay buffer.
@@ -155,22 +162,23 @@ class HindsightExperienceReplayWrapper(object):
         """
         # For each transition in the last episode,
         # create a set of artificial transitions
-        for transition_idx, transition in enumerate(self.episode_transitions):
+        for transition_idx, transition in enumerate(self.replay_buffer.local_transitions[i]):
 
             obs_t, action, reward, obs_tp1, done = transition
 
             # Add to the replay buffer
-            self.replay_buffer.add(obs_t, action, reward, obs_tp1, done)
+            # Call add method from ReplayBuffer
+            super(type(self.replay_buffer), self.replay_buffer).add(obs_t, action, reward, obs_tp1, done)
 
             # We cannot sample a goal from the future in the last step of an episode
-            if (transition_idx == len(self.episode_transitions) - 1 and
+            if (transition_idx == len(self.replay_buffer.local_transitions[i]) - 1 and
                     (self.goal_selection_strategy == GoalSelectionStrategy.FUTURE or
                              self.goal_selection_strategy == GoalSelectionStrategy.FUTUREANDFINAL)):
                 break
 
             # Sampled n goals per transition, where n is `n_sampled_goal`
             # this is called k in the paper
-            sampled_goals = self._sample_achieved_goals(self.episode_transitions, transition_idx)
+            sampled_goals = self._sample_achieved_goals(self.replay_buffer.local_transitions[i], transition_idx)
             # For each sampled goals, store a new transition
             for goal in sampled_goals:
                 # Copy transition to avoid modifying the original one
@@ -193,21 +201,13 @@ class HindsightExperienceReplayWrapper(object):
                     next_obs_dict['achieved_goal'][3:] = one_hot
                     next_obs_dict['achieved_goal'][0:3] = next_obs_dict['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
 
-                # Update the reward according to the new desired goal
-                # info = {
-                #     'is_blocked': next_obs_dict['observation'][7] + self.env.env.size_obstacle[1] * np.cos(next_obs_dict['observation'][22]) > 0.85
-                #                   and next_obs_dict['observation'][7] - self.env.env.size_obstacle[1] * np.cos(
-                #         next_obs_dict['observation'][22]) < 0.65
-                #                   and abs(next_obs_dict['observation'][6] - self.env.env.pos_wall[0]) < self.env.env.size_wall[0] + self.env.env.size_obstacle[
-                #         0] + self.env.env.size_object[0]
-                #                   and (next_obs_dict['achieved_goal'][0] - self.env.env.pos_wall[0]) * (next_obs_dict['desired_goal'][0] - self.env.env.pos_wall[0]) < 0
-                #
-                # }
                 info = None
                 if len(goal) == 3:
                     reward = self.env.compute_reward(goal, next_obs_dict['achieved_goal'], info)
                 else:
                     reward = self.env.compute_reward(self.env.convert_dict_to_obs(next_obs_dict), goal, info)
+                if isinstance(self.env.env, VecEnv):
+                    reward = reward[0]
                 # Can we use achieved_goal == desired_goal?
                 done = False
 
@@ -215,4 +215,5 @@ class HindsightExperienceReplayWrapper(object):
                 obs, next_obs = map(self.env.convert_dict_to_obs, (obs_dict, next_obs_dict))
 
                 # Add artificial transition to the replay buffer
-                self.replay_buffer.add(obs, action, reward, next_obs, done)
+                # Call add method from ReplayBuffer
+                super(type(self.replay_buffer), self.replay_buffer).add(obs, action, reward, next_obs, done)

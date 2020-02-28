@@ -5,7 +5,7 @@ from stable_baselines.common import OffPolicyRLModel
 from stable_baselines.common.base_class import _UnvecWrapper
 from stable_baselines.common.vec_env import VecEnvWrapper
 from .replay_buffer import HindsightExperienceReplayWrapper, KEY_TO_GOAL_STRATEGY
-from stable_baselines.her.utils import HERGoalEnvWrapper
+from .utils import HERGoalEnvWrapper
 
 
 class HER_HACK(BaseRLModel):
@@ -25,7 +25,7 @@ class HER_HACK(BaseRLModel):
         assert not isinstance(env, VecEnvWrapper), "HER does not support VecEnvWrapper"
 
         super().__init__(policy=policy, env=env, verbose=kwargs.get('verbose', 0),
-                         policy_base=None, requires_vec_env=False)
+                         policy_base=None, requires_vec_env=True)
 
         self.model_class = model_class
         self.replay_wrapper = None

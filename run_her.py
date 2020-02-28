@@ -1,7 +1,8 @@
 from stable_baselines import SAC
 from stable_baselines.sac.policies import FeedForwardPolicy as SACPolicy
 from stable_baselines.common.policies import register_policy
-from baselines import HER_HACK
+from stable_baselines.common.vec_env import SubprocVecEnv
+from baselines import HER_HACK, SAC_parallel
 from utils.wrapper import DoneOnSuccessWrapper
 from gym.wrappers import FlattenDictWrapper
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
@@ -25,6 +26,7 @@ ENTRY_POINT = {
     'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
     'FetchStack-v0': FetchPureStackEnv,
     'FetchStack-v1': FetchStackEnv,
+    'FetchStackUnlimit-v1': FetchStackEnv,
     }
 
 hard_test = False
@@ -100,7 +102,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
 
     set_global_seeds(seed)
 
-    model_class = SAC  # works also with SAC, DDPG and TD3
+    # model_class = SAC  # works also with SAC, DDPG and TD3
+    model_class = SAC_parallel
 
     # if env_name in ENTRY_POINT.keys():
     #     kwargs = dict(penaltize_height=False, heavy_obstacle=heavy_obstacle, random_gripper=random_gripper)
@@ -110,13 +113,17 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     #     env = gym.make(env_name)
     # else:
     #     raise NotImplementedError("%s not implemented" % env_name)
+    n_workers = 32
     env_kwargs = dict(random_box=True,
                       random_ratio=random_ratio,
                       random_gripper=True,
                       max_episode_steps=100,
                       reward_type=reward_type,
                       n_object=n_object, )
-    env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
+    # env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
+    def make_thunk(rank):
+        return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
+    env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
 
     if not play:
         os.makedirs(log_dir, exist_ok=True)
@@ -125,7 +132,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     goal_selection_strategy = 'future'  # equivalent to GoalSelectionStrategy.FUTURE
 
     if not play:
-        if model_class is SAC:
+        if model_class is SAC or model_class is SAC_parallel:
             # wrap env
             # from utils.wrapper import DoneOnSuccessWrapper
             from stable_baselines.ddpg.noise import NormalActionNoise
@@ -163,16 +170,17 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             train_kwargs = {}
             policy_kwargs = {}
             callback = None
-        # class CustomSACPolicy(SACPolicy):
-        #     def __init__(self, *args, **kwargs):
-        #         super(CustomSACPolicy, self).__init__(*args, **kwargs,
-        #                                             layers=[256, 256],
-        #                                             feature_extraction="mlp")
-        # register_policy('CustomSACPolicy', CustomSACPolicy)
-        from utils.sac_attention_policy import AttentionPolicy
-        policy = AttentionPolicy
-        policy_kwargs["n_object"] = n_object
-        policy_kwargs["feature_extraction"] = "attention_mlp"
+        class CustomSACPolicy(SACPolicy):
+            def __init__(self, *args, **kwargs):
+                super(CustomSACPolicy, self).__init__(*args, **kwargs,
+                                                    layers=[256, 256],
+                                                    feature_extraction="mlp")
+        register_policy('CustomSACPolicy', CustomSACPolicy)
+        policy = CustomSACPolicy
+        # from utils.sac_attention_policy import AttentionPolicy
+        # policy = AttentionPolicy
+        # policy_kwargs["n_object"] = n_object
+        # policy_kwargs["feature_extraction"] = "attention_mlp"
         # if layer_norm:
         #     policy = 'LnMlpPolicy'
         # else:
