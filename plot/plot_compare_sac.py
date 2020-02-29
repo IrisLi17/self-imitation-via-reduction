@@ -8,7 +8,7 @@ if __name__ == '__main__':
     option = sys.argv[1]
     log_paths = sys.argv[2:]
     assert option in ['success_rate', 'eval', 'entropy', 'aug_ratio', 'self_aug_ratio']
-    window = 200
+    window = 20
     def get_item(log_file, label):
         data = pandas.read_csv(log_file, index_col=None, comment='#', error_bad_lines=True)
         return data[label].values

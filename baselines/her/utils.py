@@ -96,9 +96,9 @@ class HERGoalEnvWrapper(object):
     def reset(self):
         return self.convert_dict_to_obs(self.env.reset())
 
-    def compute_reward(self, achieved_goal, desired_goal, info):
+    def compute_reward(self, achieved_goal, desired_goal, info, indices=None):
         if isinstance(self.env, VecEnv):
-            return self.env.env_method('compute_reward', achieved_goal, desired_goal, info)
+            return self.env.env_method('compute_reward', achieved_goal, desired_goal, info, indices=indices)
         return self.env.compute_reward(achieved_goal, desired_goal, info)
 
     def render(self, mode='human'):

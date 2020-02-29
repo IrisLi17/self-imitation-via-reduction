@@ -37,6 +37,7 @@ def arg_parse():
     parser.add_argument('--env', default='FetchPushWallObstacle-v4')
     parser.add_argument('--seed', type=int, default=42)
     # parser.add_argument('--policy', type=str, default='MlpPolicy')
+    parser.add_argument('--learning_rate', type=float, default=3e-4)
     parser.add_argument('--action_noise', type=str, default='none')
     parser.add_argument('--num_timesteps', type=float, default=3e6)
     parser.add_argument('--log_path', default=None, type=str)
@@ -47,6 +48,7 @@ def arg_parse():
     parser.add_argument('--gamma', type=float, default=0.95)
     parser.add_argument('--reward_type', type=str, default='sparse')
     parser.add_argument('--n_object', type=int, default=2)
+    parser.add_argument('--priority', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
     return args
@@ -91,7 +93,8 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
 
 
 def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
-         export_gif, gamma, random_ratio, action_noise, reward_type, n_object):
+         export_gif, gamma, random_ratio, action_noise, reward_type, n_object,
+         priority, learning_rate):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -154,6 +157,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                 train_freq=1,
                                 batch_size=batch_size,
                                 action_noise=parsed_action_noise,
+                                priority_buffer=priority,
+                                learning_rate=learning_rate,
                                 )
             if 'FetchStack' in env_name:
                 train_kwargs['tau'] = 0.001
@@ -264,4 +269,5 @@ if __name__ == '__main__':
          log_path=args.log_path, load_path=args.load_path, play=args.play,
          batch_size=args.batch_size, export_gif=args.export_gif,
          gamma=args.gamma, random_ratio=args.random_ratio, action_noise=args.action_noise,
-         reward_type=args.reward_type, n_object=args.n_object)
+         reward_type=args.reward_type, n_object=args.n_object, priority=args.priority,
+         learning_rate=args.learning_rate)

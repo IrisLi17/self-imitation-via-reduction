@@ -68,7 +68,7 @@ class SAC_parallel(OffPolicyRLModel):
     """
 
     def __init__(self, policy, env, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
-                 priority_buffer=True, alpha=0.2,
+                 priority_buffer=True, alpha=0.6,
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
@@ -334,7 +334,7 @@ class SAC_parallel(OffPolicyRLModel):
     def _train_step(self, step, writer, learning_rate):
         # Sample a batch from the replay buffer
         if self.priority_buffer:
-            batch = self.replay_buffer.sample(self.batch_size, beta=0.5)
+            batch = self.replay_buffer.sample(self.batch_size, beta=0.4)
             batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, weights, idxes = batch
         else:
             batch = self.replay_buffer.sample(self.batch_size)
@@ -373,8 +373,8 @@ class SAC_parallel(OffPolicyRLModel):
             batch_rewards = np.reshape(batch_rewards, (self.batch_size, -1))
             batch_dones = np.reshape(batch_dones, (self.batch_size, -1))
             priorities = batch_rewards + (1 - batch_dones) * self.gamma * value_target - qf1
-            priorities = 1 / (1 + np.exp(-priorities))
-            priorities = np.squeeze(priorities).tolist()
+            priorities = np.abs(priorities) + 1e-4
+            priorities = np.squeeze(priorities, axis=-1).tolist()
             self.replay_buffer.update_priorities(idxes, priorities)
 
         if self.log_ent_coef is not None:
@@ -390,6 +390,8 @@ class SAC_parallel(OffPolicyRLModel):
 
         if replay_wrapper is not None:
             self.replay_buffer = replay_wrapper(self.replay_buffer)
+            if self.priority_buffer:
+                self.replay_buffer.set_model(self)
 
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
@@ -449,7 +451,7 @@ class SAC_parallel(OffPolicyRLModel):
                         # print(next_obs[idx], info[idx]['terminal_observation'])
                         next_obs[idx] = self.env.convert_dict_to_obs(info[idx]['terminal_observation'])
 
-                # Calculate absolute td error
+                # Calculate absolute td error (Done in wrapper now)
                 # qf1 = self.step_ops[4]
                 # q, v_tp1 = self.sess.run([qf1, self.value_target],
                 #                          {self.observations_ph: obs, self.actions_ph: action,
@@ -529,7 +531,7 @@ class SAC_parallel(OffPolicyRLModel):
                 num_episodes = sum([len(episode_rewards[i]) for i in range(len(episode_rewards))])
                 self.num_timesteps += self.env.env.num_envs
                 # Display training infos
-                if self.verbose >= 1 and done.any() and log_interval is not None and num_episodes % log_interval == 0:
+                if self.verbose >= 1 and sum(done) > 0 and log_interval is not None and num_episodes % log_interval == 0:
                     fps = int(self.num_timesteps / (time.time() - start_time))
                     logger.logkv("episodes", num_episodes)
                     logger.logkv("mean 100 episode reward", mean_reward)
