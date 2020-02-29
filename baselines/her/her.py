@@ -4,7 +4,7 @@ from stable_baselines.common import BaseRLModel
 from stable_baselines.common import OffPolicyRLModel
 from stable_baselines.common.base_class import _UnvecWrapper
 from stable_baselines.common.vec_env import VecEnvWrapper
-from .replay_buffer import HindsightExperienceReplayWrapper, KEY_TO_GOAL_STRATEGY
+from .replay_buffer import HindsightExperienceReplayWrapper, KEY_TO_GOAL_STRATEGY, SingleHindsightExperienceReplayWrapper
 from .utils import HERGoalEnvWrapper
 
 
@@ -20,15 +20,16 @@ class HER_HACK(BaseRLModel):
     """
 
     def __init__(self, policy, env, model_class, n_sampled_goal=4,
-                 goal_selection_strategy='future', *args, **kwargs):
+                 goal_selection_strategy='future', num_workers=1, *args, **kwargs):
 
         assert not isinstance(env, VecEnvWrapper), "HER does not support VecEnvWrapper"
 
         super().__init__(policy=policy, env=env, verbose=kwargs.get('verbose', 0),
-                         policy_base=None, requires_vec_env=True)
+                         policy_base=None, requires_vec_env=(num_workers > 1))
 
         self.model_class = model_class
         self.replay_wrapper = None
+        self.n_workers = num_workers
         # Save dict observation space (used for checks at loading time)
         if env is not None:
             self.observation_space = env.observation_space
@@ -65,7 +66,11 @@ class HER_HACK(BaseRLModel):
         # maybe we can try calling `compute_reward()` ?
         # assert isinstance(self.env, gym.GoalEnv), "HER only supports gym.GoalEnv"
 
-        self.replay_wrapper = functools.partial(HindsightExperienceReplayWrapper,
+        if self.n_workers > 1:
+            replay_wrapper = HindsightExperienceReplayWrapper
+        else:
+            replay_wrapper = SingleHindsightExperienceReplayWrapper
+        self.replay_wrapper = functools.partial(replay_wrapper,
                                                 n_sampled_goal=self.n_sampled_goal,
                                                 goal_selection_strategy=self.goal_selection_strategy,
                                                 wrapped_env=self.env)

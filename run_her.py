@@ -36,7 +36,8 @@ def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', default='FetchPushWallObstacle-v4')
     parser.add_argument('--seed', type=int, default=42)
-    # parser.add_argument('--policy', type=str, default='MlpPolicy')
+    parser.add_argument('--policy', type=str, default='CustomSACPolicy')
+    parser.add_argument('--num_workers', type=int, default=32)
     parser.add_argument('--learning_rate', type=float, default=3e-4)
     parser.add_argument('--action_noise', type=str, default='none')
     parser.add_argument('--num_timesteps', type=float, default=3e6)
@@ -94,7 +95,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
 
 def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
          export_gif, gamma, random_ratio, action_noise, reward_type, n_object,
-         priority, learning_rate):
+         priority, learning_rate, num_workers, policy):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -106,7 +107,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     set_global_seeds(seed)
 
     # model_class = SAC  # works also with SAC, DDPG and TD3
-    model_class = SAC_parallel
+    model_class = SAC_parallel if num_workers > 1 else SAC
 
     # if env_name in ENTRY_POINT.keys():
     #     kwargs = dict(penaltize_height=False, heavy_obstacle=heavy_obstacle, random_gripper=random_gripper)
@@ -116,7 +117,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     #     env = gym.make(env_name)
     # else:
     #     raise NotImplementedError("%s not implemented" % env_name)
-    n_workers = 32
+    n_workers = num_workers
     env_kwargs = dict(random_box=True,
                       random_ratio=random_ratio,
                       random_gripper=True,
@@ -126,7 +127,10 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     # env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
-    env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
+    if n_workers > 1:
+        env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
+    else:
+        env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
 
     if not play:
         os.makedirs(log_dir, exist_ok=True)
@@ -160,6 +164,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                 priority_buffer=priority,
                                 learning_rate=learning_rate,
                                 )
+            if num_workers == 1:
+                del train_kwargs['priority_buffer']
             if 'FetchStack' in env_name:
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
@@ -181,11 +187,12 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                                     layers=[256, 256],
                                                     feature_extraction="mlp")
         register_policy('CustomSACPolicy', CustomSACPolicy)
-        policy = CustomSACPolicy
-        # from utils.sac_attention_policy import AttentionPolicy
-        # policy = AttentionPolicy
-        # policy_kwargs["n_object"] = n_object
-        # policy_kwargs["feature_extraction"] = "attention_mlp"
+        # policy = CustomSACPolicy
+        from utils.sac_attention_policy import AttentionPolicy
+        register_policy('AttentionPolicy', AttentionPolicy)
+        if policy == 'AttentionPolicy':
+            policy_kwargs["n_object"] = n_object
+            policy_kwargs["feature_extraction"] = "attention_mlp"
         # if layer_norm:
         #     policy = 'LnMlpPolicy'
         # else:
@@ -196,6 +203,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         # Wrap the model
         model = HER_HACK(policy, env, model_class, n_sampled_goal=4,
                          goal_selection_strategy=goal_selection_strategy,
+                         num_workers=num_workers,
                          policy_kwargs=policy_kwargs,
                          verbose=1,
                          **train_kwargs)
@@ -270,4 +278,4 @@ if __name__ == '__main__':
          batch_size=args.batch_size, export_gif=args.export_gif,
          gamma=args.gamma, random_ratio=args.random_ratio, action_noise=args.action_noise,
          reward_type=args.reward_type, n_object=args.n_object, priority=args.priority,
-         learning_rate=args.learning_rate)
+         learning_rate=args.learning_rate, num_workers=args.num_workers, policy=args.policy)
