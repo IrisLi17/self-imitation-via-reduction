@@ -174,6 +174,7 @@ class SAC_parallel(OffPolicyRLModel):
                     self.actions_ph = tf.placeholder(tf.float32, shape=(None,) + self.action_space.shape,
                                                      name='actions')
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
+                    self.importance_weight_ph = tf.placeholder(tf.float32, shape=(None,), name='weights')
 
                 with tf.variable_scope("model", reuse=False):
                     # Create the policy
@@ -237,8 +238,8 @@ class SAC_parallel(OffPolicyRLModel):
 
                     # Compute Q-Function loss
                     # TODO: test with huber loss (it would avoid too high values)
-                    qf1_loss = 0.5 * tf.reduce_mean((q_backup - qf1) ** 2)
-                    qf2_loss = 0.5 * tf.reduce_mean((q_backup - qf2) ** 2)
+                    qf1_loss = 0.5 * tf.reduce_mean(self.importance_weight_ph * (q_backup - qf1) ** 2)
+                    qf2_loss = 0.5 * tf.reduce_mean(self.importance_weight_ph * (q_backup - qf2) ** 2)
 
                     # Compute the entropy temperature loss
                     # it is used when the entropy coefficient is learned
@@ -263,7 +264,7 @@ class SAC_parallel(OffPolicyRLModel):
                     # We update the vf towards the min of two Q-functions in order to
                     # reduce overestimation bias from function approximation error.
                     v_backup = tf.stop_gradient(min_qf_pi - self.ent_coef * logp_pi)
-                    value_loss = 0.5 * tf.reduce_mean((value_fn - v_backup) ** 2)
+                    value_loss = 0.5 * tf.reduce_mean(self.importance_weight_ph * (value_fn - v_backup) ** 2)
 
                     values_losses = qf1_loss + qf2_loss + value_loss
 
@@ -336,9 +337,12 @@ class SAC_parallel(OffPolicyRLModel):
         if self.priority_buffer:
             batch = self.replay_buffer.sample(self.batch_size, beta=0.4)
             batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, weights, idxes = batch
+            # For debugging.
+            # weights = np.ones(batch_obs.shape[0])
         else:
             batch = self.replay_buffer.sample(self.batch_size)
             batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
+            weights = np.ones(batch_obs.shape[0])
 
         feed_dict = {
             self.observations_ph: batch_obs,
@@ -346,7 +350,8 @@ class SAC_parallel(OffPolicyRLModel):
             self.next_observations_ph: batch_next_obs,
             self.rewards_ph: batch_rewards.reshape(self.batch_size, -1),
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
-            self.learning_rate_ph: learning_rate
+            self.learning_rate_ph: learning_rate,
+            self.importance_weight_ph: weights,
         }
 
         # out  = [policy_loss, qf1_loss, qf2_loss,

@@ -67,7 +67,7 @@ class HindsightExperienceReplayWrapper(object):
         # self.episode_transitions = []
         self.replay_buffer = replay_buffer
         self.temp_container = {'idx': [], 'observation': [], 'action': [], 'next_observation': [],
-                               'reward': []}
+                               'reward': [], 'done': []}
 
     def set_model(self, model):
         self.model = model
@@ -94,7 +94,8 @@ class HindsightExperienceReplayWrapper(object):
                 self.model.actions_ph: np.asarray(self.temp_container['action']),
                 self.model.next_observations_ph: np.asarray(self.temp_container['next_observation']),
             })
-            priorities = np.reshape(np.asarray(self.temp_container['reward']), q1.shape) + self.model.gamma * value - q1
+            priorities = np.reshape(np.asarray(self.temp_container['reward']), q1.shape) \
+                         + (1 - np.reshape(np.asarray(self.temp_container['done']), q1.shape)) * self.model.gamma * value - q1
             priorities = np.squeeze(np.abs(priorities) + 1e-4, axis=-1).tolist()
             self.update_priorities(self.temp_container['idx'], priorities)
             for key in self.temp_container.keys():
@@ -190,6 +191,7 @@ class HindsightExperienceReplayWrapper(object):
                 self.temp_container['action'].append(action)
                 self.temp_container['next_observation'].append(obs_tp1)
                 self.temp_container['reward'].append(reward)
+                self.temp_container['done'].append(done)
             # Call add method from ReplayBuffer
             super(type(self.replay_buffer), self.replay_buffer).add(obs_t, action, reward, obs_tp1, done)
 
@@ -232,7 +234,8 @@ class HindsightExperienceReplayWrapper(object):
                 if isinstance(self.env.env, VecEnv):
                     reward = reward[0]
                 # Can we use achieved_goal == desired_goal?
-                done = False
+                # done = False
+                done = reward > 0.5
 
                 # Transform back to ndarrays
                 obs, next_obs = map(self.env.convert_dict_to_obs, (obs_dict, next_obs_dict))
@@ -244,6 +247,7 @@ class HindsightExperienceReplayWrapper(object):
                     self.temp_container['action'].append(action)
                     self.temp_container['next_observation'].append(next_obs)
                     self.temp_container['reward'].append(reward)
+                    self.temp_container['done'].append(done)
                 # Call add method from ReplayBuffer
                 super(type(self.replay_buffer), self.replay_buffer).add(obs, action, reward, next_obs, done)
 
@@ -411,7 +415,8 @@ class SingleHindsightExperienceReplayWrapper(object):
                     reward = self.env.compute_reward(self.env.convert_dict_to_obs(next_obs_dict), goal, info)
 
                 # Can we use achieved_goal == desired_goal?
-                done = False
+                # done = False
+                done = reward > 0.5
 
                 # Transform back to ndarrays
                 obs, next_obs = map(self.env.convert_dict_to_obs, (obs_dict, next_obs_dict))
