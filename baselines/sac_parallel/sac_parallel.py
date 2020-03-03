@@ -434,8 +434,9 @@ class SAC_parallel(OffPolicyRLModel):
                 if (self.num_timesteps < self.learning_starts
                     or np.random.rand() < self.random_exploration):
                     # No need to rescale when sampling random action
-                    rescaled_action = action = self.env.action_space.sample()
-                    rescaled_action = np.tile(action, (self.env.env.num_envs, 1))
+                    # rescaled_action = action = self.env.action_space.sample()
+                    # rescaled_action = np.tile(action, (self.env.env.num_envs, 1))
+                    rescaled_action = np.stack([self.env.action_space.sample() for _ in range(self.env.env.num_envs)], axis=0)
                     action = rescaled_action
                 else:
                     action = self.policy_tf.step(obs, deterministic=False)
@@ -536,7 +537,7 @@ class SAC_parallel(OffPolicyRLModel):
                 num_episodes = sum([len(episode_rewards[i]) for i in range(len(episode_rewards))])
                 self.num_timesteps += self.env.env.num_envs
                 # Display training infos
-                if self.verbose >= 1 and sum(done) > 0 and log_interval is not None and num_episodes % log_interval == 0:
+                if self.verbose >= 1 and done[0] and log_interval is not None and len(episode_rewards[0]) % (log_interval // self.env.env.num_envs) == 0:
                     fps = int(self.num_timesteps / (time.time() - start_time))
                     logger.logkv("episodes", num_episodes)
                     logger.logkv("mean 100 episode reward", mean_reward)
@@ -548,7 +549,7 @@ class SAC_parallel(OffPolicyRLModel):
                     logger.logkv("fps", fps)
                     logger.logkv('time_elapsed', int(time.time() - start_time))
                     if len(episode_successes[0]) > 0:
-                        logger.logkv("success rate", np.mean(episode_successes[0][-100:]))
+                        logger.logkv("success rate", np.mean(np.concatenate([episode_successes[i][-100:] for i in range(self.env.env.num_envs)])))
                     if len(infos_values) > 0:
                         for (name, val) in zip(self.infos_names, infos_values):
                             logger.logkv(name, val)

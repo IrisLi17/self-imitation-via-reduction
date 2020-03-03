@@ -27,6 +27,8 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=128):
         self_out, num_outputs=n_units, scope='shared_agent_fc0', activation_fn=tf.nn.relu)
     self_out = tf.contrib.layers.fully_connected(
         self_out, num_outputs=n_units // 2, scope='shared_agent_fc1', activation_fn=tf.nn.relu)
+    # self_out = tf.contrib.layers.fully_connected(
+    #     self_out_latent, num_outputs=n_units // 2, scope="shared_agent_fc2", activation_fn=tf.nn.relu)
 
     objects_in = []
     for i in range(n_object):
@@ -44,43 +46,47 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=128):
             objects_in.append(fc2)
     objects_in = tf.stack(objects_in, 2) # (*, n_unit, n_object)
     objects_attention = tf.nn.softmax(tf.matmul(tf.expand_dims(self_out, axis=1), objects_in) / math.sqrt(n_units // 2)) # (*, 1, n_object)
+    objects_out = tf.squeeze(tf.matmul(objects_attention, tf.transpose(objects_in, [0, 2, 1])), 1) # (*, n_unit // 2)
+    objects_out = tf.contrib.layers.layer_norm(objects_out)
+    objects_out = tf.nn.relu(objects_out)
+
+    latent = tf.concat([self_out, objects_out], 1) # (*, n_unit)
+    # latent = tf.concat([self_out_latent, objects_out], 1)
+    return latent
+
+
+def attention_mlp_extractor2(flat_observations, n_object=2, n_units=128):
+    agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
+                                np.arange(3 + 6 * n_object + 2 + 9 * n_object, int(flat_observations.shape[1]))])
+    self_in = tf.gather(flat_observations, agent_idx, axis=1)
+    self_out = self_in
+    self_out = tf.contrib.layers.fully_connected(
+        self_out, num_outputs=n_units, scope='shared_agent_fc0', activation_fn=tf.nn.relu)
+    self_out = tf.contrib.layers.fully_connected(
+        self_out, num_outputs=n_units // 2, scope='shared_agent_fc1', activation_fn=tf.nn.relu)
+
+    objects_in = []
+    for i in range(n_object):
+        _object_idx = np.concatenate([np.arange(3+3*i, 3+3*(i+1)), np.arange(3+3*n_object+3*i, 3+3*n_object+3*(i+1)),
+                                      np.arange(3+6*n_object+2+3*i, 3+6*n_object+2+3*(i+1)),
+                                      np.arange(3+9*n_object+2+3*i, 3+9*n_object+2+3*(i+1)),
+                                      np.arange(3+12*n_object+2+3*i, 3+12*n_object+2+3*(i+1))])
+        object_in = tf.gather(flat_observations, _object_idx, axis=1)
+        object_onehot = tf.tile(tf.expand_dims(tf.one_hot(i, n_object), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
+        object_in = tf.concat([object_in, object_onehot], axis=1)
+        # assert self_in.shape[1] + n_object * object_in.shape[1] == flat_observations.shape[1], (self_out.shape, object_in.shape)
+        with tf.variable_scope("object", reuse=tf.AUTO_REUSE):
+            fc1 = tf.contrib.layers.fully_connected(object_in, num_outputs=n_units, scope="fc0", activation_fn=tf.nn.relu)
+            fc2 = tf.contrib.layers.fully_connected(fc1, num_outputs=n_units // 2, scope="fc1", activation_fn=tf.nn.relu)
+            objects_in.append(fc2)
+    objects_in = tf.stack(objects_in, 2) # (*, n_unit, n_object)
+    objects_attention = tf.nn.softmax(tf.matmul(tf.expand_dims(self_out, axis=1), objects_in) / math.sqrt(n_units // 2)) # (*, 1, n_object)
     objects_out = tf.squeeze(tf.matmul(objects_attention, tf.transpose(objects_in, [0, 2, 1])), 1) # (*, n_unit)
     objects_out = tf.contrib.layers.layer_norm(objects_out)
     objects_out = tf.nn.relu(objects_out)
 
     latent = tf.concat([self_out, objects_out], 1) # (*, 2*n_unit)
     return latent
-
-    # Old code
-    # # Iterate through the shared layers and build the shared parts of the network
-    # for idx, layer in enumerate(net_arch):
-    #     if isinstance(layer, int):  # Check that this is a shared layer
-    #         layer_size = layer
-    #         latent = act_fun(linear(latent, "shared_fc{}".format(idx), layer_size, init_scale=np.sqrt(2)))
-    #     else:
-    #         assert isinstance(layer, dict), "Error: the net_arch list can only contain ints and dicts"
-    #         if 'pi' in layer:
-    #             assert isinstance(layer['pi'], list), "Error: net_arch[-1]['pi'] must contain a list of integers."
-    #             policy_only_layers = layer['pi']
-    #
-    #         if 'vf' in layer:
-    #             assert isinstance(layer['vf'], list), "Error: net_arch[-1]['vf'] must contain a list of integers."
-    #             value_only_layers = layer['vf']
-    #         break  # From here on the network splits up in policy and value network
-
-    # Build the non-shared part of the network
-    # latent_policy = latent
-    # latent_value = latent
-    # for idx, (pi_layer_size, vf_layer_size) in enumerate(zip_longest(policy_only_layers, value_only_layers)):
-    #     if pi_layer_size is not None:
-    #         assert isinstance(pi_layer_size, int), "Error: net_arch[-1]['pi'] must only contain integers."
-    #         latent_policy = act_fun(linear(latent_policy, "pi_fc{}".format(idx), pi_layer_size, init_scale=np.sqrt(2)))
-    #
-    #     if vf_layer_size is not None:
-    #         assert isinstance(vf_layer_size, int), "Error: net_arch[-1]['vf'] must only contain integers."
-    #         latent_value = act_fun(linear(latent_value, "vf_fc{}".format(idx), vf_layer_size, init_scale=np.sqrt(2)))
-    #
-    # return latent_policy, latent_value
 
 
 def self_attention_mlp_extractor(flat_observations, n_object=3, n_units=256):

@@ -167,9 +167,11 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             if num_workers == 1:
                 del train_kwargs['priority_buffer']
             if 'FetchStack' in env_name:
+                train_kwargs['ent_coef'] = 0.01
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
                 train_kwargs['batch_size'] = 256
+                train_kwargs['random_exploration'] = 0.1
             policy_kwargs = {}
 
             def callback(_locals, _globals):
@@ -184,7 +186,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         class CustomSACPolicy(SACPolicy):
             def __init__(self, *args, **kwargs):
                 super(CustomSACPolicy, self).__init__(*args, **kwargs,
-                                                    layers=[256, 256],
+                                                    layers=[256, 256, 256, 256],
                                                     feature_extraction="mlp")
         register_policy('CustomSACPolicy', CustomSACPolicy)
         # policy = CustomSACPolicy
@@ -193,6 +195,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         if policy == 'AttentionPolicy':
             policy_kwargs["n_object"] = n_object
             policy_kwargs["feature_extraction"] = "attention_mlp"
+        elif policy == "CustomSACPolicy":
+            policy_kwargs["layer_norm"] = True
         # if layer_norm:
         #     policy = 'LnMlpPolicy'
         # else:

@@ -1,7 +1,7 @@
 import tensorflow as tf
 from stable_baselines.sac.sac import SACPolicy
 from stable_baselines.sac.policies import mlp, gaussian_entropy, gaussian_likelihood, apply_squashing_func, LOG_STD_MAX, LOG_STD_MIN
-from .attention_policy import attention_mlp_extractor
+from .attention_policy import attention_mlp_extractor2
 
 
 class AttentionPolicy(SACPolicy):
@@ -37,7 +37,7 @@ class AttentionPolicy(SACPolicy):
         self.cnn_extractor = cnn_extractor
         self.reuse = reuse
         if layers is None:
-            layers = [256, 256]
+            layers = [256, 256, 256, 256]
         self.layers = layers
         self.reg_loss = None
         self.reg_weight = reg_weight
@@ -52,11 +52,16 @@ class AttentionPolicy(SACPolicy):
         if obs is None:
             obs = self.processed_obs
 
+        with tf.variable_scope("attention", reuse=tf.AUTO_REUSE):
+            if self.feature_extraction == "attention_mlp":
+                latent = attention_mlp_extractor2(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+
         with tf.variable_scope(scope, reuse=reuse):
             if self.feature_extraction == "cnn":
                 pi_h = self.cnn_extractor(obs, **self.cnn_kwargs)
             elif self.feature_extraction == "attention_mlp":
-                pi_h = attention_mlp_extractor(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+                # pi_h = attention_mlp_extractor(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+                pi_h = latent
             else:
                 pi_h = tf.layers.flatten(obs)
 
@@ -96,11 +101,16 @@ class AttentionPolicy(SACPolicy):
         if obs is None:
             obs = self.processed_obs
 
+        # with tf.variable_scope("attention", reuse=tf.AUTO_REUSE):
+        #     if self.feature_extraction == "attention_mlp":
+        #         latent = attention_mlp_extractor2(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+
         with tf.variable_scope(scope, reuse=reuse):
             if self.feature_extraction == "cnn":
                 critics_h = self.cnn_extractor(obs, **self.cnn_kwargs)
-            elif self.feature_extraction == "attention_mlp":
-                critics_h = attention_mlp_extractor(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+            # elif self.feature_extraction == "attention_mlp":
+            #     # critics_h = attention_mlp_extractor(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+            #     critics_h = latent
             else:
                 critics_h = tf.layers.flatten(obs)
 
