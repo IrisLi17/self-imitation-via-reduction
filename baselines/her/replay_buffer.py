@@ -68,6 +68,7 @@ class HindsightExperienceReplayWrapper(object):
         self.replay_buffer = replay_buffer
         self.temp_container = {'idx': [], 'observation': [], 'action': [], 'next_observation': [],
                                'reward': [], 'done': []}
+        self.reward_time = 0.0
 
     def set_model(self, model):
         self.model = model
@@ -83,11 +84,47 @@ class HindsightExperienceReplayWrapper(object):
         """
         assert self.replay_buffer is not None
         assert obs_t.shape[0] == self.replay_buffer.num_workers
+        self._next_idx = self.replay_buffer._next_idx
         for i in range(self.replay_buffer.num_workers):
             self.replay_buffer.local_transitions[i].append((obs_t[i], action[i], reward[i], obs_tp1[i], done[i]))
             if done[i]:
                 self._store_episode(i)
                 self.replay_buffer.local_transitions[i] = []
+        if len(self.temp_container['observation']):
+            reward_time0 = time.time()
+            # Compute reward in batches
+            for _ in range(len(self.temp_container['observation']) // self.replay_buffer.num_workers):
+                next_obs = self.temp_container['next_observation'][_ * self.replay_buffer.num_workers: (_ + 1) * self.replay_buffer.num_workers]
+                next_obs_dict = self.env.convert_obs_to_dict(np.asarray(next_obs))
+                if self.env.goal_dim == 3:
+                    reward = self.env.compute_reward(next_obs_dict['desired_goal'], next_obs_dict['achieved_goal'], [None] * self.replay_buffer.num_workers)
+                else:
+                    reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers)
+                self.temp_container['reward'][_ * self.replay_buffer.num_workers : (_ + 1) * self.replay_buffer.num_workers] = reward.copy()
+                self.temp_container['done'][_ * self.replay_buffer.num_workers : (_ + 1) * self.replay_buffer.num_workers] = (np.array(reward) > 0.5).tolist()
+            # Remainer
+            if len(self.temp_container['observation']) % self.replay_buffer.num_workers:
+                next_obs = self.temp_container['next_observation'][len(self.temp_container['observation']) // self.replay_buffer.num_workers * self.replay_buffer.num_workers : len(self.temp_container['observation'])]
+                next_obs_dict = self.env.convert_obs_to_dict(np.asarray(next_obs))
+                if self.env.goal_dim == 3:
+                    reward = self.env.compute_reward(next_obs_dict['desired_goal'], next_obs_dict['achieved_goal'],
+                                                     [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                else:
+                    reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'],
+                                                     [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                self.temp_container['reward'][len(self.temp_container['observation']) // self.replay_buffer.num_workers * self.replay_buffer.num_workers : len(self.temp_container['observation'])] = reward.copy()
+                self.temp_container['done'][len(self.temp_container['observation']) // self.replay_buffer.num_workers * self.replay_buffer.num_workers : len(self.temp_container['observation'])] = (np.array(reward) > 0.5).tolist()
+
+            self.reward_time += time.time() - reward_time0
+            # Store into buffer now
+            for i in range(len(self.temp_container['observation'])):
+                obs = self.temp_container['observation'][i]
+                action = self.temp_container['action'][i]
+                reward = self.temp_container['reward'][i]
+                next_obs = self.temp_container['next_observation'][i]
+                done = self.temp_container['done'][i]
+                super(type(self.replay_buffer), self.replay_buffer).add(obs, action, reward, next_obs, done)
+
         if isinstance(self.replay_buffer, PrioritizedMultiWorkerReplayBuffer) and len(self.temp_container['observation']):
             q1, value = self.model.sess.run([self.model.step_ops[4], self.model.value_target], feed_dict={
                 self.model.observations_ph: np.asarray(self.temp_container['observation']),
@@ -98,8 +135,8 @@ class HindsightExperienceReplayWrapper(object):
                          + (1 - np.reshape(np.asarray(self.temp_container['done']), q1.shape)) * self.model.gamma * value - q1
             priorities = np.squeeze(np.abs(priorities) + 1e-4, axis=-1).tolist()
             self.update_priorities(self.temp_container['idx'], priorities)
-            for key in self.temp_container.keys():
-                self.temp_container[key] = []
+        for key in self.temp_container.keys():
+            self.temp_container[key] = []
 
     def sample(self, *args, **kwargs):
         return self.replay_buffer.sample(*args, **kwargs)
@@ -185,15 +222,17 @@ class HindsightExperienceReplayWrapper(object):
             obs_t, action, reward, obs_tp1, done = transition
 
             # Add to the replay buffer
-            if isinstance(self.replay_buffer, PrioritizedMultiWorkerReplayBuffer):
-                self.temp_container['idx'].append(self.replay_buffer._next_idx)
+            if isinstance(self.replay_buffer, PrioritizedMultiWorkerReplayBuffer) or isinstance(self.replay_buffer, MultiWorkerReplayBuffer):
+                self.temp_container['idx'].append(self._next_idx)
                 self.temp_container['observation'].append(obs_t)
                 self.temp_container['action'].append(action)
                 self.temp_container['next_observation'].append(obs_tp1)
                 self.temp_container['reward'].append(reward)
                 self.temp_container['done'].append(done)
-            # Call add method from ReplayBuffer
-            super(type(self.replay_buffer), self.replay_buffer).add(obs_t, action, reward, obs_tp1, done)
+            # Store them later but increment idx in this wrapper.
+            self._next_idx  = (self._next_idx + 1) % self.replay_buffer._maxsize
+            # # Call add method from ReplayBuffer
+            # super(type(self.replay_buffer), self.replay_buffer).add(obs_t, action, reward, obs_tp1, done)
 
             # We cannot sample a goal from the future in the last step of an episode
             if (transition_idx == len(self.replay_buffer.local_transitions[i]) - 1 and
@@ -226,30 +265,38 @@ class HindsightExperienceReplayWrapper(object):
                     next_obs_dict['achieved_goal'][3:] = one_hot
                     next_obs_dict['achieved_goal'][0:3] = next_obs_dict['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
 
+                '''
                 info = None
+                reward_time0 = time.time()
                 if len(goal) == 3:
                     reward = self.env.compute_reward(goal, next_obs_dict['achieved_goal'], info, indices=0)
                 else:
                     reward = self.env.compute_reward(self.env.convert_dict_to_obs(next_obs_dict), goal, info, indices=0)
                 if isinstance(self.env.env, VecEnv):
                     reward = reward[0]
+                self.reward_time += time.time() - reward_time0
                 # Can we use achieved_goal == desired_goal?
                 # done = False
                 done = reward > 0.5
+                '''
+                reward = 0.0
+                done = False
 
                 # Transform back to ndarrays
                 obs, next_obs = map(self.env.convert_dict_to_obs, (obs_dict, next_obs_dict))
 
                 # Add artificial transition to the replay buffer
-                if isinstance(self.replay_buffer, PrioritizedMultiWorkerReplayBuffer):
-                    self.temp_container['idx'].append(self.replay_buffer._next_idx)
+                if isinstance(self.replay_buffer, PrioritizedMultiWorkerReplayBuffer) or isinstance(self.replay_buffer, MultiWorkerReplayBuffer):
+                    self.temp_container['idx'].append(self._next_idx)
                     self.temp_container['observation'].append(obs)
                     self.temp_container['action'].append(action)
                     self.temp_container['next_observation'].append(next_obs)
                     self.temp_container['reward'].append(reward)
                     self.temp_container['done'].append(done)
-                # Call add method from ReplayBuffer
-                super(type(self.replay_buffer), self.replay_buffer).add(obs, action, reward, next_obs, done)
+                # Store them later but increment idx in this wrapper.
+                self._next_idx = (self._next_idx + 1) % self.replay_buffer._maxsize
+                # # Call add method from ReplayBuffer
+                # super(type(self.replay_buffer), self.replay_buffer).add(obs, action, reward, next_obs, done)
 
 
 class SingleHindsightExperienceReplayWrapper(object):

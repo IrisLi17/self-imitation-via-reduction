@@ -56,8 +56,13 @@ def attention_mlp_extractor(flat_observations, n_object=2, n_units=128):
 
 
 def attention_mlp_extractor2(flat_observations, n_object=2, n_units=128):
-    agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
-                                np.arange(3 + 6 * n_object + 2 + 9 * n_object, int(flat_observations.shape[1]))])
+    # agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
+    #                             np.arange(3 + 6 * n_object + 2 + 9 * n_object, int(flat_observations.shape[1]))])
+    agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 5 + 6 * n_object),
+                                np.arange(5 + 15 * n_object, 12 + 15 * n_object),
+                                np.arange(12 + 15 * n_object, 15 + 15 * n_object), # achieved goal pos
+                                np.arange(15 + 16 * n_object, 18 + 16 * n_object), # desired goal pos
+                                ]) # size 18
     self_in = tf.gather(flat_observations, agent_idx, axis=1)
     self_out = self_in
     self_out = tf.contrib.layers.fully_connected(
@@ -68,13 +73,14 @@ def attention_mlp_extractor2(flat_observations, n_object=2, n_units=128):
     objects_in = []
     for i in range(n_object):
         _object_idx = np.concatenate([np.arange(3+3*i, 3+3*(i+1)), np.arange(3+3*n_object+3*i, 3+3*n_object+3*(i+1)),
-                                      np.arange(3+6*n_object+2+3*i, 3+6*n_object+2+3*(i+1)),
-                                      np.arange(3+9*n_object+2+3*i, 3+9*n_object+2+3*(i+1)),
-                                      np.arange(3+12*n_object+2+3*i, 3+12*n_object+2+3*(i+1))])
+                                      np.arange(5+6*n_object+3*i, 5+6*n_object+3*(i+1)),
+                                      np.arange(5+9*n_object+3*i, 5+9*n_object+3*(i+1)),
+                                      np.arange(5+12*n_object+3*i, 5+12*n_object+3*(i+1)),
+                                      np.arange(15 + 15 * n_object + i, 15 + 15 * n_object + i + 1), # indicator
+                                      ]) # size 16
         object_in = tf.gather(flat_observations, _object_idx, axis=1)
-        object_onehot = tf.tile(tf.expand_dims(tf.one_hot(i, n_object), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
-        object_in = tf.concat([object_in, object_onehot], axis=1)
-        # assert self_in.shape[1] + n_object * object_in.shape[1] == flat_observations.shape[1], (self_out.shape, object_in.shape)
+        # object_onehot = tf.tile(tf.expand_dims(tf.one_hot(i, n_object), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
+        # object_in = tf.concat([object_in, object_onehot], axis=1)
         with tf.variable_scope("object", reuse=tf.AUTO_REUSE):
             fc1 = tf.contrib.layers.fully_connected(object_in, num_outputs=n_units, scope="fc0", activation_fn=tf.nn.relu)
             fc2 = tf.contrib.layers.fully_connected(fc1, num_outputs=n_units // 2, scope="fc1", activation_fn=tf.nn.relu)

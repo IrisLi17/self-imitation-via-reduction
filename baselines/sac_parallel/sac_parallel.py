@@ -68,7 +68,7 @@ class SAC_parallel(OffPolicyRLModel):
     """
 
     def __init__(self, policy, env, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
-                 priority_buffer=True, alpha=0.6,
+                 priority_buffer=False, alpha=0.6,
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
@@ -149,11 +149,17 @@ class SAC_parallel(OffPolicyRLModel):
                     n_cpu //= 2
                 self.sess = tf_util.make_session(num_cpu=n_cpu, graph=self.graph)
 
+                if hasattr(self.env, "env") and isinstance(self.env.env, VecEnv):
+                    self.n_envs = self.env.env.num_envs
+                else:
+                    self.n_envs = 1
+
                 if self.priority_buffer:
                     self.replay_buffer = PrioritizedMultiWorkerReplayBuffer(self.buffer_size, self.alpha,
                                                                             num_workers=self.env.env.num_envs)
                 else:
-                    self.replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=self.env.env.num_envs)
+                    print(self.n_envs)
+                    self.replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=self.n_envs)
 
                 with tf.variable_scope("input", reuse=False):
                     # Create policy and target TF objects
@@ -409,12 +415,16 @@ class SAC_parallel(OffPolicyRLModel):
             current_lr = self.learning_rate(1)
 
             start_time = time.time()
+            store_time = 0.0
+            step_time = 0.0
+            train_time = 0.0
             episode_rewards = [[0.0] for _ in range(self.env.env.num_envs)]
             episode_successes = [[] for _ in range(self.env.env.num_envs)]
             if self.action_noise is not None:
                 self.action_noise.reset()
             assert isinstance(self.env.env, VecEnv)
             obs = self.env.reset()
+            print(obs.shape)
             self.episode_reward = np.zeros((1,))
             ep_info_buf = deque(maxlen=100)
             n_updates = 0
@@ -449,7 +459,9 @@ class SAC_parallel(OffPolicyRLModel):
 
                 assert action.shape == (self.env.env.num_envs, ) + self.env.action_space.shape
 
+                step_time0 = time.time()
                 new_obs, reward, done, info = self.env.step(rescaled_action)
+                step_time += time.time() - step_time0
 
                 next_obs = new_obs.copy()
                 for idx, _done in enumerate(done):
@@ -466,7 +478,9 @@ class SAC_parallel(OffPolicyRLModel):
                 # self.replay_buffer.append_priority(priority)
 
                 # Store transition in the replay buffer.
+                store_time0 = time.time()
                 self.replay_buffer.add(obs, action, reward, next_obs, done)
+                store_time += time.time() - store_time0
                 # TODO: when to update priorities?
                 obs = new_obs
                 for idx, _done in enumerate(done):
@@ -492,6 +506,7 @@ class SAC_parallel(OffPolicyRLModel):
                     self.episode_reward = total_episode_reward_logger(self.episode_reward, ep_reward,
                                                                       ep_done, writer, self.num_timesteps)
 
+                train_time0 = time.time()
                 if step % self.train_freq == 0:
                     mb_infos_vals = []
                     # Update policy, critics and target networks
@@ -515,6 +530,7 @@ class SAC_parallel(OffPolicyRLModel):
                     if len(mb_infos_vals) > 0:
                         infos_values = np.mean(mb_infos_vals, axis=0)
 
+
                 # episode_rewards[-1] += reward
                 # TODO: multi action noise
                 # if done:
@@ -527,7 +543,7 @@ class SAC_parallel(OffPolicyRLModel):
                     # maybe_is_success = info.get('is_success')
                     # if maybe_is_success is not None:
                     #     episode_successes.append(float(maybe_is_success))
-
+                train_time += time.time() - train_time0
                 if len(episode_rewards[0][-101:-1]) == 0:
                     mean_reward = -np.inf
                 else:

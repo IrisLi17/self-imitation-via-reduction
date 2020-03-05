@@ -2,6 +2,7 @@ from stable_baselines import SAC
 from stable_baselines.sac.policies import FeedForwardPolicy as SACPolicy
 from stable_baselines.common.policies import register_policy
 from stable_baselines.common.vec_env import SubprocVecEnv
+from utils.parallel_subproc_vec_env2 import ParallelSubprocVecEnv
 from baselines import HER_HACK, SAC_parallel
 from utils.wrapper import DoneOnSuccessWrapper
 from gym.wrappers import FlattenDictWrapper
@@ -128,7 +129,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
     if n_workers > 1:
-        env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
+        # env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
+        env = ParallelSubprocVecEnv([make_thunk(i) for i in range(n_workers)])
     else:
         env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
 
@@ -154,7 +156,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                                         sigma=sigma * np.ones(env.action_space.shape))
             else:
                 raise NotImplementedError
-            train_kwargs = dict(buffer_size=int(1e6),
+            train_kwargs = dict(buffer_size=int(1e5),
                                 ent_coef="auto",
                                 gamma=gamma,
                                 learning_starts=1000,
@@ -167,7 +169,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             if num_workers == 1:
                 del train_kwargs['priority_buffer']
             if 'FetchStack' in env_name:
-                train_kwargs['ent_coef'] = 0.01
+                train_kwargs['ent_coef'] = "auto"
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
                 train_kwargs['batch_size'] = 256
@@ -195,6 +197,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         if policy == 'AttentionPolicy':
             policy_kwargs["n_object"] = n_object
             policy_kwargs["feature_extraction"] = "attention_mlp"
+            policy_kwargs["layer_norm"] = True
         elif policy == "CustomSACPolicy":
             policy_kwargs["layer_norm"] = True
         # if layer_norm:
