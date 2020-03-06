@@ -17,6 +17,7 @@ import os, time
 import imageio
 import argparse
 import numpy as np
+from run_ppo_augment import stack_eval_model, eval_model, log_eval
 
 try:
     from mpi4py import MPI
@@ -51,6 +52,7 @@ def arg_parse():
     parser.add_argument('--reward_type', type=str, default='sparse')
     parser.add_argument('--n_object', type=int, default=2)
     parser.add_argument('--priority', action="store_true", default=False)
+    parser.add_argument('--curriculum', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
     return args
@@ -96,7 +98,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
 
 def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
          export_gif, gamma, random_ratio, action_noise, reward_type, n_object,
-         priority, learning_rate, num_workers, policy):
+         priority, learning_rate, num_workers, policy, curriculum):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -133,6 +135,13 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         env = ParallelSubprocVecEnv([make_thunk(i) for i in range(n_workers)])
     else:
         env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
+    if os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
+        os.remove(os.path.join(logger.get_dir(), 'eval.csv'))
+        print('Remove existing eval.csv')
+    eval_env_kwargs = env_kwargs.copy()
+    eval_env_kwargs['random_ratio'] = 0.0
+    eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
+    eval_env = FlattenDictWrapper(eval_env, ['observation', 'achieved_goal', 'desired_goal'])
 
     if not play:
         os.makedirs(log_dir, exist_ok=True)
@@ -165,6 +174,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                 action_noise=parsed_action_noise,
                                 priority_buffer=priority,
                                 learning_rate=learning_rate,
+                                curriculum=curriculum,
+                                eval_env=eval_env,
                                 )
             if num_workers == 1:
                 del train_kwargs['priority_buffer']
@@ -177,9 +188,16 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             policy_kwargs = {}
 
             def callback(_locals, _globals):
-                if _locals['step'] % int(1e5) == 0:
-                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(1e5)))
+                if _locals['step'] % int(1e3) == 0:
+                    if 'FetchStack' in env_name:
+                        mean_eval_reward = stack_eval_model(eval_env, _locals["self"])
+                    else:
+                        mean_eval_reward = eval_model(eval_env, _locals["self"])
+                    log_eval(_locals['self'].num_timesteps, mean_eval_reward)
+                if _locals['step'] % int(1e4) == 0:
+                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(1e4)))
                     model.save(model_path)
+                    print('model saved to', model_path)
                 return True
         else:
             train_kwargs = {}
@@ -285,4 +303,5 @@ if __name__ == '__main__':
          batch_size=args.batch_size, export_gif=args.export_gif,
          gamma=args.gamma, random_ratio=args.random_ratio, action_noise=args.action_noise,
          reward_type=args.reward_type, n_object=args.n_object, priority=args.priority,
-         learning_rate=args.learning_rate, num_workers=args.num_workers, policy=args.policy)
+         learning_rate=args.learning_rate, num_workers=args.num_workers, policy=args.policy,
+         curriculum=args.curriculum)

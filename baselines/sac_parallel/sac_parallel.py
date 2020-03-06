@@ -15,6 +15,7 @@ from utils.replay_buffer import MultiWorkerReplayBuffer, PrioritizedMultiWorkerR
 from stable_baselines.ppo2.ppo2 import safe_mean, get_schedule_fn
 from stable_baselines.sac.policies import SACPolicy
 from stable_baselines import logger
+from utils.eval_stack import pp_eval_model
 
 
 def get_vars(scope):
@@ -72,6 +73,7 @@ class SAC_parallel(OffPolicyRLModel):
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
+                 eval_env=None, curriculum=False,
                  random_exploration=0.0, verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -98,6 +100,8 @@ class SAC_parallel(OffPolicyRLModel):
         self.gamma = gamma
         self.action_noise = action_noise
         self.random_exploration = random_exploration
+        self.eval_env = eval_env
+        self.curriculum = curriculum
 
         self.value_fn = None
         self.graph = None
@@ -429,6 +433,8 @@ class SAC_parallel(OffPolicyRLModel):
             ep_info_buf = deque(maxlen=100)
             n_updates = 0
             infos_values = []
+            pp_sr_buf = deque(maxlen=5)
+            start_decay = total_timesteps
 
             for step in range(total_timesteps):
                 if callback is not None:
@@ -436,6 +442,20 @@ class SAC_parallel(OffPolicyRLModel):
                     # compatibility with callbacks that have no return statement.
                     if callback(locals(), globals()) is False:
                         break
+
+                    if self.curriculum and step % 3000 == 0:
+                        if 'FetchStack' in self.env.env.get_attr('spec')[0].id:
+                            # Stacking
+                            pp_sr = pp_eval_model(self.eval_env, self)
+                            pp_sr_buf.append(pp_sr)
+                            print('Pick-and-place success rate', np.mean(pp_sr_buf))
+                            if start_decay == total_timesteps and np.mean(pp_sr_buf) > 0.8:
+                                start_decay = step
+                            _ratio = np.clip(0.7 - (step - start_decay) / (0.05 * total_timesteps), 0.3, 0.7)  # from 0.7 to 0.3
+                        else:
+                            raise NotImplementedError
+                        self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
+                        print('Set random_ratio to', self.env.env.get_attr('random_ratio')[0])
 
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
@@ -570,6 +590,7 @@ class SAC_parallel(OffPolicyRLModel):
                         for (name, val) in zip(self.infos_names, infos_values):
                             logger.logkv(name, val)
                     logger.logkv("total timesteps", self.num_timesteps)
+                    logger.logkv("random_ratio", self.env.env.get_attr('random_ratio')[0])
                     logger.dumpkvs()
                     # Reset infos:
                     infos_values = []
