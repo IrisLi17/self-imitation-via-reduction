@@ -19,3 +19,18 @@ class DoneOnSuccessWrapper(gym.Wrapper):
     def compute_reward(self, achieved_goal, desired_goal, info):
         reward = self.env.compute_reward(achieved_goal, desired_goal, info)
         return reward + self.reward_offset
+
+
+class ScaleRewardWrapper(gym.Wrapper):
+    def __init__(self, env, reward_scale=1.0):
+        super(ScaleRewardWrapper, self).__init__(env)
+        self.reward_scale = reward_scale
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        reward /= self.reward_scale
+        return obs, reward, done, info
+
+    def compute_reward(self, achieved_goal, desired_goal, info):
+        reward = self.env.compute_reward(achieved_goal, desired_goal, info)
+        return reward / self.reward_scale

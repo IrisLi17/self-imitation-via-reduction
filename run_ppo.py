@@ -14,7 +14,7 @@ from fetch_stack import FetchStackEnv, FetchPureStackEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
 import gym
-from utils.wrapper import DoneOnSuccessWrapper
+from utils.wrapper import DoneOnSuccessWrapper, ScaleRewardWrapper
 import numpy as np
 
 import os, time, argparse, imageio
@@ -92,8 +92,9 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     else:
         env = gym.make(env_id, reward_type='sparse')
     env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
-    if env_id in PICK_ENTRY_POINT.keys() and kwargs['reward_type'] == 'dense':
+    if env_id in PICK_ENTRY_POINT.keys() and (kwargs['reward_type'] == 'dense' or kwargs['reward_type'] == 'incremental'):
         env = DoneOnSuccessWrapper(env, reward_offset=0.0)
+        env = ScaleRewardWrapper(env, reward_scale=100.0)
     else:
         env = DoneOnSuccessWrapper(env)
     if log_dir is not None:
