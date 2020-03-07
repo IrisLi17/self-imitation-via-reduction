@@ -189,7 +189,7 @@ class AttentionPolicy(ActorCriticPolicy):
         with tf.variable_scope("model", reuse=reuse):
             # assert feature_extraction == 'attention_mlp'
             if feature_extraction == 'attention_mlp':
-                latent = attention_mlp_extractor(tf.layers.flatten(self.processed_obs), n_object=n_object,
+                latent = attention_mlp_extractor2(tf.layers.flatten(self.processed_obs), n_object=n_object,
                                                  n_units=128)
                 pi_latent, vf_latent = mlp_extractor(latent, net_arch, act_fun)
             elif feature_extraction == 'self_attention_mlp':
