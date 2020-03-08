@@ -355,7 +355,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                 r = r_achieve
                 success = (r > 0.5)
             else:
-                r_achieve = -(self._goal_distance(achieved_goal, goal[0:3]) > self.distance_threshold)
+                r_achieve = -(self._goal_distance(achieved_goal, goal[0:3]) > self.distance_threshold).astype(np.float32)
                 if abs(achieved_goal[2] - goal[2]) > 0.01:
                     r_achieve = -1
                 if r_achieve < -0.5:
