@@ -1,4 +1,4 @@
-from baselines import PPO2_augment
+from baselines import PPO2_augment, PPO2_augment_IS
 from stable_baselines import logger
 from stable_baselines.bench import Monitor
 from stable_baselines.common import set_global_seeds
@@ -19,6 +19,8 @@ import csv, pickle
 
 import os, time, argparse, imageio
 import matplotlib.pyplot as plt
+
+hack_IS = True
 
 ENTRY_POINT = {'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
                'FetchPushWallObstacleUnlimit-v4': FetchPushWallObstacleEnv_v4,
@@ -278,13 +280,23 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             dim_candidate = 3
         else:
             dim_candidate = 2
-        model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
-                             gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
-                             cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
-                             policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
-                             reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
-                             curriculum=curriculum, self_imitate=self_imitate,
-                             )
+        if not hack_IS:
+            model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
+                                 gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
+                                 cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
+                                 policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
+                                 reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
+                                 curriculum=curriculum, self_imitate=self_imitate,
+                                 )
+        else:
+            model = PPO2_augment_IS(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps,
+                                 nminibatches=32, lam=0.95,
+                                 gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
+                                 cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
+                                 policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
+                                 reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
+                                 curriculum=curriculum, self_imitate=self_imitate,
+                                 )
 
         def callback(_locals, _globals):
             num_update = _locals["update"]
@@ -317,7 +329,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
 
     else:
         assert load_path is not None
-        model = PPO2_augment.load(load_path)
+        if not hack_IS:
+            model = PPO2_augment.load(load_path)
+        else:
+            model = PPO2_augment_IS.load(load_path)
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
         while (np.argmax(obs[0][-2:]) != 0):
