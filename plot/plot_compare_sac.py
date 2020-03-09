@@ -35,8 +35,8 @@ if __name__ == '__main__':
             ax[0].plot(smooth(total_timesteps, window), smooth(success_rate, window), label=log_path)
         elif option == 'eval':
             # ax[0].plot(n_updates*65536, eval_reward, label=log_path)
-            
-            ax[0].plot(smooth(total_timesteps[n_updates-1], window), smooth(eval_reward, window), label=log_path)
+            ax[0].plot(smooth(n_updates, window), smooth(eval_reward, window), label=log_path)
+            # ax[0].plot(smooth(total_timesteps[n_updates-1], window), smooth(eval_reward, window), label=log_path)
         elif option == 'entropy':
             ax[0].plot(smooth(total_timesteps, window), smooth(entropy, window), label=log_path)
         elif option == 'aug_ratio':
