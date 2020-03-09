@@ -714,13 +714,13 @@ class SAC_augment(OffPolicyRLModel):
                             is_self_aug = temp_subgoals[idx][3]
                             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
                             for i in range(len(env_storage[idx])):
-                                self.augment_replay_buffer.add(env_storage[idx][i])
+                                self.augment_replay_buffer.add(*(env_storage[idx][i]))
                             for i in range(len(transitions)):
                                 if i == len(transitions) - 1:
                                     temp = list(transitions[i])
                                     temp[-1] = True
                                     transitions[i] = tuple(temp)
-                                self.augment_replay_buffer.add(transitions[i])
+                                self.augment_replay_buffer.add(*(transitions[i]))
 
 
                     self.restart_steps = self.restart_steps[self.aug_env.num_envs:]
