@@ -343,15 +343,23 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                     success = 0.0
                 r += success
             elif self.reward_type == 'incremental':
-                achieved_goal = observation[3 : 3 + 3 * self.n_object]
-                desired_goal = np.concatenate([goal[0:3], goal[0:3]])
-                idx = np.argmin(one_hot)
-                # Assume only 2 objects
-                desired_goal[3 * idx] = self.height_offset
-                r_achieve = -np.sum([(self._goal_distance(achieved_goal[3 * i : 3 * (i + 1)], desired_goal[3 * i : 3 * (i+1)]) > self.distance_threshold).astype(np.float32) for i in range(self.n_object)])
+                if self.n_object == 2:
+                    achieved_goal = observation[3 : 3 + 3 * self.n_object]
+                    desired_goal = np.concatenate([goal[0:3], goal[0:3]])
+                    idx = np.argmin(one_hot)
+                    # Assume only 2 objects
+                    desired_goal[3 * idx] = self.height_offset
+                elif self.n_object == 1:
+                    achieved_goal = observation[3 + 3 * idx : 3 + 3 * (idx + 1)]
+                    desired_goal = goal[0:3]
+                else:
+                    raise NotImplementedError
+                r_achieve = -np.sum([(self._goal_distance(achieved_goal[3 * i: 3 * (i + 1)], desired_goal[3 * i: 3 * (i + 1)]) > self.distance_threshold).astype(np.float32) for i in range(self.n_object)])
                 r_achieve = np.asarray(r_achieve)
-                gripper_far = np.all([np.linalg.norm(observation[0:3] - achieved_goal[3 * i : 3 * (i + 1)]) > 2 * self.distance_threshold for i in range(self.n_object)])
-                np.putmask(r_achieve, r_achieve==0, gripper_far)
+                gripper_far = np.all(
+                    [np.linalg.norm(observation[0:3] - achieved_goal[3 * i: 3 * (i + 1)]) > 2 * self.distance_threshold
+                     for i in range(self.n_object)])
+                np.putmask(r_achieve, r_achieve == 0, gripper_far)
                 r = r_achieve
                 success = (r > 0.5)
             else:
