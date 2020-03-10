@@ -173,6 +173,7 @@ class PPO2_augment_IS(ActorCriticRLModel):
                     self.old_vpred_ph = tf.placeholder(tf.float32, [None], name="old_vpred_ph")
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
                     self.clip_range_ph = tf.placeholder(tf.float32, [], name="clip_range_ph")
+                    self.is_demo_ph = tf.placeholder(tf.float32, [None], name="is_demo_ph")
 
                     # self.aug_action_ph = train_aug_model.pdtype.sample_placeholder([None], name="aug_action_ph")
                     # self.aug_advs_ph = tf.placeholder(tf.float32, [None], name="aug_advs_ph")
@@ -223,6 +224,8 @@ class PPO2_augment_IS(ActorCriticRLModel):
                     self.approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - self.old_neglog_pac_ph))
                     self.clipfrac = tf.reduce_mean(tf.cast(tf.greater(tf.abs(ratio - 1.0),
                                                                       self.clip_range_ph), tf.float32))
+                    self.demo_clipfrac = tf.reduce_mean(self.is_demo_ph * tf.cast(
+                        tf.greater(tf.abs(ratio - 1.0), self.clip_range_ph), tf.float32)) / (tf.reduce_mean(self.is_demo_ph) + 1e-5)
                     loss = self.pg_loss - self.entropy * self.ent_coef + self.vf_loss * self.vf_coef
 
                     tf.summary.scalar('entropy_loss', self.entropy)
@@ -246,7 +249,7 @@ class PPO2_augment_IS(ActorCriticRLModel):
                 trainer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph, epsilon=1e-5)
                 self._train = trainer.apply_gradients(grads)
 
-                self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
+                self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac', 'demo_clipfrac']
 
                 with tf.variable_scope("input_info", reuse=False):
                     tf.summary.scalar('discounted_rewards', tf.reduce_mean(self.rewards_ph))
@@ -306,13 +309,15 @@ class PPO2_augment_IS(ActorCriticRLModel):
         """
         advs = returns - values
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
-        for i in range(advs.shape[0]):
-            if is_demo[i]:
-                advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
+        # for i in range(advs.shape[0]):
+        #     if is_demo[i]:
+        #         advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
                   self.advs_ph: advs, self.rewards_ph: returns,
                   self.learning_rate_ph: learning_rate, self.clip_range_ph: cliprange,
-                  self.old_neglog_pac_ph: neglogpacs, self.old_vpred_ph: values}
+                  self.old_neglog_pac_ph: neglogpacs, self.old_vpred_ph: values,
+                  self.is_demo_ph: is_demo,
+                  }
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
@@ -330,23 +335,23 @@ class PPO2_augment_IS(ActorCriticRLModel):
             if self.full_tensorboard_log and (1 + update) % 10 == 0:
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
-                summary, policy_loss, value_loss, policy_entropy, approxkl, clipfrac, _ = self.sess.run(
-                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self._train],
+                summary, policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac, _ = self.sess.run(
+                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.demo_clipfrac, self._train],
                     td_map, options=run_options, run_metadata=run_metadata)
                 writer.add_run_metadata(run_metadata, 'step%d' % (update * update_fac))
             else:
-                summary, policy_loss, value_loss, policy_entropy, approxkl, clipfrac, _ = self.sess.run(
-                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self._train],
+                summary, policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac, _ = self.sess.run(
+                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.demo_clipfrac, self._train],
                     td_map)
             writer.add_summary(summary, (update * update_fac))
         else:
-            policy_loss, value_loss, policy_entropy, approxkl, clipfrac, _ = self.sess.run(
-                [self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self._train], td_map)
+            policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac, _ = self.sess.run(
+                [self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.demo_clipfrac, self._train], td_map)
             # if aug_obs_slice is not None:
             #     print('demo loss', demo_loss)
                 # exit()
 
-        return policy_loss, value_loss, policy_entropy, approxkl, clipfrac
+        return policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac
 
     def learn(self, total_timesteps, callback=None, seed=None, log_interval=1, tb_log_name="PPO2",
               reset_num_timesteps=True):
