@@ -120,7 +120,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     #     env = gym.make(env_name)
     # else:
     #     raise NotImplementedError("%s not implemented" % env_name)
-    n_workers = num_workers
+    n_workers = num_workers if not play else 1
     env_kwargs = dict(random_box=True,
                       random_ratio=random_ratio,
                       random_gripper=True,
@@ -130,11 +130,11 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     # env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
-    if n_workers > 1:
-        # env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
-        env = ParallelSubprocVecEnv([make_thunk(i) for i in range(n_workers)])
-    else:
-        env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
+    env = ParallelSubprocVecEnv([make_thunk(i) for i in range(n_workers)])
+    # if n_workers > 1:
+    #     # env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
+    # else:
+    #     env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
     if os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
         os.remove(os.path.join(logger.get_dir(), 'eval.csv'))
         print('Remove existing eval.csv')
@@ -248,52 +248,56 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
-        # sim_state = env.sim.get_state()
-        # print(sim_state)
-        # while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
-        #             obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
-        #     if not hard_test:
-        #         break
-        #     obs = env.reset()
-        print('gripper_pos', obs['observation'][0:3])
-        img = env.render(mode='rgb_array')
+        if 'FetchStack' in env_name:
+            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
+                obs = env.reset()
+        print('goal', obs['desired_goal'][0])
         episode_reward = 0.0
         images = []
         frame_idx = 0
-        episode_idx = 0
-        for i in range(env.spec.max_episode_steps * 6):
-            # images.append(img)
+        num_episode = 0
+        for i in range(env_kwargs['max_episode_steps'] * 10):
+            img = env.render(mode='rgb_array')
+            ax.cla()
+            ax.imshow(img)
+            # ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
+            #              ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
+            tasks = ['pick and place', 'stack']
+            ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)
+                         + ', task: ' + tasks[np.argmax(obs['observation'][0][-2:])])
+            images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
             obs, reward, done, _ = env.step(action)
             episode_reward += reward
             frame_idx += 1
-            ax.cla()
-            img = env.render(mode='rgb_array')
-            ax.imshow(img)
-            ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
-                         ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
             if export_gif:
-                plt.savefig('tempimg' + str(i) + '.png')
-            plt.pause(0.02)
+                plt.imsave(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % i), img)
+            else:
+                plt.pause(0.02)
             if done:
-                obs = env.reset()
-                # while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
-                #             obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
-                #     if not hard_test:
-                #         break
-                #     obs = env.reset()
-                print('gripper_pos', obs['observation'][0:3])
                 print('episode_reward', episode_reward)
+                obs = env.reset()
+                if 'FetchStack' in env_name:
+                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or \
+                                    env.get_attr('task_mode')[0] != 1:
+                        obs = env.reset()
+                print('goal', obs['desired_goal'][0])
                 episode_reward = 0.0
                 frame_idx = 0
-                episode_idx += 1
+                num_episode += 1
+                if num_episode >= 10:
+                    break
         if export_gif:
-            for i in range(env.spec.max_episode_steps * 6):
-                images.append(plt.imread('tempimg' + str(i) + '.png'))
-                os.remove('tempimg' + str(i) + '.png')
-            imageio.mimsave(env_name + '.gif', images)
+            os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
+                      os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
+            for i in range(env_kwargs['max_episode_steps'] * 10):
+                # images.append(plt.imread('tempimg' + str(i) + '.png'))
+                try:
+                    os.remove(os.path.join(os.path.dirname(load_path), 'tempimg' + str(i) + '.png'))
+                except:
+                    pass
 
 
 if __name__ == '__main__':
