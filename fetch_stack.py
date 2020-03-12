@@ -1,8 +1,9 @@
-import os
+import os, tempfile
 import numpy as np
 from gym import utils
 from gym.envs.robotics import fetch_env, rotations
 import gym.envs.robotics.utils as robotics_utils
+from assets.fetch.generate_xml import generate_xml
 
 
 MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'fetch', 'pick_and_place_stack.xml')
@@ -15,29 +16,37 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             'robot0:slide0': 0.405,
             'robot0:slide1': 0.48,
             'robot0:slide2': 0.0,
-            'object0:joint': [1.25, 0.53, 0.4, 1., 0., 0., 0.],
-            'object1:joint': [1.30, 0.53, 0.4, 1., 0., 0., 0.],
+            # 'object0:joint': [1.25, 0.53, 0.4, 1., 0., 0., 0.],
+            # 'object1:joint': [1.30, 0.53, 0.4, 1., 0., 0., 0.],
             # 'object2:joint': [1.25, 0.58, 0.4, 1., 0., 0., 0.],
             # 'object3:joint': [1.30, 0.58, 0.4, 1., 0., 0., 0.],
         }
-        if n_object == 3:
-            initial_qpos['object2:joint'] = [1.25, 0.58, 0.4, 1., 0., 0., 0.]
+        # if n_object == 3:
+        #     initial_qpos['object2:joint'] = [1.25, 0.58, 0.4, 1., 0., 0., 0.]
+        for i in range(n_object):
+            initial_qpos['object%d:joint' % i] = [1.25 + 0.05 * i, 0.53, 0.4, 1., 0., 0., 0.]
         self.random_gripper = random_gripper
         self.random_box = random_box
         self.random_ratio = random_ratio
         self.n_object = n_object
-        if n_object == 2:
-            model_path = MODEL_XML_PATH
-        elif n_object == 3:
-            model_path = MODEL_XML_PATH3
-        else:
-            raise NotImplementedError
+        # if n_object == 2:
+        #     model_path = MODEL_XML_PATH
+        # elif n_object == 3:
+        #     model_path = MODEL_XML_PATH3
+        # else:
+        #     raise NotImplementedError
+        with tempfile.NamedTemporaryFile(mode='wt',
+                                         dir=os.path.join(os.path.dirname(__file__), 'assets', 'fetch'),
+                                         delete=False, suffix=".xml") as fp:
+            fp.write(generate_xml(self.n_object))
+            model_path = fp.name
         self.task_mode = 0  # 0: pick and place, 1: stack
         fetch_env.FetchEnv.__init__(
             self, model_path, has_object=True, block_gripper=False, n_substeps=20,
             gripper_extra_height=0.2, target_in_the_air=True, target_offset=0.0,
             obj_range=0.15, target_range=0.15, distance_threshold=0.05,
             initial_qpos=initial_qpos, reward_type=reward_type)
+        os.remove(model_path)
         utils.EzPickle.__init__(self)
         self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
         self.size_obstacle = np.array([0.15, 0.15, 0.15])
@@ -183,12 +192,17 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             # self.sample_easy = (self.task_mode == 1)
             self.has_base = False
             task_rand = self.np_random.uniform()
-            if self.n_object == 2:
-                task_array = [(1, 0), (2, 0), (2, 1)]
-                self.current_nobject, base_nobject = task_array[int(task_rand * len(task_array))]
-            else:
-                task_array = [(1, 0), (2, 0), (2, 1), (3, 0), (3, 1), (3, 2)]
-                self.current_nobject, base_nobject = task_array[int(task_rand * len(task_array))]
+            # if self.n_object == 2:
+            #     task_array = [(1, 0), (2, 0), (2, 1)]
+            #     self.current_nobject, base_nobject = task_array[int(task_rand * len(task_array))]
+            # else:
+            #     task_array = [(1, 0), (2, 0), (2, 1), (3, 0), (3, 1), (3, 2)]
+            #     self.current_nobject, base_nobject = task_array[int(task_rand * len(task_array))]
+            # Any number of objects
+            task_array = []
+            for i in range(self.n_object):
+                task_array.extend([(i + 1, j) for j in range(i + 1)])
+            self.current_nobject, base_nobject = task_array[int(task_rand * len(task_array))]
             self.selected_objects = np.random.choice(np.arange(self.n_object), self.current_nobject, replace=False)
             self.tower_height = self.height_offset + (base_nobject - 1) * self.size_object[2] * 2
             # if self.random_box and self.np_random.uniform() < self.random_ratio:
@@ -228,6 +242,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                 if i in self.selected_objects:
                     object_qpos[:3] = objects_xpos[np.where(self.selected_objects == i)[0][0]]
                 else:
+                    # This is coordinate in physical simulator, not the observation
                     object_qpos[:3] = np.array([-1, -1, 0])
                 self.sim.data.set_joint_qpos('object%d:joint' % i, object_qpos)
 
@@ -287,6 +302,25 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         assert achieved_goal.shape == goal.shape
         return np.linalg.norm(achieved_goal - goal, axis=-1)
 
+    def _is_stacked(self, achieved_goal, goal, other_objects_pos):
+        stack = True
+        # TODO: tower with arbitrary shape
+        for h in range(int(round((goal[2] - self.height_offset) / (2 * self.size_object[2])))):
+            stack = False
+            for i in range(self.n_object - 1):
+                # iterate over other objects to see if one of them fills the position
+                if abs(other_objects_pos[3 * i + 2] - (
+                            self.height_offset + h * 2 * self.size_object[2])) < 0.01 \
+                        and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[
+                            0] \
+                        and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < \
+                                self.size_object[1]:
+                    stack = True
+                    break
+            if not stack:
+                break
+        return stack
+
     def compute_reward(self, observation, goal, info):
         r, _ = self.compute_reward_and_success(observation, goal, info)
         return r
@@ -326,39 +360,40 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                     gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > self.distance_threshold
                     other_objects_pos = np.concatenate([observation[3: 3 + 3 * idx],
                                                         observation[3 + 3 * (idx + 1): 3 + 3 * self.n_object]])
-                    stack = False
-                    if abs(achieved_goal[2] - self.height_offset) < 0.01:
-                        # on the ground
-                        stack = True
-                    else:
-                        for i in range(self.n_object - 1):
-                            if abs(other_objects_pos[3 * i + 2] - (achieved_goal[2] - self.size_object[2] * 2)) < 0.01 \
-                                    and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[0] \
-                                    and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
-                                stack = True
-                                break
+                    stack = self._is_stacked(achieved_goal, goal, other_objects_pos)
+                    # if abs(achieved_goal[2] - self.height_offset) < 0.01:
+                    #     # on the ground
+                    #     stack = True
+                    # else:
+                    #     for i in range(self.n_object - 1):
+                    #         if abs(other_objects_pos[3 * i + 2] - (achieved_goal[2] - self.size_object[2] * 2)) < 0.01 \
+                    #                 and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[0] \
+                    #                 and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
+                    #             stack = True
+                    #             break
+
                     success = gripper_far and stack
                 else:
                     r = r_achieve
                     success = 0.0
                 r += success
             elif self.reward_type == 'incremental':
-                if self.n_object == 2:
+                if self.current_nobject == 2:
                     achieved_goal = observation[3 : 3 + 3 * self.n_object]
                     desired_goal = np.concatenate([goal[0:3], goal[0:3]])
                     idx = np.argmin(one_hot)
                     # Assume only 2 objects
-                    desired_goal[3 * idx] = self.height_offset
-                elif self.n_object == 1:
+                    desired_goal[2 + 3 * idx] = self.height_offset
+                elif self.current_nobject == 1:
                     achieved_goal = observation[3 + 3 * idx : 3 + 3 * (idx + 1)]
                     desired_goal = goal[0:3]
                 else:
                     raise NotImplementedError
-                r_achieve = -np.sum([(self._goal_distance(achieved_goal[3 * i: 3 * (i + 1)], desired_goal[3 * i: 3 * (i + 1)]) > self.distance_threshold).astype(np.float32) for i in range(self.n_object)])
+                r_achieve = -np.sum([(self._goal_distance(achieved_goal[3 * i: 3 * (i + 1)], desired_goal[3 * i: 3 * (i + 1)]) > self.distance_threshold).astype(np.float32) for i in range(self.current_nobject)])
                 r_achieve = np.asarray(r_achieve)
                 gripper_far = np.all(
                     [np.linalg.norm(observation[0:3] - achieved_goal[3 * i: 3 * (i + 1)]) > 2 * self.distance_threshold
-                     for i in range(self.n_object)])
+                     for i in range(self.current_nobject)])
                 np.putmask(r_achieve, r_achieve == 0, gripper_far)
                 r = r_achieve
                 success = (r > 0.5)
@@ -374,17 +409,17 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                                                         observation[3 + 3 * (idx + 1): 3 + 3 * self.n_object]])
                     # print('other_objects_pos', other_objects_pos)
                     # print('achieved_goal', achieved_goal)
-                    stack = False
-                    if abs(achieved_goal[2] - self.height_offset) < 0.01:
-                        stack = True
-                    # TODO: if two objects serve together as lower part?
-                    else:
-                        for i in range(self.n_object - 1):
-                            if abs(other_objects_pos[3 * i + 2] - (achieved_goal[2] - self.size_object[2] * 2)) < 0.01 \
-                                    and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[0] \
-                                    and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
-                                stack = True
-                                break
+                    stack = self._is_stacked(achieved_goal, goal, other_objects_pos)
+                    # if abs(achieved_goal[2] - self.height_offset) < 0.01:
+                    #     stack = True
+                    # # TODO: if two objects serve together as lower part?
+                    # else:
+                    #     for i in range(self.n_object - 1):
+                    #         if abs(other_objects_pos[3 * i + 2] - (achieved_goal[2] - self.size_object[2] * 2)) < 0.01 \
+                    #                 and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[0] \
+                    #                 and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
+                    #             stack = True
+                    #             break
                     gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > 2 * self.distance_threshold
                     # print('stack', stack, 'gripper_far', gripper_far)
                     if stack and gripper_far:
