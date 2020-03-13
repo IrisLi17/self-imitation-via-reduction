@@ -1,10 +1,11 @@
-from baselines import PPO2_augment, PPO2_augment_IS
+from baselines import PPO2_augment
 from stable_baselines import logger
 from stable_baselines.bench import Monitor
 from stable_baselines.common import set_global_seeds
 from stable_baselines.common.vec_env import SubprocVecEnv
 from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
 from gym.wrappers import FlattenDictWrapper
+from stable_baselines.common.policies import register_policy
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from masspoint_env import MasspointPushSingleObstacleEnv_v2, MasspointPushDoubleObstacleEnv
@@ -20,7 +21,6 @@ import csv, pickle
 import os, time, argparse, imageio
 import matplotlib.pyplot as plt
 
-hack_IS = True
 
 ENTRY_POINT = {'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
                'FetchPushWallObstacleUnlimit-v4': FetchPushWallObstacleEnv_v4,
@@ -46,6 +46,7 @@ PICK_ENTRY_POINT = {
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', default='FetchPushWallObstacle-v4')
+    parser.add_argument('--policy', type=str, default='MlpPolicy')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--num_timesteps', type=float, default=1e8)
     parser.add_argument('--log_path', default=None, type=str)
@@ -193,7 +194,7 @@ def log_traj(aug_obs, aug_done, index, goal_dim=5, n_obstacle=1):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, aug_clip, n_subgoal,
-         parallel, start_augment, reuse_times, aug_adv_weight, reward_type, n_object, curriculum, self_imitate):
+         parallel, start_augment, reuse_times, aug_adv_weight, reward_type, n_object, curriculum, self_imitate, policy):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir)
 
@@ -274,34 +275,27 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             n_steps = 1024
         else:
             n_steps = 2048
-        policy = 'MlpPolicy'
+        # policy = 'MlpPolicy'
+        from utils.attention_policy import AttentionPolicy
+        register_policy('AttentionPolicy', AttentionPolicy)
         if 'FetchStack' in env_name:
-            from utils.attention_policy import AttentionPolicy
-            policy = AttentionPolicy
+            policy = 'AttentionPolicy' # Force attention policy for fetchstack env
             policy_kwargs["n_object"] = n_object
             policy_kwargs["feature_extraction"] = "attention_mlp"
+        elif 'MasspointPushDoubleObstacle' in env_name:
+            if policy == "AttentionPolicy":
+                policy_kwargs["feature_extraction"] = "attention_mlp_particle"
         if 'FetchStack' in env_name:
             dim_candidate = 3
         else:
             dim_candidate = 2
-        if not hack_IS:
-            model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
-                                 gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
-                                 cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
-                                 policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
-                                 reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
-                                 curriculum=curriculum, self_imitate=self_imitate,
-                                 )
-        else:
-            model = PPO2_augment_IS(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps,
-                                 nminibatches=32, lam=0.95,
-                                 gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
-                                 cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
-                                 policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
-                                 reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
-                                 curriculum=curriculum, self_imitate=self_imitate,
-                                 )
-
+        model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
+                             gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
+                             cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
+                             policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
+                             reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
+                             curriculum=curriculum, self_imitate=self_imitate,
+                             )
         def callback(_locals, _globals):
             num_update = _locals["update"]
             if 'FetchStack' in env_name:
@@ -333,10 +327,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
 
     else:
         assert load_path is not None
-        if not hack_IS:
-            model = PPO2_augment.load(load_path)
-        else:
-            model = PPO2_augment_IS.load(load_path)
+        model = PPO2_augment.load(load_path)
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
         while (np.argmax(obs[0][-2:]) != 0):
@@ -394,4 +385,4 @@ if __name__ == '__main__':
          random_ratio=args.random_ratio, aug_clip=args.aug_clip, n_subgoal=args.n_subgoal,
          parallel=args.parallel, start_augment=int(args.start_augment), reuse_times=args.reuse_times,
          aug_adv_weight=args.aug_adv_weight, reward_type=args.reward_type, n_object=args.n_object,
-         curriculum=args.curriculum, self_imitate=args.self_imitate)
+         curriculum=args.curriculum, self_imitate=args.self_imitate, policy=args.policy)

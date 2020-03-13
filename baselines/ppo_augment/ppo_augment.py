@@ -473,7 +473,8 @@ class PPO2_augment(ActorCriticRLModel):
                 #     self.aug_done[-1] = self.aug_done[-1][other_aug_idx] if len(other_aug_idx) else None
                 #     self.aug_reward[-1] = self.aug_reward[-1][other_aug_idx] if len(other_aug_idx) else None
                 # Reuse other data
-                if _reuse_times > 1 and (not ('MasspointPush' in self.env.get_attr('spec')[0].id) or ('MasspointPush' in self.env.get_attr('spec')[0].id and update > 150)):
+                # if _reuse_times > 1 and (not ('MasspointPush' in self.env.get_attr('spec')[0].id) or ('MasspointPush' in self.env.get_attr('spec')[0].id and update > 150)):
+                if _reuse_times > 1:
                     self.aug_obs = self.aug_obs[-_reuse_times+1:] + [None]
                     self.aug_act = self.aug_act[-_reuse_times+1:] + [None]
                     self.aug_neglogp = self.aug_neglogp[-_reuse_times+1:] + [None]
