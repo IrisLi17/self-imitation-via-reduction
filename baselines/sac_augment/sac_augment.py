@@ -72,7 +72,7 @@ class SAC_augment(OffPolicyRLModel):
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
                  random_exploration=0.0, n_subgoal=2, start_augment_time=0,
-                 aug_env=None, eval_env=None, curriculum=False,
+                 aug_env=None, eval_env=None, curriculum=False, imitation_coef=5,
                  verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -105,6 +105,7 @@ class SAC_augment(OffPolicyRLModel):
         self.priority_buffer = priority_buffer
         self.alpha = alpha
         self.curriculum = curriculum
+        self.imitation_coef = imitation_coef
 
         self.value_fn = None
         self.graph = None
@@ -276,7 +277,7 @@ class SAC_augment(OffPolicyRLModel):
                     # regularization loss for the gaussian parameters
                     # this is not used for now
                     # policy_loss = (policy_kl_loss + policy_regularization_loss)
-                    policy_loss = policy_kl_loss + 5 * policy_imitation_loss
+                    policy_loss = policy_kl_loss + self.imitation_coef * policy_imitation_loss
 
 
                     # Target for value fn regression
