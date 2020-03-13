@@ -220,12 +220,20 @@ class PPO2_augment_IS(ActorCriticRLModel):
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
                                                                   self.clip_range_ph)
-                    self.pg_loss = tf.reduce_mean(tf.maximum(pg_losses, pg_losses2))
+                    truncate_pg_losses = -self.advs_ph * tf.math.minimum(ratio, 2.0)
+                    # self.pg_loss = tf.reduce_mean(tf.maximum(pg_losses, pg_losses2))
+                    self.pg_loss = tf.reduce_mean(self.is_demo_ph * truncate_pg_losses + (1 - self.is_demo_ph) * tf.maximum(pg_losses, pg_losses2))
                     self.approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - self.old_neglog_pac_ph))
                     self.clipfrac = tf.reduce_mean(tf.cast(tf.greater(tf.abs(ratio - 1.0),
                                                                       self.clip_range_ph), tf.float32))
-                    self.demo_clipfrac = tf.reduce_mean(self.is_demo_ph * tf.cast(
-                        tf.greater(tf.abs(ratio - 1.0), self.clip_range_ph), tf.float32)) / (tf.reduce_mean(self.is_demo_ph) + 1e-5)
+                    # self.demo_clipfrac = tf.reduce_mean(self.is_demo_ph * tf.cast(
+                    #     tf.greater(tf.abs(ratio - 1.0), self.clip_range_ph), tf.float32)) / (tf.reduce_mean(self.is_demo_ph) + 1e-5)
+                    reduced_ratio = tf.boolean_mask(ratio, self.is_demo_ph)
+                    self.demo_clipfrac = tf.reduce_mean(tf.cast(tf.greater(tf.abs(reduced_ratio - 1.0), self.clip_range_ph), tf.float32))
+                    self.demo_ratio_max = tf.reduce_max(reduced_ratio)
+                    self.demo_ratio_min = tf.reduce_min(reduced_ratio)
+                    self.demo_ratio_mean = tf.reduce_mean(reduced_ratio)
+                    # self.demo_ratio_std = tf.math.reduce_std(reduced_ratio)
                     loss = self.pg_loss - self.entropy * self.ent_coef + self.vf_loss * self.vf_coef
 
                     tf.summary.scalar('entropy_loss', self.entropy)
@@ -249,7 +257,8 @@ class PPO2_augment_IS(ActorCriticRLModel):
                 trainer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph, epsilon=1e-5)
                 self._train = trainer.apply_gradients(grads)
 
-                self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac', 'demo_clipfrac']
+                self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac',
+                                   'demo_clipfrac', 'demo_rmax', 'demo_rmin', 'demo_rmean', ]
 
                 with tf.variable_scope("input_info", reuse=False):
                     tf.summary.scalar('discounted_rewards', tf.reduce_mean(self.rewards_ph))
@@ -309,9 +318,9 @@ class PPO2_augment_IS(ActorCriticRLModel):
         """
         advs = returns - values
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
-        # for i in range(advs.shape[0]):
-        #     if is_demo[i]:
-        #         advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
+        for i in range(advs.shape[0]):
+            if is_demo[i]:
+                advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
                   self.advs_ph: advs, self.rewards_ph: returns,
                   self.learning_rate_ph: learning_rate, self.clip_range_ph: cliprange,
@@ -335,23 +344,23 @@ class PPO2_augment_IS(ActorCriticRLModel):
             if self.full_tensorboard_log and (1 + update) % 10 == 0:
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
-                summary, policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac, _ = self.sess.run(
-                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.demo_clipfrac, self._train],
+                summary, policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac, demo_rmax, demo_rmin, demo_rmean,  _ = self.sess.run(
+                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.demo_clipfrac, self.demo_ratio_max, self.demo_ratio_min, self.demo_ratio_mean, self._train],
                     td_map, options=run_options, run_metadata=run_metadata)
                 writer.add_run_metadata(run_metadata, 'step%d' % (update * update_fac))
             else:
-                summary, policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac, _ = self.sess.run(
-                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.demo_clipfrac, self._train],
+                summary, policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac, demo_rmax, demo_rmin, demo_rmean, _ = self.sess.run(
+                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.demo_clipfrac, self.demo_ratio_max, self.demo_ratio_min, self.demo_ratio_mean, self._train],
                     td_map)
             writer.add_summary(summary, (update * update_fac))
         else:
-            policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac, _ = self.sess.run(
-                [self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.demo_clipfrac, self._train], td_map)
+            policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac, demo_rmax, demo_rmin, demo_rmean, _ = self.sess.run(
+                [self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.demo_clipfrac, self.demo_ratio_max, self.demo_ratio_min, self.demo_ratio_mean, self._train], td_map)
             # if aug_obs_slice is not None:
             #     print('demo loss', demo_loss)
                 # exit()
 
-        return policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac
+        return policy_loss, value_loss, policy_entropy, approxkl, clipfrac, demo_clipfrac, demo_rmax, demo_rmin, demo_rmean
 
     def learn(self, total_timesteps, callback=None, seed=None, log_interval=1, tb_log_name="PPO2",
               reset_num_timesteps=True):
@@ -529,7 +538,7 @@ class PPO2_augment_IS(ActorCriticRLModel):
                                                                  writer=writer, states=mb_states,
                                                                  cliprange_vf=cliprange_vf_now))
 
-                loss_vals = np.mean(mb_loss_vals, axis=0)
+                loss_vals = np.mean(np.ma.masked_invalid(mb_loss_vals), axis=0)
                 t_now = time.time()
                 fps = int(self.n_batch / (t_now - t_start))
 
