@@ -1,6 +1,7 @@
 from baselines import PPO2
 from stable_baselines import logger
 from stable_baselines.bench import Monitor
+from stable_baselines.common.policies import register_policy
 from stable_baselines.common import set_global_seeds
 from stable_baselines.common.vec_env import SubprocVecEnv
 from gym.wrappers import FlattenDictWrapper
@@ -43,6 +44,7 @@ PICK_ENTRY_POINT = {
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--env', default='FetchPushWallObstacle-v4')
+    parser.add_argument('--policy', type=str, default='MlpPolicy')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--num_timesteps', type=float, default=1e8)
     parser.add_argument('--reward_type', type=str, default='sparse')
@@ -103,7 +105,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     return env
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, reward_type, n_object,
-         curriculum, gamma):
+         curriculum, gamma, policy):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir) 
     
@@ -183,12 +185,20 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         elif 'MasspointMaze' in env_name:
             n_steps = 1024
 
-        policy = 'MlpPolicy'
+        # policy = 'MlpPolicy'
+        from utils.attention_policy import AttentionPolicy
+        register_policy('AttentionPolicy', AttentionPolicy)
         if 'FetchStack' in env_name:
-            from utils.attention_policy import AttentionPolicy
-            policy = AttentionPolicy
+            # from utils.attention_policy import AttentionPolicy
+            # policy = AttentionPolicy
+            policy = "AttentionPolicy" # Force attention policy for fetchstack env
             policy_kwargs["n_object"] = n_object
             policy_kwargs["feature_extraction"] = "attention_mlp"
+        elif 'MasspointPushDoubleObstacle' in env_name:
+            # from utils.attention_policy import AttentionPolicy
+            # policy = AttentionPolicy
+            if policy == "AttentionPolicy":
+                policy_kwargs["feature_extraction"] = "attention_mlp_particle"
         print(policy_kwargs)
 
         model = PPO2(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=gamma, noptepochs=10,
@@ -305,4 +315,4 @@ if __name__ == '__main__':
     main(env_name=args.env, seed=args.seed, num_timesteps=int(args.num_timesteps), 
          log_path=args.log_path, load_path=args.load_path, play=args.play, export_gif=args.export_gif,
          random_ratio=args.random_ratio, reward_type=args.reward_type, n_object=args.n_object,
-         curriculum=args.curriculum, gamma=args.gamma)
+         curriculum=args.curriculum, gamma=args.gamma, policy=args.policy)

@@ -8,50 +8,89 @@ from itertools import zip_longest
 import math
 
 
-def attention_mlp_extractor(flat_observations, n_object=2, n_units=128):
-    # policy_only_layers = []  # Layer sizes of the network that only belongs to the policy network
-    # value_only_layers = []  # Layer sizes of the network that only belongs to the value network
+# def attention_mlp_extractor(flat_observations, n_object=2, n_units=128):
+#     # policy_only_layers = []  # Layer sizes of the network that only belongs to the policy network
+#     # value_only_layers = []  # Layer sizes of the network that only belongs to the value network
+#
+#     # agent_idx = np.concatenate([np.arange(3), np.arange(3+6*n_object, 3+6*n_object+2),
+#     #                             np.arange(3+6*n_object+2+9*n_object, 3+6*n_object+2+9*n_object+7+2*(3+n_object))])
+#     agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
+#                                 np.arange(3 + 6 * n_object + 2 + 9 * n_object, int(flat_observations.shape[1]))])
+#     self_in = tf.gather(flat_observations, agent_idx, axis=1)
+#     # self_in = np.concatenate([flat_observations[:, :3], flat_observations[:, 3 + 6 * n_object:3 + 6 * n_object + 2],
+#     #                           flat_observations[:, 3+6*n_object+2+9*n_object:]], axis=1)
+#     self_out = self_in
+#     # Maybe nonlinear and more layers
+#     # for i in range(2):
+#     #     self_out = tf.nn.relu(linear(self_out, "shared_agent_fc{}".format(i), n_units, init_scale=np.sqrt(2))) # (*, n_units)
+#     self_out = tf.contrib.layers.fully_connected(
+#         self_out, num_outputs=n_units, scope='shared_agent_fc0', activation_fn=tf.nn.relu)
+#     self_out = tf.contrib.layers.fully_connected(
+#         self_out, num_outputs=n_units // 2, scope='shared_agent_fc1', activation_fn=tf.nn.relu)
+#     # self_out = tf.contrib.layers.fully_connected(
+#     #     self_out_latent, num_outputs=n_units // 2, scope="shared_agent_fc2", activation_fn=tf.nn.relu)
+#
+#     objects_in = []
+#     for i in range(n_object):
+#         _object_idx = np.concatenate([np.arange(3+3*i, 3+3*(i+1)), np.arange(3+3*n_object+3*i, 3+3*n_object+3*(i+1)),
+#                                       np.arange(3+6*n_object+2+3*i, 3+6*n_object+2+3*(i+1)),
+#                                       np.arange(3+9*n_object+2+3*i, 3+9*n_object+2+3*(i+1)),
+#                                       np.arange(3+12*n_object+2+3*i, 3+12*n_object+2+3*(i+1))])
+#         object_in = tf.gather(flat_observations, _object_idx, axis=1)
+#         assert self_in.shape[1] + n_object * object_in.shape[1] == flat_observations.shape[1], (self_out.shape, object_in.shape)
+#         with tf.variable_scope("object", reuse=tf.AUTO_REUSE):
+#             # fc1 = tf.nn.relu(linear(object_in, "fc0", n_units, init_scale=np.sqrt(2)))
+#             # fc2 = tf.nn.relu(linear(fc1, "fc1", n_units, init_scale=np.sqrt(2)))
+#             fc1 = tf.contrib.layers.fully_connected(object_in, num_outputs=n_units, scope="fc0", activation_fn=tf.nn.relu)
+#             fc2 = tf.contrib.layers.fully_connected(fc1, num_outputs=n_units // 2, scope="fc1", activation_fn=tf.nn.relu)
+#             objects_in.append(fc2)
+#     objects_in = tf.stack(objects_in, 2) # (*, n_unit, n_object)
+#     objects_attention = tf.nn.softmax(tf.matmul(tf.expand_dims(self_out, axis=1), objects_in) / math.sqrt(n_units // 2)) # (*, 1, n_object)
+#     objects_out = tf.squeeze(tf.matmul(objects_attention, tf.transpose(objects_in, [0, 2, 1])), 1) # (*, n_unit // 2)
+#     objects_out = tf.contrib.layers.layer_norm(objects_out)
+#     objects_out = tf.nn.relu(objects_out)
+#
+#     latent = tf.concat([self_out, objects_out], 1) # (*, n_unit)
+#     # latent = tf.concat([self_out_latent, objects_out], 1)
+#     return latent
 
-    # agent_idx = np.concatenate([np.arange(3), np.arange(3+6*n_object, 3+6*n_object+2),
-    #                             np.arange(3+6*n_object+2+9*n_object, 3+6*n_object+2+9*n_object+7+2*(3+n_object))])
-    agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
-                                np.arange(3 + 6 * n_object + 2 + 9 * n_object, int(flat_observations.shape[1]))])
+def attention_mlp_extractor_particle(flat_observations, n_object=2, n_units=128):
+    # agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
+    #                             np.arange(3 + 6 * n_object + 2 + 9 * n_object, int(flat_observations.shape[1]))])
+    agent_idx = np.concatenate([np.arange(3), np.arange(3 + 15 * n_object, 6 + 15 * n_object),
+                                np.arange(6 + 15 * n_object, 9 + 15 * n_object), # achieved goal pos
+                                np.arange(9 + 16 * n_object, 12 + 16 * n_object), # desired goal pos
+                                ]) # size 11
     self_in = tf.gather(flat_observations, agent_idx, axis=1)
-    # self_in = np.concatenate([flat_observations[:, :3], flat_observations[:, 3 + 6 * n_object:3 + 6 * n_object + 2],
-    #                           flat_observations[:, 3+6*n_object+2+9*n_object:]], axis=1)
     self_out = self_in
-    # Maybe nonlinear and more layers
-    # for i in range(2):
-    #     self_out = tf.nn.relu(linear(self_out, "shared_agent_fc{}".format(i), n_units, init_scale=np.sqrt(2))) # (*, n_units)
     self_out = tf.contrib.layers.fully_connected(
         self_out, num_outputs=n_units, scope='shared_agent_fc0', activation_fn=tf.nn.relu)
     self_out = tf.contrib.layers.fully_connected(
         self_out, num_outputs=n_units // 2, scope='shared_agent_fc1', activation_fn=tf.nn.relu)
-    # self_out = tf.contrib.layers.fully_connected(
-    #     self_out_latent, num_outputs=n_units // 2, scope="shared_agent_fc2", activation_fn=tf.nn.relu)
 
     objects_in = []
     for i in range(n_object):
         _object_idx = np.concatenate([np.arange(3+3*i, 3+3*(i+1)), np.arange(3+3*n_object+3*i, 3+3*n_object+3*(i+1)),
-                                      np.arange(3+6*n_object+2+3*i, 3+6*n_object+2+3*(i+1)),
-                                      np.arange(3+9*n_object+2+3*i, 3+9*n_object+2+3*(i+1)),
-                                      np.arange(3+12*n_object+2+3*i, 3+12*n_object+2+3*(i+1))])
+                                      np.arange(3+6*n_object+3*i, 3+6*n_object+3*(i+1)),
+                                      np.arange(3+9*n_object+3*i, 3+9*n_object+3*(i+1)),
+                                      np.arange(3+12*n_object+3*i, 3+12*n_object+3*(i+1)),
+                                      np.arange(9 + 15 * n_object + i, 9 + 15 * n_object + i + 1), # indicator
+                                      ]) # size 16
         object_in = tf.gather(flat_observations, _object_idx, axis=1)
-        assert self_in.shape[1] + n_object * object_in.shape[1] == flat_observations.shape[1], (self_out.shape, object_in.shape)
+        shape_onehot = tf.tile(tf.expand_dims(np.array([i == 0], dtype=np.float32), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
+        # object_onehot = tf.tile(tf.expand_dims(tf.one_hot(i, n_object), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
+        object_in = tf.concat([object_in, shape_onehot], axis=1)
         with tf.variable_scope("object", reuse=tf.AUTO_REUSE):
-            # fc1 = tf.nn.relu(linear(object_in, "fc0", n_units, init_scale=np.sqrt(2)))
-            # fc2 = tf.nn.relu(linear(fc1, "fc1", n_units, init_scale=np.sqrt(2)))
             fc1 = tf.contrib.layers.fully_connected(object_in, num_outputs=n_units, scope="fc0", activation_fn=tf.nn.relu)
             fc2 = tf.contrib.layers.fully_connected(fc1, num_outputs=n_units // 2, scope="fc1", activation_fn=tf.nn.relu)
             objects_in.append(fc2)
     objects_in = tf.stack(objects_in, 2) # (*, n_unit, n_object)
     objects_attention = tf.nn.softmax(tf.matmul(tf.expand_dims(self_out, axis=1), objects_in) / math.sqrt(n_units // 2)) # (*, 1, n_object)
-    objects_out = tf.squeeze(tf.matmul(objects_attention, tf.transpose(objects_in, [0, 2, 1])), 1) # (*, n_unit // 2)
+    objects_out = tf.squeeze(tf.matmul(objects_attention, tf.transpose(objects_in, [0, 2, 1])), 1) # (*, n_unit)
     objects_out = tf.contrib.layers.layer_norm(objects_out)
     objects_out = tf.nn.relu(objects_out)
 
-    latent = tf.concat([self_out, objects_out], 1) # (*, n_unit)
-    # latent = tf.concat([self_out_latent, objects_out], 1)
+    latent = tf.concat([self_out, objects_out], 1) # (*, 2*n_unit)
     return latent
 
 
@@ -191,6 +230,9 @@ class AttentionPolicy(ActorCriticPolicy):
             if feature_extraction == 'attention_mlp':
                 latent = attention_mlp_extractor2(tf.layers.flatten(self.processed_obs), n_object=n_object,
                                                  n_units=128)
+                pi_latent, vf_latent = mlp_extractor(latent, net_arch, act_fun)
+            elif feature_extraction == 'attention_mlp_particle':
+                latent = attention_mlp_extractor_particle(tf.layers.flatten(self.processed_obs), n_object=3, n_units=128)
                 pi_latent, vf_latent = mlp_extractor(latent, net_arch, act_fun)
             elif feature_extraction == 'self_attention_mlp':
                 pi_latent, vf_latent = self_attention_mlp_extractor(tf.layers.flatten(self.processed_obs), n_object=n_object)
