@@ -505,7 +505,7 @@ class SAC_augment(OffPolicyRLModel):
                         print('Pick-and-place success rate', np.mean(pp_sr_buf))
                         if start_decay == total_timesteps and np.mean(pp_sr_buf) > 0.8:
                             start_decay = step
-                        _ratio = np.clip(0.7 - (step - start_decay) / (0.05 * total_timesteps), 0.3, 0.7)  # from 0.7 to 0.3
+                        _ratio = np.clip(0.7 - (step - start_decay) / 5e5, 0.3, 0.7)  # from 0.7 to 0.3
                     else:
                         raise NotImplementedError
                     self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)

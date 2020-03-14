@@ -28,17 +28,22 @@ if __name__ == '__main__':
                       random_gripper=True,
                       max_episode_steps=100,
                       reward_type="sparse",
-                      n_object=2, )
+                      n_object=3, )
     env = make_env('FetchStack-v1', seed=None, rank=0, kwargs=env_kwargs)
     # model = PPO2.load(model_path)
     model = HER_HACK.load(model_path)
     goal_dim = env.goal.shape[0]
     obs_dim = env.observation_space.shape[0] - 2 * goal_dim
-    obj1_pickandplace = eval_model(1, False)
-    print('1 obj pick and place', obj1_pickandplace)
-    obj1_stack = eval_model(1, True)
-    print('1 obj stack', obj1_stack)
-    obj2_pickandplace = eval_model(2, False)
-    print('2 obj pick and place', obj2_pickandplace)
-    obj2_stack = eval_model(2, True)
-    print('2 obj stack', obj2_stack)
+    # obj1_pickandplace = eval_model(1, False)
+    # print('1 obj pick and place', obj1_pickandplace)
+    # obj1_stack = eval_model(1, True)
+    # print('1 obj stack', obj1_stack)
+    # obj2_pickandplace = eval_model(2, False)
+    # print('2 obj pick and place', obj2_pickandplace)
+    # obj2_stack = eval_model(2, True)
+    # print('2 obj stack', obj2_stack)
+    for i in range(env_kwargs['n_object']):
+        pp_sr = eval_model(i + 1, False)
+        print('%d obj pick and place' % (i + 1), pp_sr)
+        stack_sr = eval_model(i + 1, True)
+        print('%d obj stack' % (i + 1), stack_sr)
