@@ -304,7 +304,9 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
     def _is_stacked(self, achieved_goal, goal, other_objects_pos):
         stack = True
         # TODO: tower with arbitrary shape
-        for h in range(int(round((goal[2] - self.height_offset) / (2 * self.size_object[2])))):
+        # TODO: when relabel and goal is not integer times of size above table... h min n selected object?
+        n_stores = min([int(round((goal[2] - self.height_offset) / (2 * self.size_object[2]))), self.current_nobject - 1])
+        for h in range(n_stores):
             stack = False
             for i in range(self.n_object - 1):
                 # iterate over other objects to see if one of them fills the position
