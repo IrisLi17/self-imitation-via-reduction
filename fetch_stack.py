@@ -29,6 +29,9 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         self.random_box = random_box
         self.random_ratio = random_ratio
         self.n_object = n_object
+        self.task_array = []
+        for i in range(self.n_object):
+            self.task_array.extend([(i + 1, j) for j in range(i + 1)])
         # if n_object == 2:
         #     model_path = MODEL_XML_PATH
         # elif n_object == 3:
@@ -198,11 +201,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             # else:
             #     task_array = [(1, 0), (2, 0), (2, 1), (3, 0), (3, 1), (3, 2)]
             #     self.current_nobject, base_nobject = task_array[int(task_rand * len(task_array))]
-            # Any number of objects
-            task_array = []
-            for i in range(self.n_object):
-                task_array.extend([(i + 1, j) for j in range(i + 1)])
-            self.current_nobject, base_nobject = task_array[int(task_rand * len(task_array))]
+            self.current_nobject, base_nobject = self.task_array[int(task_rand * len(self.task_array))]
             self.selected_objects = np.random.choice(np.arange(self.n_object), self.current_nobject, replace=False)
             self.tower_height = self.height_offset + (base_nobject - 1) * self.size_object[2] * 2
             # if self.random_box and self.np_random.uniform() < self.random_ratio:
@@ -310,13 +309,19 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             for i in range(self.n_object - 1):
                 # iterate over other objects to see if one of them fills the position
                 if abs(other_objects_pos[3 * i + 2] - (
-                            self.height_offset + h * 2 * self.size_object[2])) < 0.01 \
-                        and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[
-                            0] \
-                        and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < \
-                                self.size_object[1]:
+                            achieved_goal[2] - 2 * self.size_object[2] * (h + 1))) < 0.01 \
+                        and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[0] \
+                        and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < self.size_object[1]:
                     stack = True
                     break
+                # if abs(other_objects_pos[3 * i + 2] - (
+                #             self.height_offset + h * 2 * self.size_object[2])) < 0.01 \
+                #         and abs(other_objects_pos[3 * i] - achieved_goal[0]) < self.size_object[
+                #             0] \
+                #         and abs(other_objects_pos[3 * i + 1] - achieved_goal[1]) < \
+                #                 self.size_object[1]:
+                #     stack = True
+                #     break
             if not stack:
                 break
         return stack

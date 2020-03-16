@@ -141,6 +141,7 @@ def eval_model(eval_env, model):
 def stack_eval_model(eval_env, model):
     env = eval_env
     env.unwrapped.random_ratio = 0.0
+    env.unwrapped.task_array = [(env.n_object, i) for i in range(env.n_object)]
     assert abs(env.unwrapped.random_ratio) < 1e-4
     n_episode = 0
     ep_rewards = []

@@ -15,7 +15,7 @@ from utils.replay_buffer import MultiWorkerReplayBuffer, PrioritizedMultiWorkerR
 from stable_baselines.ppo2.ppo2 import safe_mean, get_schedule_fn
 from stable_baselines.sac.policies import SACPolicy
 from stable_baselines import logger
-from utils.eval_stack import pp_eval_model
+from utils.eval_stack import pp_eval_model, eval_model
 
 
 def get_vars(scope):
@@ -73,7 +73,7 @@ class SAC_parallel(OffPolicyRLModel):
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
-                 eval_env=None, curriculum=False,
+                 eval_env=None, curriculum=False, sequential=False,
                  random_exploration=0.0, verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -102,6 +102,7 @@ class SAC_parallel(OffPolicyRLModel):
         self.random_exploration = random_exploration
         self.eval_env = eval_env
         self.curriculum = curriculum
+        self.sequential = sequential
 
         self.value_fn = None
         self.graph = None
@@ -435,6 +436,10 @@ class SAC_parallel(OffPolicyRLModel):
             infos_values = []
             pp_sr_buf = deque(maxlen=5)
             start_decay = total_timesteps
+            current_max_nobject = 2
+            if self.sequential:
+                self.env.env.set_attr('task_array', [[(2, 1), (2, 0), (1, 0)]] * self.env.env.num_envs)
+                print('Set task_array to ', self.env.env.get_attr('task_array')[0])
 
             for step in range(total_timesteps):
                 if callback is not None:
@@ -451,11 +456,17 @@ class SAC_parallel(OffPolicyRLModel):
                             print('Pick-and-place success rate', np.mean(pp_sr_buf))
                             if start_decay == total_timesteps and np.mean(pp_sr_buf) > 0.8:
                                 start_decay = step
-                            _ratio = np.clip(0.7 - (step - start_decay) / (0.05 * total_timesteps), 0.3, 0.7)  # from 0.7 to 0.3
+                            # _ratio = np.clip(0.7 - (step - start_decay) / 5e5, 0.3, 0.7)  # from 0.7 to 0.3
+                            _ratio = np.clip(0.7 - (step - start_decay) / 2e6, 0.3, 0.7)  # from 0.7 to 0.3
                         else:
                             raise NotImplementedError
                         self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
                         print('Set random_ratio to', self.env.env.get_attr('random_ratio')[0])
+                    if self.sequential and step % 3000 == 0 and 'FetchStack' in self.env.env.get_attr('spec')[0].id:
+                        if eval_model(self.eval_env, self, current_max_nobject) > 0.8:
+                            current_max_nobject += 1
+                            self.env.env.set_attr('task_array', [[(current_max_nobject, j) for j in range(current_max_nobject)]] * self.env.env.num_envs)
+                            print('Set task_array to', self.env.env.get_attr('task_array')[0])
 
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
