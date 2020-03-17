@@ -45,6 +45,7 @@ def arg_parse():
     parser.add_argument('--priority', action="store_true", default=False)
     parser.add_argument('--curriculum', action="store_true", default=False)
     parser.add_argument('--imitation_coef', type=float, default=5)
+    parser.add_argument('--sequential', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
     return args
@@ -59,7 +60,7 @@ def configure_logger(log_path, **kwargs):
 
 def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
          export_gif, gamma, random_ratio, action_noise, reward_type, n_object, start_augment,
-         policy, learning_rate, n_workers, priority, curriculum, imitation_coef):
+         policy, learning_rate, n_workers, priority, curriculum, imitation_coef, sequential):
     assert n_workers > 1
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
@@ -138,6 +139,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                 eval_env=eval_env,
                                 aug_env=aug_env,
                                 imitation_coef=imitation_coef,
+                                sequential=sequential,
                                 )
             if n_workers == 1:
                 del train_kwargs['priority_buffer']
@@ -262,4 +264,4 @@ if __name__ == '__main__':
          gamma=args.gamma, random_ratio=args.random_ratio, action_noise=args.action_noise,
          reward_type=args.reward_type, n_object=args.n_object, start_augment=int(args.start_augment),
          policy=args.policy, n_workers=args.num_workers, priority=args.priority, curriculum=args.curriculum,
-         learning_rate=args.learning_rate, imitation_coef=args.imitation_coef)
+         learning_rate=args.learning_rate, imitation_coef=args.imitation_coef, sequential=args.sequential)

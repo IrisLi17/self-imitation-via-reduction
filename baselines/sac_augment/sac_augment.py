@@ -15,7 +15,7 @@ from utils.replay_buffer import MultiWorkerReplayBuffer, PrioritizedMultiWorkerR
 from stable_baselines.ppo2.ppo2 import safe_mean, get_schedule_fn
 from stable_baselines.sac.policies import SACPolicy
 from stable_baselines import logger
-from utils.eval_stack import pp_eval_model
+from utils.eval_stack import pp_eval_model, eval_model
 
 
 def get_vars(scope):
@@ -73,6 +73,7 @@ class SAC_augment(OffPolicyRLModel):
                  gradient_steps=1, target_entropy='auto', action_noise=None,
                  random_exploration=0.0, n_subgoal=2, start_augment_time=0,
                  aug_env=None, eval_env=None, curriculum=False, imitation_coef=5,
+                 sequential=False,
                  verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -106,6 +107,7 @@ class SAC_augment(OffPolicyRLModel):
         self.alpha = alpha
         self.curriculum = curriculum
         self.imitation_coef = imitation_coef
+        self.sequential = sequential
 
         self.value_fn = None
         self.graph = None
@@ -443,6 +445,10 @@ class SAC_augment(OffPolicyRLModel):
             pp_sr_buf = deque(maxlen=5)
             n_updates = 0
             start_decay = total_timesteps
+            current_max_nobject = 2
+            if self.sequential:
+                self.env.env.set_attr('task_array', [[(2, 1), (2, 0), (1, 0)]] * self.env.env.num_envs)
+                print('Set task_array to ', self.env.env.get_attr('task_array')[0])
             infos_values = []
             # TODO: multi-env
             self.ep_state_buf = [[] for _ in range(self.n_envs)]
@@ -510,6 +516,12 @@ class SAC_augment(OffPolicyRLModel):
                         raise NotImplementedError
                     self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
                     print('Set random_ratio to', self.env.env.get_attr('random_ratio')[0])
+                if self.sequential and step % 3000 == 0 and 'FetchStack' in self.env.env.get_attr('spec')[0].id:
+                    if eval_model(self.eval_env, self, current_max_nobject) > 0.8:
+                        current_max_nobject += 1
+                        self.env.env.set_attr('task_array', [
+                            [(current_max_nobject, j) for j in range(current_max_nobject)]] * self.env.env.num_envs)
+                        print('Set task_array to', self.env.env.get_attr('task_array')[0])
 
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
