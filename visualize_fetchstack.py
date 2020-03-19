@@ -4,8 +4,11 @@ import numpy as np
 
 
 fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-env = FetchStackEnv()
+env = FetchStackEnv(n_object=6, random_ratio=0.0)
 obs = env.reset()
+while env.current_nobject != 1:
+    obs = env.reset()
+print('task', obs['observation'][-2:], 'goal', obs['desired_goal'], obs['achieved_goal'])
 # while (np.argmax(obs['desired_goal'][3:]) != 1 or env.task_mode != 1):
 #     obs = env.reset()
 # for i in range(env.n_object):

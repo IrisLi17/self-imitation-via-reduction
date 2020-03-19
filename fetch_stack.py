@@ -242,7 +242,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                     object_qpos[:3] = objects_xpos[np.where(self.selected_objects == i)[0][0]]
                 else:
                     # This is coordinate in physical simulator, not the observation
-                    object_qpos[:3] = np.array([-1, -1, 0])
+                    object_qpos[:3] = np.array([-1-i, -1, 0])
                 self.sim.data.set_joint_qpos('object%d:joint' % i, object_qpos)
 
         self.sim.forward()
@@ -285,6 +285,10 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
             # Pick and place
             # g_idx = np.random.randint(self.current_nobject)
             g_idx = np.random.choice(self.selected_objects)
+            if hasattr(self, 'has_base') and self.has_base:
+                while abs(self.sim.data.get_joint_qpos('object%d:joint' % g_idx)[0] - self.maybe_goal_xy[0]) < 0.01 \
+                        and abs(self.sim.data.get_joint_qpos('object%d:joint' % g_idx)[1] - self.maybe_goal_xy[1]) < 0.01:
+                    g_idx = np.random.choice(self.selected_objects)
             one_hot = np.zeros(self.n_object)
             one_hot[g_idx] = 1
             goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-self.target_range, self.target_range, size=3)
