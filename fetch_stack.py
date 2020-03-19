@@ -302,10 +302,13 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         return np.linalg.norm(achieved_goal - goal, axis=-1)
 
     def _is_stacked(self, achieved_goal, goal, other_objects_pos):
+        assert len(other_objects_pos) == 3 * (self.n_object - 1)
+        current_nobject = np.sum([np.linalg.norm(other_objects_pos[3 * i : 3 * (i + 1)]) > 1e-3
+                                  for i in range(len(other_objects_pos) // 3)]) + 1
         stack = True
         # TODO: tower with arbitrary shape
         # TODO: when relabel and goal is not integer times of size above table... h min n selected object?
-        n_stores = min([int(round((goal[2] - self.height_offset) / (2 * self.size_object[2]))), self.current_nobject - 1])
+        n_stores = min([int(round((goal[2] - self.height_offset) / (2 * self.size_object[2]))), current_nobject - 1])
         for h in range(n_stores):
             stack = False
             for i in range(self.n_object - 1):

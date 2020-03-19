@@ -255,7 +255,7 @@ class HindsightExperienceReplayWrapper(object):
                 obs_dict['desired_goal'] = goal
                 next_obs_dict['desired_goal'] = goal
 
-                assert len(goal) in [3, 5, 6]
+                # assert len(goal) in [3, 5, 6]
                 if len(goal) > 3:
                     # modify dict, note that desired_goal is already modified, only need to modify achieved goal
                     one_hot = goal[3:]
