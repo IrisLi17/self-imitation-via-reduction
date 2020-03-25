@@ -23,12 +23,13 @@ def eval_model(n_obj, is_stack):
 
 if __name__ == '__main__':
     model_path = sys.argv[1]
+    n_object = int(sys.argv[2]) if len(sys.argv) > 2 else 3
     env_kwargs = dict(random_box=True,
                       random_ratio=1.0,
                       random_gripper=True,
                       max_episode_steps=100,
                       reward_type="sparse",
-                      n_object=3, )
+                      n_object=n_object, )
     env = make_env('FetchStack-v1', seed=None, rank=0, kwargs=env_kwargs)
     # model = PPO2.load(model_path)
     model = HER_HACK.load(model_path)

@@ -110,6 +110,8 @@ def attention_mlp_extractor2(flat_observations, n_object=2, n_units=128):
         self_out, num_outputs=n_units // 2, scope='shared_agent_fc1', activation_fn=tf.nn.relu)
 
     objects_in = []
+    mask = []
+    # TODO: add mask
     for i in range(n_object):
         _object_idx = np.concatenate([np.arange(3+3*i, 3+3*(i+1)), np.arange(3+3*n_object+3*i, 3+3*n_object+3*(i+1)),
                                       np.arange(5+6*n_object+3*i, 5+6*n_object+3*(i+1)),
@@ -118,14 +120,21 @@ def attention_mlp_extractor2(flat_observations, n_object=2, n_units=128):
                                       np.arange(15 + 15 * n_object + i, 15 + 15 * n_object + i + 1), # indicator
                                       ]) # size 16
         object_in = tf.gather(flat_observations, _object_idx, axis=1)
+        object_pos = tf.gather(flat_observations, np.arange(3 + 3 * i, 3 + 3 * (i + 1)), axis=1)
+        # Generate one column
+        mask.append(tf.greater(tf.norm(object_pos, axis=1, keepdims=True), 1e-3))
         # object_onehot = tf.tile(tf.expand_dims(tf.one_hot(i, n_object), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
         # object_in = tf.concat([object_in, object_onehot], axis=1)
         with tf.variable_scope("object", reuse=tf.AUTO_REUSE):
             fc1 = tf.contrib.layers.fully_connected(object_in, num_outputs=n_units, scope="fc0", activation_fn=tf.nn.relu)
             fc2 = tf.contrib.layers.fully_connected(fc1, num_outputs=n_units // 2, scope="fc1", activation_fn=tf.nn.relu)
             objects_in.append(fc2)
+    mask = tf.stop_gradient(tf.expand_dims(tf.concat(mask, axis=1), axis=1))
     objects_in = tf.stack(objects_in, 2) # (*, n_unit, n_object)
-    objects_attention = tf.nn.softmax(tf.matmul(tf.expand_dims(self_out, axis=1), objects_in) / math.sqrt(n_units // 2)) # (*, 1, n_object)
+    unnormalize_objects_attention = tf.matmul(tf.expand_dims(self_out, axis=1), objects_in) / math.sqrt(n_units // 2)
+    # Mask before normalization.
+    objects_attention = tf.nn.softmax(tf.where(mask, unnormalize_objects_attention, -1e10 * tf.ones(tf.shape(unnormalize_objects_attention)))) # (*, 1, n_object)
+    # objects_attention = tf.nn.softmax(tf.matmul(tf.expand_dims(self_out, axis=1), objects_in) / math.sqrt(n_units // 2)) # (*, 1, n_object)
     objects_out = tf.squeeze(tf.matmul(objects_attention, tf.transpose(objects_in, [0, 2, 1])), 1) # (*, n_unit)
     objects_out = tf.contrib.layers.layer_norm(objects_out)
     objects_out = tf.nn.relu(objects_out)
