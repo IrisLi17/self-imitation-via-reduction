@@ -436,9 +436,9 @@ class SAC_parallel(OffPolicyRLModel):
             infos_values = []
             pp_sr_buf = deque(maxlen=5)
             start_decay = total_timesteps
-            current_max_nobject = 2
             if self.sequential:
-                self.env.env.set_attr('task_array', [[(2, 1), (2, 0), (1, 0)]] * self.env.env.num_envs)
+                current_max_nobject = 2
+                self.env.env.set_attr('task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 print('Set task_array to ', self.env.env.get_attr('task_array')[0])
 
             for step in range(total_timesteps):
@@ -463,9 +463,10 @@ class SAC_parallel(OffPolicyRLModel):
                         self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
                         print('Set random_ratio to', self.env.env.get_attr('random_ratio')[0])
                     if self.sequential and step % 3000 == 0 and 'FetchStack' in self.env.env.get_attr('spec')[0].id:
-                        if eval_model(self.eval_env, self, current_max_nobject) > 0.8:
+                        if current_max_nobject < self.env.env.get_attr('n_object')[0] and eval_model(self.eval_env, self, current_max_nobject) > 0.2:
                             current_max_nobject += 1
-                            self.env.env.set_attr('task_array', [[(current_max_nobject, j) for j in range(current_max_nobject)]] * self.env.env.num_envs)
+                            previous_task_array = self.env.env.get_attr('task_array')[0]
+                            self.env.env.set_attr('task_array', [previous_task_array + [(current_max_nobject, j) for j in range(current_max_nobject)]] * self.env.env.num_envs)
                             print('Set task_array to', self.env.env.get_attr('task_array')[0])
 
                 # Before training starts, randomly sample actions

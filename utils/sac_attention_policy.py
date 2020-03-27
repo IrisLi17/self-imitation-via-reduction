@@ -101,16 +101,15 @@ class AttentionPolicy(SACPolicy):
         if obs is None:
             obs = self.processed_obs
 
-        # with tf.variable_scope("attention", reuse=tf.AUTO_REUSE):
-        #     if self.feature_extraction == "attention_mlp":
-        #         latent = attention_mlp_extractor2(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+        with tf.variable_scope("attention", reuse=tf.AUTO_REUSE):
+            if self.feature_extraction == "attention_mlp":
+                latent = attention_mlp_extractor2(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
 
         with tf.variable_scope(scope, reuse=reuse):
             if self.feature_extraction == "cnn":
                 critics_h = self.cnn_extractor(obs, **self.cnn_kwargs)
-            # elif self.feature_extraction == "attention_mlp":
-            #     # critics_h = attention_mlp_extractor(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
-            #     critics_h = latent
+            elif self.feature_extraction == "attention_mlp":
+                critics_h = latent
             else:
                 critics_h = tf.layers.flatten(obs)
 
