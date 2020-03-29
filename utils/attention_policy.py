@@ -94,14 +94,23 @@ def attention_mlp_extractor_particle(flat_observations, n_object=2, n_units=128)
     return latent
 
 
-def attention_mlp_extractor2(flat_observations, n_object=2, n_units=128):
+def attention_mlp_extractor2(flat_observations, n_object=2, n_units=128, has_action=False):
+    # Assume action is in the last 4 dimensions if has_action
     # agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
     #                             np.arange(3 + 6 * n_object + 2 + 9 * n_object, int(flat_observations.shape[1]))])
-    agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 5 + 6 * n_object),
-                                np.arange(5 + 15 * n_object, 12 + 15 * n_object),
-                                np.arange(12 + 15 * n_object, 15 + 15 * n_object), # achieved goal pos
-                                np.arange(15 + 16 * n_object, 18 + 16 * n_object), # desired goal pos
-                                ]) # size 18
+    if not has_action:
+        agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 5 + 6 * n_object),
+                                    np.arange(5 + 15 * n_object, 12 + 15 * n_object),
+                                    np.arange(12 + 15 * n_object, 15 + 15 * n_object), # achieved goal pos
+                                    np.arange(15 + 16 * n_object, 18 + 16 * n_object), # desired goal pos
+                                    ]) # size 18
+    else:
+        agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 5 + 6 * n_object),
+                                    np.arange(5 + 15 * n_object, 12 + 15 * n_object),
+                                    np.arange(12 + 15 * n_object, 15 + 15 * n_object), # achieved goal pos
+                                    np.arange(15 + 16 * n_object, 18 + 16 * n_object), # desired goal pos
+                                    np.arange(18 + 17 * n_object, 22 + 17 * n_object), # 4-d actions
+                                    ]) # size 22
     self_in = tf.gather(flat_observations, agent_idx, axis=1)
     self_out = self_in
     self_out = tf.contrib.layers.fully_connected(

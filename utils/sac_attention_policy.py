@@ -39,6 +39,7 @@ class AttentionPolicy(SACPolicy):
         if layers is None:
             layers = [256, 256, 256, 256]
         self.layers = layers
+        self.critic_layers = [256, 256]
         self.reg_loss = None
         self.reg_weight = reg_weight
         self.entropy = None
@@ -52,15 +53,13 @@ class AttentionPolicy(SACPolicy):
         if obs is None:
             obs = self.processed_obs
 
-        with tf.variable_scope("attention", reuse=tf.AUTO_REUSE):
-            if self.feature_extraction == "attention_mlp":
-                latent = attention_mlp_extractor2(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
-
         with tf.variable_scope(scope, reuse=reuse):
             if self.feature_extraction == "cnn":
                 pi_h = self.cnn_extractor(obs, **self.cnn_kwargs)
             elif self.feature_extraction == "attention_mlp":
                 # pi_h = attention_mlp_extractor(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+                with tf.variable_scope("attention", reuse=reuse):
+                    latent = attention_mlp_extractor2(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
                 pi_h = latent
             else:
                 pi_h = tf.layers.flatten(obs)
@@ -101,22 +100,26 @@ class AttentionPolicy(SACPolicy):
         if obs is None:
             obs = self.processed_obs
 
-        with tf.variable_scope("attention", reuse=tf.AUTO_REUSE):
-            if self.feature_extraction == "attention_mlp":
-                latent = attention_mlp_extractor2(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
+        # with tf.variable_scope("attention_critic", reuse=tf.AUTO_REUSE):
+        #     if self.feature_extraction == "attention_mlp":
+        #         latent = attention_mlp_extractor2(tf.layers.flatten(obs), n_object=self.n_object, n_units=128)
 
         with tf.variable_scope(scope, reuse=reuse):
             if self.feature_extraction == "cnn":
                 critics_h = self.cnn_extractor(obs, **self.cnn_kwargs)
-            elif self.feature_extraction == "attention_mlp":
-                critics_h = latent
+            # elif self.feature_extraction == "attention_mlp":
+            #     critics_h = latent
             else:
                 critics_h = tf.layers.flatten(obs)
 
             if create_vf:
                 # Value function
                 with tf.variable_scope('vf', reuse=reuse):
-                    vf_h = mlp(critics_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
+                    critics_latent = critics_h
+                    if self.feature_extraction == "attention_mlp":
+                        with tf.variable_scope("attention", reuse=reuse):
+                            critics_latent = attention_mlp_extractor2(critics_h, n_object=self.n_object, n_units=128)
+                    vf_h = mlp(critics_latent, self.critic_layers, self.activ_fn, layer_norm=self.layer_norm)
                     value_fn = tf.layers.dense(vf_h, 1, name="vf")
                 self.value_fn = value_fn
 
@@ -126,11 +129,19 @@ class AttentionPolicy(SACPolicy):
 
                 # Double Q values to reduce overestimation
                 with tf.variable_scope('qf1', reuse=reuse):
-                    qf1_h = mlp(qf_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
+                    qf1_h = qf_h
+                    if self.feature_extraction == "attention_mlp":
+                        with tf.variable_scope("attention", reuse=reuse):
+                            qf1_h = attention_mlp_extractor2(qf_h, n_object=self.n_object, n_units=128, has_action=True)
+                    qf1_h = mlp(qf1_h, self.critic_layers, self.activ_fn, layer_norm=self.layer_norm)
                     qf1 = tf.layers.dense(qf1_h, 1, name="qf1")
 
                 with tf.variable_scope('qf2', reuse=reuse):
-                    qf2_h = mlp(qf_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
+                    qf2_h = qf_h
+                    if self.feature_extraction == "attention_mlp":
+                        with tf.variable_scope("attention", reuse=reuse):
+                            qf2_h = attention_mlp_extractor2(qf_h, n_object=self.n_object, n_units=128, has_action=True)
+                    qf2_h = mlp(qf2_h, self.critic_layers, self.activ_fn, layer_norm=self.layer_norm)
                     qf2 = tf.layers.dense(qf2_h, 1, name="qf2")
 
                 self.qf1 = qf1
