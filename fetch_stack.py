@@ -452,14 +452,41 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         self._step_callback()
         obs = self._get_obs()
 
+        # Coarsely check x,y position and z height
         intower_idx = list(filter(lambda idx: np.linalg.norm(obs['observation'][3 + 3 * idx : 3 + 3 * idx + 2] - obs['desired_goal'][:2]) < 0.025
                                               and abs((obs['observation'][3 + 3 * idx + 2] - self.height_offset)
                                                       - 0.05 * round((obs['observation'][3 + 3 * idx + 2] - self.height_offset) / 0.05)) < 0.01,
                                   np.arange(self.n_object)))
+        '''
         if len(intower_idx):
             self.tower_height = np.max(obs['observation'][3 + 3 * np.array(intower_idx) + 2])
         else:
             self.tower_height = self.height_offset - self.size_object[2] * 2
+        '''
+
+        # TODO: more refined tower height calculation: from bottom to top, check if stacked properly.
+        # Also, if target block is not placed at the desired level, it should be considered as part of tower.
+        self.tower_height = self.height_offset - self.size_object[2] * 2
+        for i in range(0, self.current_nobject):
+            found = False
+            for prob_idx in intower_idx:
+                if self.height_offset + 2 * self.size_object[2] * i < obs['desired_goal'][2] - 0.01:
+                    # Should not be target object
+                    if prob_idx != np.argmax(obs['desired_goal'][3:]) and \
+                                    abs(obs['observation'][3 + 3 * prob_idx + 2] - (self.height_offset + 2 * self.size_object[2] * i)) < 0.01:
+                        self.tower_height += 2 * self.size_object[2]
+                        found = True
+                        break
+                else:
+                    # desired goal height now, no need to check if it is target_block
+                    if abs(obs['observation'][3 + 3 * prob_idx + 2] - (self.height_offset + 2 * self.size_object[2] * i)) < 0.01:
+                        self.tower_height += 2 * self.size_object[2]
+                        found = True
+                        break
+
+            if not found:
+                break
+
         done = False
         reward, is_success = self.compute_reward_and_success(obs['observation'], self.goal, info)
         info['is_success'] = is_success
@@ -1269,3 +1296,14 @@ class FetchStackEnv_v2(fetch_env.FetchEnv, utils.EzPickle):
         self.sim.model.site_pos[site_id] = self.goal[:3] - sites_offset[0]
         self.sim.model.site_rgba[site_id] = np.concatenate([self.sim.model.site_rgba[object_id][:3], [0.5]])
         self.sim.forward()
+
+
+if __name__ == '__main__':
+    env = FetchStackEnv(n_object=6, random_ratio=0.0)
+    obs = env.reset()
+    while env.current_nobject != 6:
+        obs = env.reset()
+    env.step(np.random.rand(4))
+    print('object location', obs['observation'][3 : 3 + 3 * env.n_object])
+    print('goal', obs['desired_goal'])
+    print('tower height', env.tower_height)
