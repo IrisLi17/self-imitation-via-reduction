@@ -118,7 +118,8 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
 
 def eval_model(eval_env, model):
     env = eval_env
-    assert abs(env.unwrapped.random_ratio) < 1e-4
+    if hasattr(env.unwrapped, 'random_ratio'):
+        assert abs(env.unwrapped.random_ratio) < 1e-4
     n_episode = 0
     ep_rewards = []
     while n_episode < 20:

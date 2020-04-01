@@ -602,7 +602,8 @@ class SAC_parallel(OffPolicyRLModel):
                         for (name, val) in zip(self.infos_names, infos_values):
                             logger.logkv(name, val)
                     logger.logkv("total timesteps", self.num_timesteps)
-                    logger.logkv("random_ratio", self.env.env.get_attr('random_ratio')[0])
+                    if hasattr(self.eval_env.unwrapped, 'random_ratio'):
+                        logger.logkv("random_ratio", self.env.env.get_attr('random_ratio')[0])
                     logger.dumpkvs()
                     # Reset infos:
                     infos_values = []
