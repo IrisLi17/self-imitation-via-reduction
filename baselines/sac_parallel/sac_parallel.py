@@ -439,7 +439,7 @@ class SAC_parallel(OffPolicyRLModel):
             if self.sequential:
                 current_max_nobject = 2
                 # self.env.env.set_attr('task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
-                self.env.env.env_method('set_task_array', [[(2, 0), (2, 1), (1, 0)] * self.env.env.num_envs])
+                self.env.env.env_method('set_task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 print('Set task_array to ', self.env.env.get_attr('task_array')[0])
 
             for step in range(total_timesteps):
