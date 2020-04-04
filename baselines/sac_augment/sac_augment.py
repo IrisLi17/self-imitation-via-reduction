@@ -447,7 +447,8 @@ class SAC_augment(OffPolicyRLModel):
             start_decay = total_timesteps
             if self.sequential:
                 current_max_nobject = 2
-                self.env.env.set_attr('task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
+                # self.env.env.set_attr('task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
+                self.env.env.env_method('set_task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 print('Set task_array to ', self.env.env.get_attr('task_array')[0])
             infos_values = []
             # TODO: multi-env
@@ -520,8 +521,12 @@ class SAC_augment(OffPolicyRLModel):
                     if current_max_nobject < self.env.env.get_attr('n_object')[0] and eval_model(self.eval_env, self, current_max_nobject) > 0.2:
                         current_max_nobject += 1
                         previous_task_array = self.env.env.get_attr('task_array')[0]
-                        self.env.env.set_attr('task_array', [previous_task_array + [(current_max_nobject, j) for j in
-                                                                                    range(current_max_nobject)]] * self.env.env.num_envs)
+                        # self.env.env.set_attr('task_array', [previous_task_array + [(current_max_nobject, j) for j in
+                        #                                                             range(current_max_nobject)]] * self.env.env.num_envs)
+                        self.env.env.env_method('set_task_array', [
+                            previous_task_array + [(current_max_nobject, j) for j in
+                                                   range(current_max_nobject)]] * self.env.env.num_envs)
+
                         print('Set task_array to', self.env.env.get_attr('task_array')[0])
 
                 # Before training starts, randomly sample actions

@@ -125,7 +125,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     env_kwargs = dict(random_box=True,
                       random_ratio=random_ratio,
                       random_gripper=True,
-                      max_episode_steps=100,
+                      max_episode_steps=(50 * n_object if n_object > 3 else 100),
                       reward_type=reward_type,
                       n_object=n_object, )
     # env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
@@ -251,9 +251,10 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
         if 'FetchStack' in env_name:
+            env.env_method('set_task_array', [[(3, 0)]])
             while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
-        print('goal', obs['desired_goal'][0])
+        print('goal', obs['desired_goal'][0], 'obs', obs['observation'][0])
         episode_reward = 0.0
         images = []
         frame_idx = 0

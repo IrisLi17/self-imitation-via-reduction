@@ -167,6 +167,9 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
     def set_random_ratio(self, random_ratio):
         self.random_ratio = random_ratio
 
+    def set_task_array(self, task_array):
+        self.task_array = task_array.copy()
+
     def _reset_sim(self):
         self.sim.set_state(self.initial_state)
         if self.random_gripper:
