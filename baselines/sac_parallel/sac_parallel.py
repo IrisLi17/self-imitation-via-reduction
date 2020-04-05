@@ -464,10 +464,10 @@ class SAC_parallel(OffPolicyRLModel):
                         self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
                         print('Set random_ratio to', self.env.env.get_attr('random_ratio')[0])
                     if self.sequential and step % 3000 == 0 and 'FetchStack' in self.env.env.get_attr('spec')[0].id:
-                        if current_max_nobject < self.env.env.get_attr('n_object')[0] and eval_model(self.eval_env, self, current_max_nobject) > 0.2:
+                        if current_max_nobject < self.env.env.get_attr('n_object')[0] and \
+                                eval_model(self.eval_env, self, current_max_nobject) > 0.2:
                             current_max_nobject += 1
                             previous_task_array = self.env.env.get_attr('task_array')[0]
-                            # self.env.env.set_attr('task_array', [previous_task_array + [(current_max_nobject, j) for j in range(current_max_nobject)]] * self.env.env.num_envs)
                             self.env.env.env_method('set_task_array', [previous_task_array + [(current_max_nobject, j) for j in range(current_max_nobject)]] * self.env.env.num_envs)
                             print('Set task_array to', self.env.env.get_attr('task_array')[0])
 

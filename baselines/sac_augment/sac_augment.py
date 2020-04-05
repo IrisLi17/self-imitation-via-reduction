@@ -427,7 +427,8 @@ class SAC_augment(OffPolicyRLModel):
             self.noise_mag = self.aug_env.get_attr('size_obstacle')[0][1]
             self.n_object = self.aug_env.get_attr('n_object')[0]
             self.reward_type = self.aug_env.get_attr('reward_type')[0]
-            self.horizon = self.env.env.get_attr('spec')[0].max_episode_steps
+            # Get horizon on the fly
+            # self.horizon = self.env.env.get_attr('spec')[0].max_episode_steps
 
             # Transform to callable if needed
             self.learning_rate = get_schedule_fn(self.learning_rate)
@@ -709,7 +710,7 @@ class SAC_augment(OffPolicyRLModel):
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
                             # Exceed time limit
-                            if env_end_flag[idx] == False and env_restart_steps[idx] + increment_step > self.horizon:
+                            if env_end_flag[idx] is False and env_restart_steps[idx] + increment_step > self.get_horizon():
                                 env_end_flag[idx] = True
                                 # But env_end_step is still np.inf
                             if info['is_success']:
@@ -723,12 +724,12 @@ class SAC_augment(OffPolicyRLModel):
                                     env_end_step[idx] = env_restart_steps[idx] + increment_step
                                 else:
                                     pass
-                        if increment_step >= self.horizon - min(env_restart_steps):
+                        if increment_step >= self.get_horizon() - min(env_restart_steps):
                             break
 
                     # print('end step', env_end_step)
                     for idx, end_step in enumerate(env_end_step):
-                        if end_step <= self.horizon:
+                        if end_step <= self.get_horizon():
                             # print(temp_subgoals[idx])
                             is_self_aug = temp_subgoals[idx][3]
                             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
@@ -823,6 +824,12 @@ class SAC_augment(OffPolicyRLModel):
                     # Reset infos:
                     infos_values = []
             return self
+
+    def get_horizon(self):
+        temp = self.env.env.get_attr('spec')[0].max_episode_steps
+        if temp is None:
+            temp = self.env.env.get_attr('time_limit')[0]
+        return temp
 
     def select_subgoal(self, transition_buf, k, tower_height):
         debug = False

@@ -90,6 +90,9 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     else:
         env = gym.make(env_id, reward_type='sparse')
     # env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
+    if 'FetchStack' in env_id and max_episode_steps is None:
+        from utils.wrapper import FlexibleTimeLimitWrapper
+        env = FlexibleTimeLimitWrapper(env, 100)
     env = DoneOnSuccessWrapper(env)
     if log_dir is not None:
         env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets, info_keywords=('is_success',))
@@ -125,7 +128,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     env_kwargs = dict(random_box=True,
                       random_ratio=random_ratio,
                       random_gripper=True,
-                      max_episode_steps=(50 * n_object if n_object > 3 else 100),
+                      # max_episode_steps=(50 * 2 if n_object > 3 else 100),
+                      max_episode_steps=None if sequential else 100,  # TODO: see if it makes sense
                       reward_type=reward_type,
                       n_object=n_object, )
     # env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)

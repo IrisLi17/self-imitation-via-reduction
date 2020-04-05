@@ -77,7 +77,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     env_kwargs = dict(random_box=True,
                       random_ratio=random_ratio,
                       random_gripper=True,
-                      max_episode_steps=50 * n_object if n_object > 3 else 100,
+                      # max_episode_steps=50 * n_object if n_object > 3 else 100,
+                      max_episode_steps=None if sequential else 100,
                       reward_type=reward_type,
                       n_object=n_object, )
 
