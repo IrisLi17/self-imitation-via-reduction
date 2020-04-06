@@ -114,7 +114,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     set_global_seeds(seed)
 
     # model_class = SAC  # works also with SAC, DDPG and TD3
-    model_class = SAC_parallel if num_workers > 1 else SAC
+    # model_class = SAC_parallel if num_workers > 1 else SAC
+    model_class = SAC_parallel
 
     # if env_name in ENTRY_POINT.keys():
     #     kwargs = dict(penaltize_height=False, heavy_obstacle=heavy_obstacle, random_gripper=random_gripper)
@@ -184,7 +185,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                 eval_env=eval_env,
                                 )
             if num_workers == 1:
-                del train_kwargs['priority_buffer']
+                # del train_kwargs['priority_buffer']
+                pass
             if 'FetchStack' in env_name:
                 train_kwargs['ent_coef'] = "auto"
                 train_kwargs['tau'] = 0.001

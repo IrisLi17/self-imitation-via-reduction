@@ -25,7 +25,8 @@ class HER_HACK(BaseRLModel):
         assert not isinstance(env, VecEnvWrapper), "HER does not support VecEnvWrapper"
 
         super().__init__(policy=policy, env=env, verbose=kwargs.get('verbose', 0),
-                         policy_base=None, requires_vec_env=(num_workers > 1))
+                         # policy_base=None, requires_vec_env=(num_workers > 1))
+                         policy_base=None, requires_vec_env=kwargs.get('requires_vec_env', True))
 
         self.model_class = model_class
         self.replay_wrapper = None
@@ -66,10 +67,11 @@ class HER_HACK(BaseRLModel):
         # maybe we can try calling `compute_reward()` ?
         # assert isinstance(self.env, gym.GoalEnv), "HER only supports gym.GoalEnv"
 
-        if self.n_workers > 1:
-            replay_wrapper = HindsightExperienceReplayWrapper
-        else:
-            replay_wrapper = SingleHindsightExperienceReplayWrapper
+        # if self.n_workers > 1:
+        #     replay_wrapper = HindsightExperienceReplayWrapper
+        # else:
+        #     replay_wrapper = SingleHindsightExperienceReplayWrapper
+        replay_wrapper = HindsightExperienceReplayWrapper
         self.replay_wrapper = functools.partial(replay_wrapper,
                                                 n_sampled_goal=self.n_sampled_goal,
                                                 goal_selection_strategy=self.goal_selection_strategy,
