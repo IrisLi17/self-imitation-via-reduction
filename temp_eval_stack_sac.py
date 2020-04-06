@@ -1,8 +1,9 @@
 import sys, os
-from run_ppo import make_env
+from run_her import make_env
 # from baselines import PPO2
 from baselines import HER_HACK
 import numpy as np
+from gym.wrappers import FlattenDictWrapper
 
 
 def eval_model(n_obj, is_stack):
@@ -27,14 +28,16 @@ if __name__ == '__main__':
     env_kwargs = dict(random_box=True,
                       random_ratio=1.0,
                       random_gripper=True,
-                      max_episode_steps=100,
+                      max_episode_steps=None,
                       reward_type="sparse",
                       n_object=n_object, )
     env = make_env('FetchStack-v1', seed=None, rank=0, kwargs=env_kwargs)
+    env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
     # model = PPO2.load(model_path)
     model = HER_HACK.load(model_path)
     goal_dim = env.goal.shape[0]
     obs_dim = env.observation_space.shape[0] - 2 * goal_dim
+    # obs_dim = env.observation_space['observation'].shape[0]
     # obj1_pickandplace = eval_model(1, False)
     # print('1 obj pick and place', obj1_pickandplace)
     # obj1_stack = eval_model(1, True)

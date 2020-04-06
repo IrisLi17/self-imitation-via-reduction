@@ -710,7 +710,7 @@ class SAC_augment(OffPolicyRLModel):
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
                             # Exceed time limit
-                            if env_end_flag[idx] is False and env_restart_steps[idx] + increment_step > self.get_horizon():
+                            if env_end_flag[idx] is False and env_restart_steps[idx] + increment_step > self.get_horizon(self.current_nobject[idx]):
                                 env_end_flag[idx] = True
                                 # But env_end_step is still np.inf
                             if info['is_success']:
@@ -724,12 +724,12 @@ class SAC_augment(OffPolicyRLModel):
                                     env_end_step[idx] = env_restart_steps[idx] + increment_step
                                 else:
                                     pass
-                        if increment_step >= self.get_horizon() - min(env_restart_steps):
+                        if increment_step >= self.get_horizon(max(self.current_nobject[:self.aug_env.num_envs])) - min(env_restart_steps):
                             break
 
                     # print('end step', env_end_step)
                     for idx, end_step in enumerate(env_end_step):
-                        if end_step <= self.get_horizon():
+                        if end_step <= self.get_horizon(self.current_nobject[idx]):
                             # print(temp_subgoals[idx])
                             is_self_aug = temp_subgoals[idx][3]
                             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
@@ -825,10 +825,8 @@ class SAC_augment(OffPolicyRLModel):
                     infos_values = []
             return self
 
-    def get_horizon(self):
-        temp = self.env.env.get_attr('spec')[0].max_episode_steps
-        if temp is None:
-            temp = self.env.env.get_attr('time_limit')[0]
+    def get_horizon(self, current_nobject):
+        temp = max(current_nobject * 50, 100)
         return temp
 
     def select_subgoal(self, transition_buf, k, tower_height):
