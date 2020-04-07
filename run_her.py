@@ -90,7 +90,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     else:
         env = gym.make(env_id, reward_type='sparse')
     # env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
-    if 'FetchStack' in env_id and max_episode_steps is None:
+    if 'FetchStack' in env_id and ('Unlimit' not in env_id) and max_episode_steps is None:
         from utils.wrapper import FlexibleTimeLimitWrapper
         env = FlexibleTimeLimitWrapper(env, 100)
     env = DoneOnSuccessWrapper(env)
