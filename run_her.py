@@ -202,8 +202,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
                     log_eval(_locals['self'].num_timesteps, mean_eval_reward)
-                if _locals['step'] % int(5e4) == 0:
-                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(5e4)))
+                if _locals['step'] % int(2e4) == 0:
+                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(2e4)))
                     model.save(model_path)
                     print('model saved to', model_path)
                 return True
