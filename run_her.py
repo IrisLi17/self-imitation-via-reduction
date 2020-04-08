@@ -257,7 +257,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
         if 'FetchStack' in env_name:
-            env.env_method('set_task_array', [[(3, 0)]])
+            env.env_method('set_task_array', [[(env.get_attr('n_object')[0], 0)]])
+            obs = env.reset()
             while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
         print('goal', obs['desired_goal'][0], 'obs', obs['observation'][0])

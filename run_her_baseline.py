@@ -176,8 +176,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             ax.cla()
             img = env.render(mode='rgb_array')
             ax.imshow(img)
-            ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
-                         ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
+            ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx))
             if export_gif:
                 plt.savefig('tempimg' + str(i) + '.png')
             plt.pause(0.02)
@@ -207,3 +206,4 @@ if __name__ == '__main__':
          batch_size=args.batch_size, export_gif=args.export_gif,
          gamma=args.gamma, random_ratio=args.random_ratio, action_noise=args.action_noise,
          reward_type=args.reward_type, n_object=args.n_object)
+

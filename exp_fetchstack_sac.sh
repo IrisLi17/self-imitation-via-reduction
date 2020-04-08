@@ -6,3 +6,4 @@ CUDA_VISIBLE_DEVICES=0 python run_her_augment.py --env FetchStack-v1 --num_times
 CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchReach-v1 --num_timesteps 1e5 --num_workers 16 --policy CustomSACPolicy
 CUDA_VISIBLE_DEVICES=2 python run_her.py --env FetchPush-v1 --num_timesteps 1e7 --num_workers 16 --policy CustomSACPolicy --log_path logs/FetchPush-v1/her_sac_16workers/no_priority
 CUDA_VISIBLE_DEVICES=2 python run_her.py --env FetchPush-v1 --num_timesteps 1e7 --num_workers 16 --policy CustomSACPolicy --priority --log_path logs/FetchPush-v1/her_sac_16workers/priority
+CUDA_VISIBLE_DEVICES=2 python run_her_baseline.py --env FetchPush-v1 --num_timesteps 1e7 --log_path logs/FetchPush-v1/her_sac_baseline/0
