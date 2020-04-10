@@ -7,6 +7,7 @@ from baselines import HER_HACK, SAC_parallel
 from utils.wrapper import DoneOnSuccessWrapper
 from gym.wrappers import FlattenDictWrapper
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
+from masspoint_env import MasspointPushDoubleObstacleEnv
 from fetch_stack import FetchPureStackEnv, FetchStackEnv
 import gym
 import matplotlib.pyplot as plt
@@ -26,7 +27,9 @@ except ImportError:
 
 ENTRY_POINT = {
     'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
-    'FetchStack-v0': FetchPureStackEnv,
+    'FetchPushWallObstacleUnlimit-v4': FetchPushWallObstacleEnv_v4,
+    'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
+    'MasspointPushDoubleObstacleUnlimit-v1': MasspointPushDoubleObstacleEnv,
     'FetchStack-v1': FetchStackEnv,
     'FetchStackUnlimit-v1': FetchStackEnv,
     }
@@ -100,6 +103,29 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     return env
 
 
+def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None, n_object=None):
+    if env_id == 'FetchStack-v1':
+        return dict(random_box=True,
+                    random_ratio=random_ratio,
+                    random_gripper=True,
+                    max_episode_steps=None if sequential else 100,
+                    reward_type=reward_type,
+                    n_object=n_object,)
+    elif env_id == 'FetchPushWallObstacle-v4':
+        return dict(random_box=True,
+                    heavy_obstacle=True,
+                    random_ratio=random_ratio,
+                    random_gripper=True,
+                    max_episode_steps=100, )
+    elif env_id == 'MasspointPushDoubleObstacle-v1':
+        return dict(random_box=True,
+                    random_ratio=random_ratio,
+                    random_pusher=True,
+                    max_episode_steps=150, )
+    else:
+        raise NotImplementedError
+
+
 def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
          export_gif, gamma, random_ratio, action_noise, reward_type, n_object,
          priority, learning_rate, num_workers, policy, curriculum, sequential):
@@ -126,13 +152,15 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     # else:
     #     raise NotImplementedError("%s not implemented" % env_name)
     n_workers = num_workers if not play else 1
-    env_kwargs = dict(random_box=True,
-                      random_ratio=random_ratio,
-                      random_gripper=True,
-                      # max_episode_steps=(50 * 2 if n_object > 3 else 100),
-                      max_episode_steps=None if sequential else 100,  # TODO: see if it makes sense
-                      reward_type=reward_type,
-                      n_object=n_object, )
+    # env_kwargs = dict(random_box=True,
+    #                   random_ratio=random_ratio,
+    #                   random_gripper=True,
+    #                   # max_episode_steps=(50 * 2 if n_object > 3 else 100),
+    #                   max_episode_steps=None if sequential else 100,  # TODO: see if it makes sense
+    #                   reward_type=reward_type,
+    #                   n_object=n_object, )
+    env_kwargs = get_env_kwargs(env_name, random_ratio=random_ratio, sequential=sequential,
+                                reward_type=reward_type, n_object=n_object)
     # env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)

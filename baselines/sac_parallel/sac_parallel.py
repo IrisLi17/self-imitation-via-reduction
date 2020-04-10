@@ -413,6 +413,7 @@ class SAC_parallel(OffPolicyRLModel):
                 as writer:
 
             self._setup_learn(seed)
+            self.env_id = self.env.env.get_attr('spec')[0].id
 
             # Transform to callable if needed
             self.learning_rate = get_schedule_fn(self.learning_rate)
@@ -436,7 +437,7 @@ class SAC_parallel(OffPolicyRLModel):
             infos_values = []
             pp_sr_buf = deque(maxlen=5)
             start_decay = total_timesteps
-            if self.sequential:
+            if self.sequential and 'FetchStack' in self.env_id:
                 current_max_nobject = 2
                 # self.env.env.set_attr('task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 self.env.env.env_method('set_task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
@@ -459,6 +460,8 @@ class SAC_parallel(OffPolicyRLModel):
                                 start_decay = step
                             # _ratio = np.clip(0.7 - (step - start_decay) / 5e5, 0.3, 0.7)  # from 0.7 to 0.3
                             _ratio = np.clip(0.7 - (step - start_decay) / 2e6, 0.3, 0.7)  # from 0.7 to 0.3
+                        elif 'FetchPushWallObstacle' in self.env_id:
+                            _ratio = max(1.0 - step / total_timesteps, 0.0)
                         else:
                             raise NotImplementedError
                         self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
@@ -515,7 +518,6 @@ class SAC_parallel(OffPolicyRLModel):
                 store_time0 = time.time()
                 self.replay_buffer.add(obs, action, reward, next_obs, done)
                 store_time += time.time() - store_time0
-                # TODO: when to update priorities?
                 obs = new_obs
                 for idx, _done in enumerate(done):
                     episode_rewards[idx][-1] += reward[idx]

@@ -8,7 +8,7 @@ import gym
 import matplotlib.pyplot as plt
 from stable_baselines.common import set_global_seeds
 from stable_baselines import logger
-from run_her import make_env
+from run_her import make_env, get_env_kwargs
 import os, time
 import imageio
 import argparse
@@ -74,22 +74,24 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
 
     model_class = SAC_augment  # works also with SAC, DDPG and TD3
 
-    env_kwargs = dict(random_box=True,
-                      random_ratio=random_ratio,
-                      random_gripper=True,
-                      # max_episode_steps=50 * n_object if n_object > 3 else 100,
-                      max_episode_steps=None if sequential else 100,
-                      reward_type=reward_type,
-                      n_object=n_object, )
+    # env_kwargs = dict(random_box=True,
+    #                   random_ratio=random_ratio,
+    #                   random_gripper=True,
+    #                   # max_episode_steps=50 * n_object if n_object > 3 else 100,
+    #                   max_episode_steps=None if sequential else 100,
+    #                   reward_type=reward_type,
+    #                   n_object=n_object, )
+    env_kwargs = get_env_kwargs(env_name, random_ratio=random_ratio, sequential=sequential,
+                                reward_type=reward_type, n_object=n_object)
 
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
 
-    if n_workers > 1:
-        # env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
-        env = ParallelSubprocVecEnv2([make_thunk(i) for i in range(n_workers)])
-    else:
-        env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
+    env = ParallelSubprocVecEnv2([make_thunk(i) for i in range(n_workers)])
+    # if n_workers > 1:
+    #     # env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
+    # else:
+    #     env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
 
     def make_thunk_aug(rank):
         return lambda: FlattenDictWrapper(make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs),
@@ -143,7 +145,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                 sequential=sequential,
                                 )
             if n_workers == 1:
-                del train_kwargs['priority_buffer']
+                pass
+                # del train_kwargs['priority_buffer']
             if 'FetchStack' in env_name:
                 train_kwargs['ent_coef'] = "auto"
                 train_kwargs['tau'] = 0.001
@@ -186,7 +189,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             print('train_kwargs', train_kwargs)
             print('policy_kwargs', policy_kwargs)
         # Wrap the model
-        model = HER_HACK(policy, env, model_class, n_sampled_goal=2,
+        model = HER_HACK(policy, env, model_class, n_sampled_goal=4,
                          start_augment_time=start_augment,
                          goal_selection_strategy=goal_selection_strategy,
                          num_workers=n_workers,

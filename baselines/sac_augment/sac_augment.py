@@ -422,6 +422,7 @@ class SAC_augment(OffPolicyRLModel):
                 as writer:
 
             self._setup_learn(seed)
+            self.env_id = self.env.env.get_attr('spec')[0].id
             self.goal_dim = self.aug_env.get_attr('goal')[0].shape[0]
             self.obs_dim = self.aug_env.observation_space.shape[0] - 2 * self.goal_dim
             self.noise_mag = self.aug_env.get_attr('size_obstacle')[0][1]
@@ -446,7 +447,8 @@ class SAC_augment(OffPolicyRLModel):
             pp_sr_buf = deque(maxlen=5)
             n_updates = 0
             start_decay = total_timesteps
-            if self.sequential:
+            # TODO: should set task_array before reset
+            if self.sequential and 'FetchStack' in self.env_id:
                 current_max_nobject = 2
                 # self.env.env.set_attr('task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 self.env.env.env_method('set_task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
@@ -455,10 +457,11 @@ class SAC_augment(OffPolicyRLModel):
             # TODO: multi-env
             self.ep_state_buf = [[] for _ in range(self.n_envs)]
             self.ep_transition_buf = [[] for _ in range(self.n_envs)]
-            self.ep_current_nobject = [[] for _ in range(self.n_envs)]
-            self.ep_selected_objects = [[] for _ in range(self.n_envs)]
-            self.ep_task_mode = [[] for _ in range(self.n_envs)]
-            self.ep_tower_height = [[] for _ in range(self.n_envs)]
+            if 'FetchStack' in self.env_id:
+                self.ep_current_nobject = [[] for _ in range(self.n_envs)]
+                self.ep_selected_objects = [[] for _ in range(self.n_envs)]
+                self.ep_task_mode = [[] for _ in range(self.n_envs)]
+                self.ep_tower_height = [[] for _ in range(self.n_envs)]
             # state_buf = []
             # obs_buf = []
             # transition_buf = []
@@ -467,35 +470,27 @@ class SAC_augment(OffPolicyRLModel):
             self.subgoals = []  # Every element should be [*subgoals, ultimate goal]
             self.restart_states = []  # list of (n_candidate) states
             self.transition_storage = []  # every element is list of tuples. length of every element should match restart steps
-            self.current_nobject = []
-            self.selected_objects = []
-            self.task_mode = []
+            if 'FetchStack' in self.env_id:
+                self.current_nobject = []
+                self.selected_objects = []
+                self.task_mode = []
 
             num_augment_ep_buf = deque(maxlen=100)
             num_success_augment_ep_buf = deque(maxlen=100)
 
-            if os.path.exists(os.path.join(logger.get_dir(), 'success_traj.csv')):
-                os.remove(os.path.join(logger.get_dir(), 'success_traj.csv'))
-                print('Remove existing success_traj.csv')
-
-            def log_traj(augment_episode_buffer):
-                if not os.path.exists(os.path.join(logger.get_dir(), 'success_traj.csv')):
-                    with open(os.path.join(logger.get_dir(), 'success_traj.csv'), 'a', newline='') as csvfile:
-                        csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
-                        title = ['gripper_x', 'gripper_y', 'gripper_z', 'box_x', 'box_y', 'box_z',
-                                 'obstacle_x', 'obstacle_y', 'obstacle_z',
-                                 'goal_0', 'goal_1', 'goal_2', 'goal_3', 'goal_4', 'done']
-                        csvwriter.writerow(title)
-                with open(os.path.join(logger.get_dir(), 'success_traj.csv'), 'a', newline='') as csvfile:
-                    csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
-                    for item in augment_episode_buffer:
-                        log_obs = item[0]
-                        data = [log_obs[i] for i in range(9)] + [log_obs[i] for i in range(45, 50)] + [item[4]]
-                        csvwriter.writerow(data)
-
             def convert_dict_to_obs(dict_obs):
                 assert isinstance(dict_obs, dict)
                 return np.concatenate([dict_obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+
+            def augment_cond():
+                if 'FetchStack' in self.env_id:
+                    if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] >= 2:
+                        return True
+                    return False
+                else:
+                    if (not infos[idx]['is_success']) and np.argmax(goal[3:]) == 0:
+                        return True
+                    return False
 
 
             for step in range(total_timesteps):
@@ -514,6 +509,8 @@ class SAC_augment(OffPolicyRLModel):
                         if start_decay == total_timesteps and np.mean(pp_sr_buf) > 0.8:
                             start_decay = step
                         _ratio = np.clip(0.7 - (step - start_decay) / 2e6, 0.3, 0.7)  # from 0.7 to 0.3
+                    elif 'FetchPushWallObstacle' in self.env_id:
+                        _ratio = max(1.0 - step / total_timesteps, 0.0)
                     else:
                         raise NotImplementedError
                     self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
@@ -552,16 +549,18 @@ class SAC_augment(OffPolicyRLModel):
                 assert action.shape == (self.env.env.num_envs, ) + self.env.action_space.shape
 
                 internal_states = self.env.env.env_method('get_state')
-                current_nobjects = self.env.env.get_attr('current_nobject')
-                selected_objects = self.env.env.get_attr('selected_objects')
-                task_modes = self.env.env.get_attr('task_mode')
-                tower_height = self.env.env.get_attr('tower_height')
+                if 'FetchStack' in self.env_id:
+                    current_nobjects = self.env.env.get_attr('current_nobject')
+                    selected_objects = self.env.env.get_attr('selected_objects')
+                    task_modes = self.env.env.get_attr('task_mode')
+                    tower_height = self.env.env.get_attr('tower_height')
                 for i in range(self.n_envs):
                     self.ep_state_buf[i].append(internal_states[i])
-                    self.ep_current_nobject[i].append(current_nobjects[i])
-                    self.ep_selected_objects[i].append(selected_objects[i])
-                    self.ep_task_mode[i].append(task_modes[i])
-                    self.ep_tower_height[i].append(tower_height[i])
+                    if 'FetchStack' in self.env_id:
+                        self.ep_current_nobject[i].append(current_nobjects[i])
+                        self.ep_selected_objects[i].append(selected_objects[i])
+                        self.ep_task_mode[i].append(task_modes[i])
+                        self.ep_tower_height[i].append(tower_height[i])
                     
                 new_obs, rewards, dones, infos = self.env.step(rescaled_action)
                 next_obs = new_obs.copy()
@@ -598,17 +597,18 @@ class SAC_augment(OffPolicyRLModel):
                                                                       ep_done, writer, self.num_timesteps)
 
 
-                # Yunfei: episode augmentation
+                # episode augmentation
                 for idx, done in enumerate(dones):
                     if self.num_timesteps >= self.start_augment_time and done:
                         goal = self.ep_transition_buf[idx][0][0][-self.goal_dim:]
-                        if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] >= 2:
+                        # if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] >= 2:
+                        if augment_cond():
                             # Do augmentation
                             # Sample start step and perturbation
                             select_subgoal_time0 = time.time()
                             _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx],
                                                                             k=self.n_subgoal,
-                                                                            tower_height=self.ep_tower_height[idx])
+                                                                            tower_height=self.ep_tower_height[idx] if 'FetchStack' in self.env_id else None)
                             assert isinstance(_restart_steps, np.ndarray)
                             assert isinstance(_subgoals, np.ndarray)
                             for j in range(_restart_steps.shape[0]):
@@ -617,17 +617,18 @@ class SAC_augment(OffPolicyRLModel):
                                 assert len(self.subgoals[-1]) == 2
                                 self.restart_states.append(self.ep_state_buf[idx][_restart_steps[j]])
                                 self.transition_storage.append(self.ep_transition_buf[idx][:_restart_steps[j]])
-                                if True:
+                                if 'FetchStack' in self.env_id:
                                     self.current_nobject.append(self.ep_current_nobject[idx][0])
                                     self.selected_objects.append(self.ep_selected_objects[idx][0])
                                     self.task_mode.append(self.ep_task_mode[idx][0])
                     if done:
                         self.ep_state_buf[idx] = []
                         self.ep_transition_buf[idx] = []
-                        self.ep_current_nobject[idx] = []
-                        self.ep_selected_objects[idx] = []
-                        self.ep_task_mode[idx] = []
-                        self.ep_tower_height[idx] = []
+                        if 'FetchStack' in self.env_id:
+                            self.ep_current_nobject[idx] = []
+                            self.ep_selected_objects[idx] = []
+                            self.ep_task_mode[idx] = []
+                            self.ep_tower_height[idx] = []
 
                 def switch_subgoal(switch_goal_flag, current_obs):
                     for idx, flag in enumerate(switch_goal_flag):
@@ -635,9 +636,10 @@ class SAC_augment(OffPolicyRLModel):
                             env_subgoals[idx].pop(0)
                             # self.aug_env.set_attr('goal', env_subgoals[idx][0], indices=idx)
                             self.aug_env.env_method('set_goal', [env_subgoals[idx][0]], indices=idx)
-                            # Use stack as ultimate task.
-                            assert self.task_mode[idx] == 1
-                            self.aug_env.env_method('set_task_mode', [self.task_mode[idx]], indices=idx)
+                            if 'FetchStack' in self.env_id:
+                                # Use stack as ultimate task.
+                                assert self.task_mode[idx] == 1
+                                self.aug_env.env_method('set_task_mode', [self.task_mode[idx]], indices=idx)
                             switch_goal_flag[idx] = False
                             current_obs[idx] = convert_dict_to_obs(self.aug_env.env_method('get_obs', indices=idx)[0])
 
@@ -655,7 +657,7 @@ class SAC_augment(OffPolicyRLModel):
                     env_end_step = [np.inf for _ in range(self.aug_env.num_envs)]
                     env_restart_state = self.restart_states[:self.aug_env.num_envs]
                     self.aug_env.env_method('set_state', env_restart_state)
-                    if True:
+                    if 'FetchStack' in self.env_id:
                         self.aug_env.env_method('set_current_nobject', self.current_nobject[:self.aug_env.num_envs])
                         self.aug_env.env_method('set_selected_objects', self.selected_objects[:self.aug_env.num_envs])
                         # Use pick and place as sub-task
@@ -667,8 +669,11 @@ class SAC_augment(OffPolicyRLModel):
                         # Switch subgoal according to switch_goal_flag, and update observation
                         switch_subgoal(switch_goal_flag, env_obs)
                         env_action, _ = self.predict(np.array(env_obs))
-                        relabel_env_obs = self.aug_env.env_method('switch_obs_goal', env_obs, ultimate_goals,
-                                                                  self.task_mode)
+                        if 'FetchStack' in self.env_id:
+                            relabel_env_obs = self.aug_env.env_method('switch_obs_goal', env_obs, ultimate_goals,
+                                                                      self.task_mode)
+                        else:
+                            relabel_env_obs = self.aug_env.env_method('switch_obs_goal', env_obs, ultimate_goals)
                         clipped_actions = env_action
                         # Clip the actions to avoid out of bound error
                         if isinstance(self.aug_env.action_space, gym.spaces.Box):
@@ -680,12 +685,18 @@ class SAC_augment(OffPolicyRLModel):
                             temp_info = [None for _ in range(self.aug_env.num_envs)]
                         else:
                             temp_info = [{'previous_obs': env_obs[i]} for i in range(self.aug_env.num_envs)]
-                        _retask_env_next_obs = env_next_obs.copy()
-                        _retask_env_next_obs[:, self.obs_dim - 2:self.obs_dim] = 0
-                        _retask_env_next_obs[:, self.obs_dim - 1] = 1  # Stack
-                        relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs, ultimate_goals, self.task_mode)
-                        env_reward = self.aug_env.env_method('compute_reward', _retask_env_next_obs, ultimate_goals,
-                                                             temp_info)
+                        if 'FetchStack' in self.env_id:
+                            _retask_env_next_obs = env_next_obs.copy()
+                            _retask_env_next_obs[:, self.obs_dim - 2:self.obs_dim] = 0
+                            _retask_env_next_obs[:, self.obs_dim - 1] = 1  # Stack
+                            relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs, ultimate_goals, self.task_mode)
+                            env_reward = self.aug_env.env_method('compute_reward', _retask_env_next_obs, ultimate_goals,
+                                                                 temp_info)
+                        else:
+                            relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs,
+                                                                           ultimate_goals)
+                            env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals,
+                                                                 temp_info)
                         if self.reward_type == 'dense':
                             env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
                                                                              _retask_env_next_obs, ultimate_goals,
@@ -702,15 +713,16 @@ class SAC_augment(OffPolicyRLModel):
 
                         for idx, info in enumerate(env_info):
                             # Special case, the agent succeeds the final goal half way
-                            if self.reward_type == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] == False:
+                            if self.reward_type == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] is False:
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
                             elif self.reward_type == 'dense' and env_reward_and_success[idx][1] and env_end_flag[
-                                idx] == False:
+                                idx] is False:
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
                             # Exceed time limit
-                            if env_end_flag[idx] is False and env_restart_steps[idx] + increment_step > self.get_horizon(self.current_nobject[idx]):
+                            if env_end_flag[idx] is False and env_restart_steps[idx] + increment_step \
+                                    > self.get_horizon(self.current_nobject[idx] if 'FetchStack' in self.env_id else None):
                                 env_end_flag[idx] = True
                                 # But env_end_step is still np.inf
                             if info['is_success']:
@@ -724,12 +736,14 @@ class SAC_augment(OffPolicyRLModel):
                                     env_end_step[idx] = env_restart_steps[idx] + increment_step
                                 else:
                                     pass
-                        if increment_step >= self.get_horizon(max(self.current_nobject[:self.aug_env.num_envs])) - min(env_restart_steps):
+                        if increment_step >= self.get_horizon(max(self.current_nobject[:self.aug_env.num_envs])
+                                                              if 'FetchStack' in self.env_id else None) \
+                                - min(env_restart_steps):
                             break
 
                     # print('end step', env_end_step)
                     for idx, end_step in enumerate(env_end_step):
-                        if end_step <= self.get_horizon(self.current_nobject[idx]):
+                        if end_step <= self.get_horizon(self.current_nobject[idx] if 'FetchStack' in self.env_id else None):
                             # print(temp_subgoals[idx])
                             is_self_aug = temp_subgoals[idx][3]
                             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
@@ -747,9 +761,10 @@ class SAC_augment(OffPolicyRLModel):
                     self.subgoals = self.subgoals[self.aug_env.num_envs:]
                     self.restart_states = self.restart_states[self.aug_env.num_envs:]
                     self.transition_storage = self.transition_storage[self.aug_env.num_envs:]
-                    self.current_nobject = self.current_nobject[self.aug_env.num_envs:]
-                    self.selected_objects = self.selected_objects[self.aug_env.num_envs:]
-                    self.task_mode = self.task_mode[self.aug_env.num_envs:]
+                    if 'FetchStack' in self.env_id:
+                        self.current_nobject = self.current_nobject[self.aug_env.num_envs:]
+                        self.selected_objects = self.selected_objects[self.aug_env.num_envs:]
+                        self.task_mode = self.task_mode[self.aug_env.num_envs:]
 
 
                 if step % self.train_freq == 0:
@@ -826,15 +841,16 @@ class SAC_augment(OffPolicyRLModel):
             return self
 
     def get_horizon(self, current_nobject):
-        temp = max(current_nobject * 50, 100)
-        return temp
+        if 'FetchStack' in self.env_id and self.sequential:
+            return max(current_nobject * 50, 100)
+        return self.env.env.get_attr('spec')[0].max_episode_steps
 
-    def select_subgoal(self, transition_buf, k, tower_height):
-        debug = False
-        # self.ep_transition_buf, self.model.value
+    def select_subgoal(self, transition_buf, k, tower_height=None):
+        if 'FetchStack' in self.env_id:
+            assert tower_height is not None
         obs_buf, *_ = zip(*transition_buf)
         obs_buf = np.asarray(obs_buf)
-        if tower_height[-1] + 0.05 - obs_buf[-1][self.obs_dim + self.goal_dim + 2] > 0.01:
+        if 'FetchStack' in self.env_id and tower_height[-1] + 0.05 - obs_buf[-1][self.obs_dim + self.goal_dim + 2] > 0.01:
             # Tower height is equal to (or higher than) goal height.
             # print('towerheight exceed goalheight')
             return np.array([]), np.array([])
@@ -842,49 +858,74 @@ class SAC_augment(OffPolicyRLModel):
         sample_obs = obs_buf[sample_t]
         ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
         noise = np.random.uniform(low=-self.noise_mag, high=self.noise_mag, size=(len(sample_t), 2))
-        # TODO: if there are more than one obstacle
         sample_obs_buf = []
         subgoal_obs_buf = []
-        sample_height = np.array(tower_height)[sample_t]
-        for object_idx in range(0, self.n_object):
-            if abs(sample_height[0] + 0.05 - sample_obs[0][self.obs_dim + self.goal_dim + 2]) > 0.01 \
-                    and object_idx == np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:]):
-                # If the goal is not 1 floor above towerheight, we don't perturb self position
-                continue
-            if np.linalg.norm(sample_obs[0][3 + object_idx * 3: 3 + (object_idx + 1) * 3]) < 1e-3:
-                # This object is masked
-                continue
-            if np.linalg.norm(sample_obs[0][3 + object_idx * 3: 3 + object_idx * 3 + 2] -
-                                      sample_obs[0][
-                                      self.obs_dim + self.goal_dim: self.obs_dim + self.goal_dim + 2]) < 1e-3:
-                # This object is part of tower
-                continue
-            obstacle_xy = sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 2] + noise
-            # Find how many objects have been stacked
-            obstacle_height = np.expand_dims(sample_height + 0.05, axis=1)
-            # obstacle_height = max(sample_obs[0][self.obs_dim + self.goal_dim + 2] - 0.05, 0.425) * np.ones((len(sample_t), 1))
-            obstacle_xy = np.concatenate([obstacle_xy, obstacle_height], axis=-1)
-            sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 3] = obstacle_xy
-            sample_obs[:, 3 * (object_idx + 1 + self.n_object):3 * (object_idx + 1 + self.n_object) + 3] \
-                = sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 3] - sample_obs[:, 0:3]
-            sample_obs[:, self.obs_dim:self.obs_dim + 3] = sample_obs[:,
-                                                           3 * (ultimate_idx + 1):3 * (ultimate_idx + 1) + 3]
-            sample_obs_buf.append(sample_obs.copy())
+        if 'FetchStack' in self.env_id:
+            sample_height = np.array(tower_height)[sample_t]
+            for object_idx in range(0, self.n_object):
+                if abs(sample_height[0] + 0.05 - sample_obs[0][self.obs_dim + self.goal_dim + 2]) > 0.01 \
+                        and object_idx == np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:]):
+                    # If the goal is not 1 floor above towerheight, we don't perturb self position
+                    continue
+                if np.linalg.norm(sample_obs[0][3 + object_idx * 3: 3 + (object_idx + 1) * 3]) < 1e-3:
+                    # This object is masked
+                    continue
+                if np.linalg.norm(sample_obs[0][3 + object_idx * 3: 3 + object_idx * 3 + 2] -
+                                          sample_obs[0][
+                                          self.obs_dim + self.goal_dim: self.obs_dim + self.goal_dim + 2]) < 1e-3:
+                    # This object is part of tower
+                    continue
+                obstacle_xy = sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 2] + noise
+                # Find how many objects have been stacked
+                obstacle_height = np.expand_dims(sample_height + 0.05, axis=1)
+                # obstacle_height = max(sample_obs[0][self.obs_dim + self.goal_dim + 2] - 0.05, 0.425) * np.ones((len(sample_t), 1))
+                obstacle_xy = np.concatenate([obstacle_xy, obstacle_height], axis=-1)
+                sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 3] = obstacle_xy
+                sample_obs[:, 3 * (object_idx + 1 + self.n_object):3 * (object_idx + 1 + self.n_object) + 3] \
+                    = sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 3] - sample_obs[:, 0:3]
+                sample_obs[:, self.obs_dim:self.obs_dim + 3] = sample_obs[:,
+                                                               3 * (ultimate_idx + 1):3 * (ultimate_idx + 1) + 3]
+                sample_obs_buf.append(sample_obs.copy())
 
-            subgoal_obs = obs_buf[sample_t]
-            # if debug:
-            #     subgoal_obs = np.tile(subgoal_obs, (2, 1))
-            subgoal_obs[:, self.obs_dim - 2: self.obs_dim] = np.array([1, 0])  # Pick and place
-            subgoal_obs[:, self.obs_dim:self.obs_dim + 3] = subgoal_obs[:,
-                                                            3 * (object_idx + 1):3 * (object_idx + 1) + 3]
-            one_hot = np.zeros(self.n_object)
-            one_hot[object_idx] = 1
-            subgoal_obs[:, self.obs_dim + 3:self.obs_dim + self.goal_dim] = one_hot
-            subgoal_obs[:, self.obs_dim + self.goal_dim:self.obs_dim + self.goal_dim + 3] = obstacle_xy
-            # subgoal_obs[:, self.obs_dim + self.goal_dim + 2:self.obs_dim + self.goal_dim + 3] = subgoal_obs[:, 3 * (
-            # object_idx + 1) + 2:3 * (object_idx + 1) + 3]
-            subgoal_obs[:, self.obs_dim + self.goal_dim + 3:self.obs_dim + self.goal_dim * 2] = one_hot
-            subgoal_obs_buf.append(subgoal_obs)
+                subgoal_obs = obs_buf[sample_t]
+                # if debug:
+                #     subgoal_obs = np.tile(subgoal_obs, (2, 1))
+                subgoal_obs[:, self.obs_dim - 2: self.obs_dim] = np.array([1, 0])  # Pick and place
+                subgoal_obs[:, self.obs_dim:self.obs_dim + 3] = subgoal_obs[:,
+                                                                3 * (object_idx + 1):3 * (object_idx + 1) + 3]
+                one_hot = np.zeros(self.n_object)
+                one_hot[object_idx] = 1
+                subgoal_obs[:, self.obs_dim + 3:self.obs_dim + self.goal_dim] = one_hot
+                subgoal_obs[:, self.obs_dim + self.goal_dim:self.obs_dim + self.goal_dim + 3] = obstacle_xy
+                # subgoal_obs[:, self.obs_dim + self.goal_dim + 2:self.obs_dim + self.goal_dim + 3] = subgoal_obs[:, 3 * (
+                # object_idx + 1) + 2:3 * (object_idx + 1) + 3]
+                subgoal_obs[:, self.obs_dim + self.goal_dim + 3:self.obs_dim + self.goal_dim * 2] = one_hot
+                subgoal_obs_buf.append(subgoal_obs)
+        else:
+            for object_idx in range(1, self.n_object):
+                obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
+                # Path2
+                sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
+                sample_obs[:, 3*(object_idx+1+self.n_object):3*(object_idx+1+self.n_object)+2] \
+                    = sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] - sample_obs[:, 0:2]
+                # achieved_goal
+                sample_obs[:, self.obs_dim:self.obs_dim + 3] \
+                    = sample_obs[:, 3 * (ultimate_idx + 1):3 * (ultimate_idx + 1) + 3]
+                sample_obs_buf.append(sample_obs.copy())
+
+                # Path1
+                subgoal_obs = obs_buf[sample_t]
+                # achieved_goal
+                subgoal_obs[:, self.obs_dim:self.obs_dim+3] = subgoal_obs[:, 3*(object_idx+1):3*(object_idx+1)+3]
+                one_hot = np.zeros(self.n_object)
+                one_hot[object_idx] = 1
+                subgoal_obs[:, self.obs_dim+3:self.obs_dim+self.goal_dim] = one_hot
+                # desired_goal
+                subgoal_obs[:, self.obs_dim+self.goal_dim:self.obs_dim+self.goal_dim+2] = obstacle_xy
+                subgoal_obs[:, self.obs_dim+self.goal_dim+2:self.obs_dim+self.goal_dim+3] \
+                    = subgoal_obs[:, 3*(object_idx+1)+2:3*(object_idx+1)+3]
+                subgoal_obs[:, self.obs_dim+self.goal_dim+3:self.obs_dim+self.goal_dim*2] = one_hot
+                subgoal_obs_buf.append(subgoal_obs)
         # print(len(sample_obs_buf))
         if len(sample_obs_buf) == 0:
             return np.array([]), np.array([])
@@ -910,8 +951,8 @@ class SAC_augment(OffPolicyRLModel):
         #     print(value2[good_ind])
         # restart_step = sample_t[best_idx]
         # subgoal = subgoal_obs[best_idx, 45:50]
-        mean_values = (value1[good_ind] + value2[good_ind]) / 2
-        assert mean_values.shape[0] == k
+        # mean_values = (value1[good_ind] + value2[good_ind]) / 2
+        # assert mean_values.shape[0] == k
         # for i in range(k):
         #     self.mean_value_buf.append(mean_values[i])
         # filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
