@@ -189,6 +189,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 policy_kwargs["feature_extraction"] = "attention_mlp"
             elif 'MasspointPushDoubleObstacle' in env_name:
                 policy_kwargs["feature_extraction"] = "attention_mlp_particle"
+                policy_kwargs["layers"] = [256, 256]
             policy_kwargs["layer_norm"] = True
         elif policy == "CustomSACPolicy":
             policy_kwargs["layer_norm"] = True
