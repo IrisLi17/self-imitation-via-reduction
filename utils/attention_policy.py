@@ -61,13 +61,13 @@ def attention_mlp_extractor_particle(flat_observations, n_object=2, n_units=128,
         agent_idx = np.concatenate([np.arange(3), np.arange(3 + 15 * n_object, 6 + 15 * n_object),
                                     np.arange(6 + 15 * n_object, 9 + 15 * n_object),  # achieved goal pos
                                     np.arange(9 + 16 * n_object, 12 + 16 * n_object),  # desired goal pos
-                                    ])  # size 11
+                                    ])  # size 12
     else:
         agent_idx = np.concatenate([np.arange(3), np.arange(3 + 15 * n_object, 6 + 15 * n_object),
                                     np.arange(6 + 15 * n_object, 9 + 15 * n_object),  # achieved goal pos
                                     np.arange(9 + 16 * n_object, 12 + 16 * n_object),  # desired goal pos
                                     np.arange(12 + 17 * n_object, 14 + 17 * n_object),  # 2d action
-                                    ])  # size 13
+                                    ])  # size 14
     self_in = tf.gather(flat_observations, agent_idx, axis=1)
     self_out = self_in
     self_out = tf.contrib.layers.fully_connected(

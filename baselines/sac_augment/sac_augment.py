@@ -441,7 +441,6 @@ class SAC_augment(OffPolicyRLModel):
             episode_successes = [[] for _ in range(self.env.env.num_envs)]
             if self.action_noise is not None:
                 self.action_noise.reset()
-            obs = self.env.reset()
             self.episode_reward = np.zeros((1,))
             ep_info_buf = deque(maxlen=100)
             pp_sr_buf = deque(maxlen=5)
@@ -453,6 +452,10 @@ class SAC_augment(OffPolicyRLModel):
                 # self.env.env.set_attr('task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 self.env.env.env_method('set_task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 print('Set task_array to ', self.env.env.get_attr('task_array')[0])
+                self.env.env.env_method('set_random_ratio', [0.7] * self.env.env.num_envs)
+            if 'FetchStack' in self.env_id and self.curriculum:
+                self.start_augment_time = np.inf
+            obs = self.env.reset()
             infos_values = []
             # TODO: multi-env
             self.ep_state_buf = [[] for _ in range(self.n_envs)]
@@ -503,29 +506,53 @@ class SAC_augment(OffPolicyRLModel):
                 if self.curriculum and step % 3000 == 0:
                     if 'FetchStack' in self.env.env.get_attr('spec')[0].id:
                         # Stacking
-                        pp_sr = pp_eval_model(self.eval_env, self)
+                        pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.n_object, 1.0)
                         pp_sr_buf.append(pp_sr)
                         print('Pick-and-place success rate', np.mean(pp_sr_buf))
-                        if start_decay == total_timesteps and np.mean(pp_sr_buf) > 0.8:
-                            start_decay = step
-                        _ratio = np.clip(0.7 - (step - start_decay) / 2e6, 0.3, 0.7)  # from 0.7 to 0.3
+                        if self.sequential:
+                            if self.env.env.get_attr('random_ratio')[0] > 0.5 and np.mean(pp_sr_buf) > 0.8:
+                                _ratio = 0.3
+                                # Force start augment after mastering pick-and-place on 2 objs
+                                if current_max_nobject == 2:
+                                    self.start_augment_time = self.num_timesteps
+                            elif self.env.env.get_attr('random_ratio')[0] < 0.5 and current_max_nobject < self.n_object \
+                                    and eval_model(self.eval_env, self, current_max_nobject, 0.0) > 1 / current_max_nobject:
+                                _ratio = 0.7
+                                current_max_nobject += 1
+                                previous_task_array = self.env.env.get_attr('task_array')[0]
+                                self.env.env.env_method('set_task_array', [
+                                    previous_task_array + [(current_max_nobject, j) for j in
+                                                           range(current_max_nobject)]] * self.env.env.num_envs)
+
+                                print('Set task_array to', self.env.env.get_attr('task_array')[0])
+                            else:
+                                _ratio = self.env.env.get_attr('random_ratio')[0]
+                        else:
+                            if start_decay == total_timesteps and np.mean(pp_sr_buf) > 0.8:
+                                start_decay = step
+                                # Force start augment after mastering pick-and-place on env.n_object objs
+                                self.start_augment_time = self.num_timesteps
+                            _ratio = np.clip(0.7 - (step - start_decay) / 2e6, 0.3, 0.7)  # from 0.7 to 0.3
                     elif 'FetchPushWallObstacle' in self.env_id:
                         _ratio = max(1.0 - step / total_timesteps, 0.0)
                     else:
                         raise NotImplementedError
                     self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
                     print('Set random_ratio to', self.env.env.get_attr('random_ratio')[0])
-                if self.sequential and step % 3000 == 0 and 'FetchStack' in self.env.env.get_attr('spec')[0].id:
-                    if current_max_nobject < self.env.env.get_attr('n_object')[0] and eval_model(self.eval_env, self, current_max_nobject) > 0.2:
-                        current_max_nobject += 1
-                        previous_task_array = self.env.env.get_attr('task_array')[0]
-                        # self.env.env.set_attr('task_array', [previous_task_array + [(current_max_nobject, j) for j in
-                        #                                                             range(current_max_nobject)]] * self.env.env.num_envs)
-                        self.env.env.env_method('set_task_array', [
-                            previous_task_array + [(current_max_nobject, j) for j in
-                                                   range(current_max_nobject)]] * self.env.env.num_envs)
-
-                        print('Set task_array to', self.env.env.get_attr('task_array')[0])
+                # if self.sequential and step % 3000 == 0 and 'FetchStack' in self.env.env.get_attr('spec')[0].id:
+                #     if current_max_nobject < self.env.env.get_attr('n_object')[0] \
+                #             and eval_model(self.eval_env, self, current_max_nobject, 0.0) > 1 / current_max_nobject:
+                #         current_max_nobject += 1
+                #         previous_task_array = self.env.env.get_attr('task_array')[0]
+                #         # self.env.env.set_attr('task_array', [previous_task_array + [(current_max_nobject, j) for j in
+                #         #                                                             range(current_max_nobject)]] * self.env.env.num_envs)
+                #         self.env.env.env_method('set_task_array', [
+                #             previous_task_array + [(current_max_nobject, j) for j in
+                #                                    range(current_max_nobject)]] * self.env.env.num_envs)
+                #
+                #         print('Set task_array to', self.env.env.get_attr('task_array')[0])
+                #         self.env.env.env_method('set_random_ratio', [0.7] * self.env.env.num_envs)
+                #         print('Set random ratio to', self.env.env.get_attr('random_ratio')[0])
 
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
@@ -902,7 +929,7 @@ class SAC_augment(OffPolicyRLModel):
                 subgoal_obs[:, self.obs_dim + self.goal_dim + 3:self.obs_dim + self.goal_dim * 2] = one_hot
                 subgoal_obs_buf.append(subgoal_obs)
         else:
-            for object_idx in range(1, self.n_object):
+            for object_idx in range(self.n_object):  # Also search self position
                 obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
                 # Path2
                 sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy

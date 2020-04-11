@@ -1,6 +1,7 @@
 import numpy as np
 
 
+# Deprecated
 def pp_eval_model(eval_env, model):
     env = eval_env
     env.unwrapped.random_ratio = 1.0
@@ -29,10 +30,11 @@ def pp_eval_model(eval_env, model):
     return np.mean(ep_successes)
 
 
-def eval_model(env, model, max_nobject):
+def eval_model(env, model, max_nobject, random_ratio):
+    # random_ratio 0: stack only, 1: pick and place only
     temp = env.unwrapped.task_array.copy()
     env.unwrapped.task_array = [(max_nobject, i) for i in range(max_nobject)]
-    env.unwrapped.random_ratio = 0.5
+    env.unwrapped.random_ratio = random_ratio
     n_episode = 0
     ep_successes = []
     while n_episode < 50:

@@ -429,8 +429,6 @@ class SAC_parallel(OffPolicyRLModel):
             if self.action_noise is not None:
                 self.action_noise.reset()
             assert isinstance(self.env.env, VecEnv)
-            obs = self.env.reset()
-            print(obs.shape)
             self.episode_reward = np.zeros((1,))
             ep_info_buf = deque(maxlen=100)
             n_updates = 0
@@ -442,7 +440,9 @@ class SAC_parallel(OffPolicyRLModel):
                 # self.env.env.set_attr('task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 self.env.env.env_method('set_task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 print('Set task_array to ', self.env.env.get_attr('task_array')[0])
-
+                self.env.env.env_method('set_random_ratio', [0.7] * self.env.env.num_envs)
+            obs = self.env.reset()
+            print(obs.shape)
             for step in range(total_timesteps):
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards
@@ -450,29 +450,46 @@ class SAC_parallel(OffPolicyRLModel):
                     if callback(locals(), globals()) is False:
                         break
 
-                    if self.curriculum and step % 3000 == 0:
-                        if 'FetchStack' in self.env.env.get_attr('spec')[0].id:
-                            # Stacking
-                            pp_sr = pp_eval_model(self.eval_env, self)
-                            pp_sr_buf.append(pp_sr)
-                            print('Pick-and-place success rate', np.mean(pp_sr_buf))
+                if self.curriculum and step % 3000 == 0:
+                    if 'FetchStack' in self.env.env.get_attr('spec')[0].id:
+                        # Stacking
+                        pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 1.0)
+                        pp_sr_buf.append(pp_sr)
+                        print('Pick-and-place success rate', np.mean(pp_sr_buf))
+                        if self.sequential:
+                            if self.env.env.get_attr('random_ratio')[0] > 0.5 and np.mean(pp_sr_buf) > 0.8:
+                                _ratio = 0.3
+                            elif self.env.env.get_attr('random_ratio')[0] < 0.5 \
+                                    and current_max_nobject < self.env.env.get_attr('n_object')[0] \
+                                    and eval_model(self.eval_env, self, current_max_nobject,
+                                                   0.0) > 1 / current_max_nobject:
+                                _ratio = 0.7
+                                current_max_nobject += 1
+                                previous_task_array = self.env.env.get_attr('task_array')[0]
+                                self.env.env.env_method('set_task_array', [
+                                    previous_task_array + [(current_max_nobject, j) for j in
+                                                           range(current_max_nobject)]] * self.env.env.num_envs)
+
+                                print('Set task_array to', self.env.env.get_attr('task_array')[0])
+                            else:
+                                _ratio = self.env.env.get_attr('random_ratio')[0]
+                        else:
                             if start_decay == total_timesteps and np.mean(pp_sr_buf) > 0.8:
                                 start_decay = step
-                            # _ratio = np.clip(0.7 - (step - start_decay) / 5e5, 0.3, 0.7)  # from 0.7 to 0.3
                             _ratio = np.clip(0.7 - (step - start_decay) / 2e6, 0.3, 0.7)  # from 0.7 to 0.3
-                        elif 'FetchPushWallObstacle' in self.env_id:
-                            _ratio = max(1.0 - step / total_timesteps, 0.0)
-                        else:
-                            raise NotImplementedError
-                        self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
-                        print('Set random_ratio to', self.env.env.get_attr('random_ratio')[0])
-                    if self.sequential and step % 3000 == 0 and 'FetchStack' in self.env.env.get_attr('spec')[0].id:
-                        if current_max_nobject < self.env.env.get_attr('n_object')[0] and \
-                                eval_model(self.eval_env, self, current_max_nobject) > 0.2:
-                            current_max_nobject += 1
-                            previous_task_array = self.env.env.get_attr('task_array')[0]
-                            self.env.env.env_method('set_task_array', [previous_task_array + [(current_max_nobject, j) for j in range(current_max_nobject)]] * self.env.env.num_envs)
-                            print('Set task_array to', self.env.env.get_attr('task_array')[0])
+                    elif 'FetchPushWallObstacle' in self.env_id:
+                        _ratio = max(1.0 - step / total_timesteps, 0.0)
+                    else:
+                        raise NotImplementedError
+                    self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
+                    print('Set random_ratio to', self.env.env.get_attr('random_ratio')[0])
+                # if self.sequential and step % 3000 == 0 and 'FetchStack' in self.env.env.get_attr('spec')[0].id:
+                #     if current_max_nobject < self.env.env.get_attr('n_object')[0] and \
+                #             eval_model(self.eval_env, self, current_max_nobject) > 0.2:
+                #         current_max_nobject += 1
+                #         previous_task_array = self.env.env.get_attr('task_array')[0]
+                #         self.env.env.env_method('set_task_array', [previous_task_array + [(current_max_nobject, j) for j in range(current_max_nobject)]] * self.env.env.num_envs)
+                #         print('Set task_array to', self.env.env.get_attr('task_array')[0])
 
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
