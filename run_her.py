@@ -253,8 +253,11 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         from utils.sac_attention_policy import AttentionPolicy
         register_policy('AttentionPolicy', AttentionPolicy)
         if policy == 'AttentionPolicy':
-            policy_kwargs["n_object"] = n_object
-            policy_kwargs["feature_extraction"] = "attention_mlp"
+            if 'FetchStack' in env_name:
+                policy_kwargs["n_object"] = n_object
+                policy_kwargs["feature_extraction"] = "attention_mlp"
+            elif 'MasspointPushDoubleObstacle' in env_name:
+                policy_kwargs["feature_extraction"] = "attention_mlp_particle"
             policy_kwargs["layer_norm"] = True
         elif policy == "CustomSACPolicy":
             policy_kwargs["layer_norm"] = True

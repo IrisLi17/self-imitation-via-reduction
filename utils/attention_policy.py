@@ -54,13 +54,20 @@ import math
 #     # latent = tf.concat([self_out_latent, objects_out], 1)
 #     return latent
 
-def attention_mlp_extractor_particle(flat_observations, n_object=2, n_units=128):
+def attention_mlp_extractor_particle(flat_observations, n_object=2, n_units=128, has_action=False):
     # agent_idx = np.concatenate([np.arange(3), np.arange(3 + 6 * n_object, 3 + 6 * n_object + 2),
     #                             np.arange(3 + 6 * n_object + 2 + 9 * n_object, int(flat_observations.shape[1]))])
-    agent_idx = np.concatenate([np.arange(3), np.arange(3 + 15 * n_object, 6 + 15 * n_object),
-                                np.arange(6 + 15 * n_object, 9 + 15 * n_object), # achieved goal pos
-                                np.arange(9 + 16 * n_object, 12 + 16 * n_object), # desired goal pos
-                                ]) # size 11
+    if not has_action:
+        agent_idx = np.concatenate([np.arange(3), np.arange(3 + 15 * n_object, 6 + 15 * n_object),
+                                    np.arange(6 + 15 * n_object, 9 + 15 * n_object),  # achieved goal pos
+                                    np.arange(9 + 16 * n_object, 12 + 16 * n_object),  # desired goal pos
+                                    ])  # size 11
+    else:
+        agent_idx = np.concatenate([np.arange(3), np.arange(3 + 15 * n_object, 6 + 15 * n_object),
+                                    np.arange(6 + 15 * n_object, 9 + 15 * n_object),  # achieved goal pos
+                                    np.arange(9 + 16 * n_object, 12 + 16 * n_object),  # desired goal pos
+                                    np.arange(12 + 17 * n_object, 14 + 17 * n_object),  # 2d action
+                                    ])  # size 13
     self_in = tf.gather(flat_observations, agent_idx, axis=1)
     self_out = self_in
     self_out = tf.contrib.layers.fully_connected(
@@ -75,7 +82,7 @@ def attention_mlp_extractor_particle(flat_observations, n_object=2, n_units=128)
                                       np.arange(3+9*n_object+3*i, 3+9*n_object+3*(i+1)),
                                       np.arange(3+12*n_object+3*i, 3+12*n_object+3*(i+1)),
                                       np.arange(9 + 15 * n_object + i, 9 + 15 * n_object + i + 1), # indicator
-                                      ]) # size 16
+                                      ])  # size 16
         object_in = tf.gather(flat_observations, _object_idx, axis=1)
         shape_onehot = tf.tile(tf.expand_dims(np.array([i == 0], dtype=np.float32), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
         # object_onehot = tf.tile(tf.expand_dims(tf.one_hot(i, n_object), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
