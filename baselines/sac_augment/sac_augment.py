@@ -477,6 +477,8 @@ class SAC_augment(OffPolicyRLModel):
                 self.current_nobject = []
                 self.selected_objects = []
                 self.task_mode = []
+            # For debugging
+            self.debug_value1, self.debug_value2 = [], []
 
             num_augment_ep_buf = deque(maxlen=100)
             num_success_augment_ep_buf = deque(maxlen=100)
@@ -494,6 +496,17 @@ class SAC_augment(OffPolicyRLModel):
                     if (not infos[idx]['is_success']) and np.argmax(goal[3:]) == 0:
                         return True
                     return False
+
+            def log_debug_value(value1, value2, goal_idx, is_success):
+                if not os.path.exists(os.path.join(logger.get_dir(), 'debug_value.csv')):
+                    with open(os.path.join(logger.get_dir(), 'debug_value.csv'), 'a', newline='') as csvfile:
+                        csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
+                        title = ['value1', 'value2', 'goal_idx', 'is_success', 'num_timesteps']
+                        csvwriter.writerow(title)
+                with open(os.path.join(logger.get_dir(), 'debug_value.csv'), 'a', newline='') as csvfile:
+                    csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
+                    data = [value1, value2, goal_idx, int(is_success), self.num_timesteps]
+                    csvwriter.writerow(data)
 
 
             for step in range(total_timesteps):
@@ -771,6 +784,7 @@ class SAC_augment(OffPolicyRLModel):
                     # print('end step', env_end_step)
                     for idx, end_step in enumerate(env_end_step):
                         if end_step <= self.get_horizon(self.current_nobject[idx] if 'FetchStack' in self.env_id else None):
+                            log_debug_value(self.debug_value1[idx], self.debug_value2[idx], np.argmax(temp_subgoals[idx][3:]), True)
                             # print(temp_subgoals[idx])
                             is_self_aug = temp_subgoals[idx][3]
                             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
@@ -782,6 +796,8 @@ class SAC_augment(OffPolicyRLModel):
                                     temp[-1] = True
                                     transitions[i] = tuple(temp)
                                 self.augment_replay_buffer.add(*(transitions[i]))
+                        else:
+                            log_debug_value(self.debug_value1[idx], self.debug_value2[idx], np.argmax(temp_subgoals[idx][3:]), False)
 
 
                     self.restart_steps = self.restart_steps[self.aug_env.num_envs:]
@@ -792,6 +808,9 @@ class SAC_augment(OffPolicyRLModel):
                         self.current_nobject = self.current_nobject[self.aug_env.num_envs:]
                         self.selected_objects = self.selected_objects[self.aug_env.num_envs:]
                         self.task_mode = self.task_mode[self.aug_env.num_envs:]
+                    # For debugging
+                    self.debug_value1 = self.debug_value1[self.aug_env.num_envs:]
+                    self.debug_value2 = self.debug_value2[self.aug_env.num_envs:]
 
 
                 if step % self.train_freq == 0:
@@ -988,6 +1007,10 @@ class SAC_augment(OffPolicyRLModel):
         restart_step = sample_t[good_ind % len(sample_t)]
         subgoal = subgoal_obs_buf[good_ind, self.obs_dim + self.goal_dim:self.obs_dim + self.goal_dim * 2]
 
+        # For debugging
+        for i in range(k):
+            self.debug_value1.append(value1[good_ind[i]])
+            self.debug_value2.append(value2[good_ind[i]])
         # print('subgoal', subgoal, 'with value1', normalize_value1[best_idx], 'value2', normalize_value2[best_idx])
         # print('restart step', restart_step)
         return restart_step, subgoal
