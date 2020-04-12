@@ -434,6 +434,7 @@ class SAC_parallel(OffPolicyRLModel):
             n_updates = 0
             infos_values = []
             pp_sr_buf = deque(maxlen=5)
+            stack_sr_buf = deque(maxlen=5)
             start_decay = total_timesteps
             if self.sequential and 'FetchStack' in self.env_id:
                 current_max_nobject = 2
@@ -455,14 +456,15 @@ class SAC_parallel(OffPolicyRLModel):
                         # Stacking
                         pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 1.0)
                         pp_sr_buf.append(pp_sr)
+                        stack_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 0.0)
+                        stack_sr_buf.append(stack_sr)
                         print('Pick-and-place success rate', np.mean(pp_sr_buf))
                         if self.sequential:
                             if self.env.env.get_attr('random_ratio')[0] > 0.5 and np.mean(pp_sr_buf) > 0.8:
                                 _ratio = 0.3
                             elif self.env.env.get_attr('random_ratio')[0] < 0.5 \
                                     and current_max_nobject < self.env.env.get_attr('n_object')[0] \
-                                    and eval_model(self.eval_env, self, current_max_nobject,
-                                                   0.0) > 1 / current_max_nobject:
+                                    and np.mean(stack_sr_buf) > 1 / current_max_nobject:
                                 _ratio = 0.7
                                 current_max_nobject += 1
                                 previous_task_array = self.env.env.get_attr('task_array')[0]
