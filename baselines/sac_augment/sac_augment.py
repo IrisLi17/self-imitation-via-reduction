@@ -913,6 +913,7 @@ class SAC_augment(OffPolicyRLModel):
         sample_obs_buf = []
         subgoal_obs_buf = []
         if 'FetchStack' in self.env_id:
+            filter_subgoal = False
             sample_height = np.array(tower_height)[sample_t]
             for object_idx in range(0, self.n_object):
                 if abs(sample_height[0] + 0.05 - sample_obs[0][self.obs_dim + self.goal_dim + 2]) > 0.01 \
@@ -954,6 +955,7 @@ class SAC_augment(OffPolicyRLModel):
                 subgoal_obs[:, self.obs_dim + self.goal_dim + 3:self.obs_dim + self.goal_dim * 2] = one_hot
                 subgoal_obs_buf.append(subgoal_obs)
         else:
+            filter_subgoal = True
             for object_idx in range(self.n_object):  # Also search self position
                 obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
                 # Path2
@@ -1003,12 +1005,13 @@ class SAC_augment(OffPolicyRLModel):
         #     print(value2[good_ind])
         # restart_step = sample_t[best_idx]
         # subgoal = subgoal_obs[best_idx, 45:50]
-        mean_values = (value1[good_ind] + value2[good_ind]) / 2
-        assert mean_values.shape[0] == k
-        for i in range(k):
-            self.mean_value_buf.append(mean_values[i])
-        filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
-        good_ind = good_ind[filtered_idx]
+        if filter_subgoal:
+            mean_values = (value1[good_ind] + value2[good_ind]) / 2
+            assert mean_values.shape[0] == k
+            for i in range(k):
+                self.mean_value_buf.append(mean_values[i])
+            filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
+            good_ind = good_ind[filtered_idx]
 
         restart_step = sample_t[good_ind % len(sample_t)]
         subgoal = subgoal_obs_buf[good_ind, self.obs_dim + self.goal_dim:self.obs_dim + self.goal_dim * 2]
