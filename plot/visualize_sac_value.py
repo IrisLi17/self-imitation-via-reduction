@@ -97,3 +97,28 @@ if __name__ == '__main__':
     plt.savefig('value_prod.png')
 
     plt.show()
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+    surf = ax.contourf((xs - 1.05) / 0.5, (ys - 0.4) / 0.7, value1s, 15, cmap=cm.coolwarm, vmin=-0.0, vmax=1)
+    ax.set_xlabel('x', fontsize=24)
+    ax.set_ylabel('y', fontsize=24)
+    ax.plot([(1.25 - 1.05) / 0.5, (1.25 - 1.05) / 0.5], [0, (0.65 - 0.4) / 0.7], 'k', linestyle='--')
+    ax.plot([(1.25 - 1.05) / 0.5, (1.25 - 1.05) / 0.5], [(0.85 - 0.4) / 0.7, (1.1 - 0.4) / 0.7], 'k', linestyle='--')
+    ax.axis([0., 1., 0., 1.])
+    cb = plt.colorbar(surf)
+    plt.tight_layout()
+    plt.savefig('value1.png')
+
+    plt.show()
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+    surf = ax.contourf((xs - 1.05) / 0.5, (ys - 0.4) / 0.7, zs, 15, cmap=cm.coolwarm, vmin=-0.0, vmax=1)
+    ax.set_xlabel('x', fontsize=24)
+    ax.set_ylabel('y', fontsize=24)
+    ax.plot([(1.25 - 1.05) / 0.5, (1.25 - 1.05) / 0.5], [0, (0.65 - 0.4) / 0.7], 'k', linestyle='--')
+    ax.plot([(1.25 - 1.05) / 0.5, (1.25 - 1.05) / 0.5], [(0.85 - 0.4) / 0.7, (1.1 - 0.4) / 0.7], 'k', linestyle='--')
+    ax.axis([0., 1., 0., 1.])
+    cb = plt.colorbar(surf)
+    plt.tight_layout()
+    plt.savefig('value2.png')
+    plt.show()
