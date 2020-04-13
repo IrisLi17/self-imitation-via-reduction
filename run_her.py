@@ -214,7 +214,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                 curriculum=curriculum,
                                 sequential=sequential,
                                 sil=sil,
-                                sir_coef=sil_coef,
+                                sil_coef=sil_coef,
                                 eval_env=eval_env,
                                 )
             if num_workers == 1:
