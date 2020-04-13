@@ -271,9 +271,14 @@ class SAC_augment(OffPolicyRLModel):
                     # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
                     policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
                     self.is_demo_ph = tf.placeholder(tf.float32, shape=(None,), name='is_demo')
+                    # Behavior cloning loss
+                    # policy_imitation_loss = tf.reduce_mean(
+                    #     self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
+                    #                                      axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
+                    # Self imitation style loss
+                    logp_ac = self.logpac(self.actions_ph)
                     policy_imitation_loss = tf.reduce_mean(
-                        self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
-                                                         axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
+                        self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -1008,9 +1013,12 @@ class SAC_augment(OffPolicyRLModel):
         if filter_subgoal:
             mean_values = (value1[good_ind] + value2[good_ind]) / 2
             assert mean_values.shape[0] == k
-            for i in range(k):
-                self.mean_value_buf.append(mean_values[i])
-            filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
+            # for i in range(k):
+            #     self.mean_value_buf.append(mean_values[i])
+            # filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
+            # Filter by hard threshold
+            # In the beginning, the value fn tends to over estimate
+            filtered_idx = np.where(np.logical_and(mean_values < 1.0, mean_values > 0.5))[0]
             good_ind = good_ind[filtered_idx]
 
         restart_step = sample_t[good_ind % len(sample_t)]
@@ -1023,6 +1031,15 @@ class SAC_augment(OffPolicyRLModel):
         # print('subgoal', subgoal, 'with value1', normalize_value1[best_idx], 'value2', normalize_value2[best_idx])
         # print('restart step', restart_step)
         return restart_step, subgoal
+
+    def logpac(self, action):
+        from stable_baselines.sac.policies import gaussian_likelihood, EPS
+        act_mu = self.policy_tf.act_mu
+        log_std = tf.log(self.policy_tf.std)
+        # Potentially we need to clip atanh and pass gradient
+        log_u = gaussian_likelihood(tf.atanh(tf.clip_by_value(action, -0.99, 0.99)), act_mu, log_std)
+        log_ac = log_u - tf.reduce_sum(tf.log(1 - action ** 2 + EPS), axis=1)
+        return log_ac
 
     def action_probability(self, observation, state=None, mask=None, actions=None, logp=False):
         if actions is not None:
