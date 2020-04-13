@@ -57,6 +57,8 @@ def arg_parse():
     parser.add_argument('--priority', action="store_true", default=False)
     parser.add_argument('--curriculum', action="store_true", default=False)
     parser.add_argument('--sequential', action="store_true", default=False)
+    parser.add_argument('--sil', action="store_true", default=False)
+    parser.add_argument('--sil_coef', type=float, default=1.0)
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
     return args
@@ -128,7 +130,8 @@ def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None,
 
 def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
          export_gif, gamma, random_ratio, action_noise, reward_type, n_object,
-         priority, learning_rate, num_workers, policy, curriculum, sequential):
+         priority, learning_rate, num_workers, policy, curriculum, sequential,
+         sil, sil_coef):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -210,12 +213,14 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                 learning_rate=learning_rate,
                                 curriculum=curriculum,
                                 sequential=sequential,
+                                sil=sil,
+                                sir_coef=sil_coef,
                                 eval_env=eval_env,
                                 )
             if num_workers == 1:
                 # del train_kwargs['priority_buffer']
                 pass
-            if 'FetchStack' in env_name or 'MasspointPushDoubleObstacle' in env_name:
+            if 'FetchStack' in env_name:
                 train_kwargs['ent_coef'] = "auto"
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
@@ -225,6 +230,10 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
                 train_kwargs['batch_size'] = 256
+            elif 'MasspointPushDoubleObstacle' in env_name:
+                train_kwargs['gamma'] = 0.99
+                train_kwargs['batch_size'] = 512
+                train_kwargs['random_exploration'] = 0.1
             policy_kwargs = {}
 
             def callback(_locals, _globals):
@@ -354,4 +363,4 @@ if __name__ == '__main__':
          gamma=args.gamma, random_ratio=args.random_ratio, action_noise=args.action_noise,
          reward_type=args.reward_type, n_object=args.n_object, priority=args.priority,
          learning_rate=args.learning_rate, num_workers=args.num_workers, policy=args.policy,
-         curriculum=args.curriculum, sequential=args.sequential)
+         curriculum=args.curriculum, sequential=args.sequential, sil=args.sil, sil_coef=args.sil_coef)

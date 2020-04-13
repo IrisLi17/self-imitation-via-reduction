@@ -74,6 +74,7 @@ class SAC_parallel(OffPolicyRLModel):
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
                  eval_env=None, curriculum=False, sequential=False,
+                 sil=False, sil_coef=1.0,
                  random_exploration=0.0, verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -103,6 +104,8 @@ class SAC_parallel(OffPolicyRLModel):
         self.eval_env = eval_env
         self.curriculum = curriculum
         self.sequential = sequential
+        self.sil = sil
+        self.sil_coef = sil_coef
 
         self.value_fn = None
         self.graph = None
@@ -263,6 +266,11 @@ class SAC_parallel(OffPolicyRLModel):
                     # Compute the policy loss
                     # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
                     policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
+                    # Add optional SIL loss
+                    if self.sil:
+                        logp_ac = self.logpac(self.actions_ph)
+                        policy_kl_loss += self.sil_coef * tf.reduce_mean(
+                            -logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn)))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -631,6 +639,15 @@ class SAC_parallel(OffPolicyRLModel):
                     # Reset infos:
                     infos_values = []
             return self
+
+    def logpac(self, action):
+        from stable_baselines.sac.policies import gaussian_likelihood, EPS
+        act_mu = self.policy_tf.act_mu
+        log_std = tf.log(self.policy_tf.std)
+        # Potentially we need to clip atanh and pass gradient
+        log_u = gaussian_likelihood(tf.atanh(tf.clip_by_value(action, -0.99, 0.99)), act_mu, log_std)
+        log_ac = log_u - tf.reduce_sum(tf.log(1 - action ** 2 + EPS), axis=1)
+        return log_ac
 
     def action_probability(self, observation, state=None, mask=None, actions=None, logp=False):
         if actions is not None:
