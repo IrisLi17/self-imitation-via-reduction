@@ -171,8 +171,9 @@ class SAC_augment(OffPolicyRLModel):
                                                                             num_workers=self.env.env.num_envs)
                 else:
                     print(self.n_envs)
-                    self.replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=self.n_envs)
-                self.augment_replay_buffer = ReplayBuffer(self.buffer_size)
+                    self.replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=self.n_envs, gamma=self.gamma)
+                # self.augment_replay_buffer = ReplayBuffer(self.buffer_size)
+                self.augment_replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=1, gamma=self.gamma)
 
                 with tf.variable_scope("input", reuse=False):
                     # Create policy and target TF objects
@@ -193,6 +194,7 @@ class SAC_augment(OffPolicyRLModel):
                     self.actions_ph = tf.placeholder(tf.float32, shape=(None,) + self.action_space.shape,
                                                      name='actions')
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
+                    self.sum_rs_ph = tf.placeholder(tf.float32, shape=(None, 1), name="sum_rs")
 
                 with tf.variable_scope("model", reuse=False):
                     # Create the policy
@@ -276,9 +278,11 @@ class SAC_augment(OffPolicyRLModel):
                     #     self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
                     #                                      axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
                     # Self imitation style loss
-                    logp_ac = self.logpac(self.actions_ph)
+                    self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                     policy_imitation_loss = tf.reduce_mean(
-                        self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
+                        self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(self.sum_rs_ph - value_fn))))
+                    # policy_imitation_loss = tf.reduce_mean(tf.boolean_mask(
+                    #     -logp_ac * tf.stop_gradient(tf.nn.relu(self.sum_rs_ph - value_fn)), self.is_demo_ph))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -362,19 +366,20 @@ class SAC_augment(OffPolicyRLModel):
     def _train_step(self, step, writer, learning_rate):
         # Sample a batch from the replay buffer
         if self.augment_replay_buffer.can_sample(self.batch_size // 2):
-            batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones = self.replay_buffer.sample(self.batch_size // 2)
-            batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones = self.augment_replay_buffer.sample(self.batch_size // 2)
+            batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs = self.replay_buffer.sample(self.batch_size // 2)
+            batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs = self.augment_replay_buffer.sample(self.batch_size // 2)
             batch_obs = np.concatenate([batch1_obs, batch2_obs])
             batch_actions = np.concatenate([batch1_actions, batch2_actions])
             batch_rewards = np.concatenate([batch1_rewards, batch2_rewards])
             batch_next_obs = np.concatenate([batch1_next_obs, batch2_next_obs])
             batch_dones = np.concatenate([batch1_dones, batch2_dones])
+            batch_sumrs = np.concatenate([batch1_sumrs, batch2_sumrs])
             batch_is_demo = np.concatenate([np.zeros(batch1_obs.shape[0], dtype=np.float32),
                                             np.ones(batch2_obs.shape[0], dtype=np.float32)])
             # print(batch_obs.shape, batch_actions.shape, batch_rewards.shape)
         else:
             batch = self.replay_buffer.sample(self.batch_size)
-            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
+            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs = batch
             batch_is_demo = np.zeros(batch_obs.shape[0], dtype=np.float32)
 
         feed_dict = {
@@ -383,7 +388,8 @@ class SAC_augment(OffPolicyRLModel):
             self.next_observations_ph: batch_next_obs,
             self.rewards_ph: batch_rewards.reshape(self.batch_size, -1),
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
-            self.learning_rate_ph: learning_rate
+            self.learning_rate_ph: learning_rate,
+            self.sum_rs_ph: batch_sumrs.reshape(self.batch_size, -1),
         }
         if hasattr(self, 'is_demo_ph'):
             feed_dict[self.is_demo_ph] =  batch_is_demo
@@ -800,13 +806,21 @@ class SAC_augment(OffPolicyRLModel):
                             is_self_aug = temp_subgoals[idx][3]
                             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
                             for i in range(len(env_storage[idx])):
-                                self.augment_replay_buffer.add(*(env_storage[idx][i]))
+                                if isinstance(self.augment_replay_buffer, MultiWorkerReplayBuffer):
+                                    self.augment_replay_buffer.add(
+                                        *([np.expand_dims(item, axis=0) for item in env_storage[idx][i]]))
+                                else:
+                                    self.augment_replay_buffer.add(*(env_storage[idx][i]))
                             for i in range(len(transitions)):
                                 if i == len(transitions) - 1:
                                     temp = list(transitions[i])
                                     temp[-1] = True
                                     transitions[i] = tuple(temp)
-                                self.augment_replay_buffer.add(*(transitions[i]))
+                                if isinstance(self.augment_replay_buffer, MultiWorkerReplayBuffer):
+                                    self.augment_replay_buffer.add(
+                                        *([np.expand_dims(item, axis=0) for item in transitions[i]]))
+                                else:
+                                    self.augment_replay_buffer.add(*(transitions[i]))
                         # else:
                         #     log_debug_value(self.debug_value1[idx], self.debug_value2[idx], np.argmax(temp_subgoals[idx][3:]), False)
 

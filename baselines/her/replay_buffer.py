@@ -1,6 +1,7 @@
 import copy
 from enum import Enum
 from utils.replay_buffer import MultiWorkerReplayBuffer, PrioritizedMultiWorkerReplayBuffer
+from utils.replay_buffer import discounted_sum
 from stable_baselines.common.vec_env import VecEnv
 
 import numpy as np
@@ -67,7 +68,7 @@ class HindsightExperienceReplayWrapper(object):
         # self.episode_transitions = []
         self.replay_buffer = replay_buffer
         self.temp_container = {'idx': [], 'observation': [], 'action': [], 'next_observation': [],
-                               'reward': [], 'done': []}
+                               'reward': [], 'done': [], 'sum_r': []}
         self.reward_time = 0.0
 
     def set_model(self, model):
@@ -123,7 +124,12 @@ class HindsightExperienceReplayWrapper(object):
                 reward = self.temp_container['reward'][i]
                 next_obs = self.temp_container['next_observation'][i]
                 done = self.temp_container['done'][i]
-                super(type(self.replay_buffer), self.replay_buffer).add(obs, action, reward, next_obs, done)
+                if reward > 0.5:
+                    sum_r = 1.
+                else:
+                    sum_r = self.temp_container['sum_r'][i]
+                # We need to construct sum r. Issue is how to deal with relabelled traj?
+                super(type(self.replay_buffer), self.replay_buffer).add(obs, action, reward, next_obs, done, sum_r)
 
         if isinstance(self.replay_buffer, PrioritizedMultiWorkerReplayBuffer) and len(self.temp_container['observation']):
             q1, value = self.model.sess.run([self.model.step_ops[4], self.model.value_target], feed_dict={
@@ -185,7 +191,7 @@ class HindsightExperienceReplayWrapper(object):
         else:
             raise ValueError("Invalid goal selection strategy,"
                              "please use one of {}".format(list(GoalSelectionStrategy)))
-        return self.env.convert_obs_to_dict(selected_transition[0])['achieved_goal']
+        return self.env.convert_obs_to_dict(selected_transition[0])['achieved_goal'], selected_idx
 
     def _sample_achieved_goals(self, episode_transitions, transition_idx):
         """
@@ -229,6 +235,10 @@ class HindsightExperienceReplayWrapper(object):
                 self.temp_container['next_observation'].append(obs_tp1)
                 self.temp_container['reward'].append(reward)
                 self.temp_container['done'].append(done)
+                self.temp_container['sum_r'].append(
+                    discounted_sum([self.replay_buffer.local_transitions[i][j][2]
+                                    for j in range(transition_idx, len(self.replay_buffer.local_transitions[i]))],
+                                   self.replay_buffer.gamma))
             # Store them later but increment idx in this wrapper.
             self._next_idx  = (self._next_idx + 1) % self.replay_buffer._maxsize
             # # Call add method from ReplayBuffer
@@ -244,7 +254,7 @@ class HindsightExperienceReplayWrapper(object):
             # this is called k in the paper
             sampled_goals = self._sample_achieved_goals(self.replay_buffer.local_transitions[i], transition_idx)
             # For each sampled goals, store a new transition
-            for goal in sampled_goals:
+            for goal, sampled_idx in sampled_goals:
                 # Copy transition to avoid modifying the original one
                 obs, action, reward, next_obs, done = copy.deepcopy(transition)
 
@@ -293,6 +303,7 @@ class HindsightExperienceReplayWrapper(object):
                     self.temp_container['next_observation'].append(next_obs)
                     self.temp_container['reward'].append(reward)
                     self.temp_container['done'].append(done)
+                    self.temp_container['sum_r'].append(self.replay_buffer.gamma ** (sampled_idx - transition_idx))
                 # Store them later but increment idx in this wrapper.
                 self._next_idx = (self._next_idx + 1) % self.replay_buffer._maxsize
                 # # Call add method from ReplayBuffer

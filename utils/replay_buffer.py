@@ -1,23 +1,124 @@
 from stable_baselines.deepq import ReplayBuffer, PrioritizedReplayBuffer
+import numpy as np
 
 
-class MultiWorkerReplayBuffer(ReplayBuffer):
-    def __init__(self, size, num_workers=1):
+class SumRReplayBuffer(ReplayBuffer):
+    def __init__(self, size):
+        super(SumRReplayBuffer, self).__init__(size)
+
+    def add(self, obs_t, action, reward, obs_tp1, done, sum_r):
+        """
+        add a new transition to the buffer
+
+        :param obs_t: (Any) the last observation
+        :param action: ([float]) the action
+        :param reward: (float) the reward of the transition
+        :param obs_tp1: (Any) the current observation
+        :param done: (bool) is the episode done
+        :param sum_r: (float) the discounted sum of reward from this step
+        """
+        data = (obs_t, action, reward, obs_tp1, done, sum_r)
+
+        if self._next_idx >= len(self._storage):
+            self._storage.append(data)
+        else:
+            self._storage[self._next_idx] = data
+        self._next_idx = (self._next_idx + 1) % self._maxsize
+
+    def _encode_sample(self, idxes):
+        obses_t, actions, rewards, obses_tp1, dones, sum_rs = [], [], [], [], [], []
+        for i in idxes:
+            data = self._storage[i]
+            obs_t, action, reward, obs_tp1, done, sum_r = data
+            obses_t.append(np.array(obs_t, copy=False))
+            actions.append(np.array(action, copy=False))
+            rewards.append(reward)
+            obses_tp1.append(np.array(obs_tp1, copy=False))
+            dones.append(done)
+            sum_rs.append(sum_r)
+        return np.array(obses_t), np.array(actions), np.array(rewards), np.array(obses_tp1), np.array(dones), np.array(sum_rs)
+
+
+class SumRPrioritizedReplayBuffer(PrioritizedReplayBuffer, SumRReplayBuffer):
+    def __init__(self, size, alpha):
+        PrioritizedReplayBuffer.__init__(self, size, alpha)
+
+    def add(self, obs_t, action, reward, obs_tp1, done, sum_r):
+        """
+        add a new transition to the buffer
+
+        :param obs_t: (Any) the last observation
+        :param action: ([float]) the action
+        :param reward: (float) the reward of the transition
+        :param obs_tp1: (Any) the current observation
+        :param done: (bool) is the episode done
+        :param sum_r: (float) the discounted sum reward from this step
+        """
+        idx = self._next_idx
+        SumRReplayBuffer.add(self, obs_t, action, reward, obs_tp1, done, sum_r)
+        self._it_sum[idx] = self._max_priority ** self._alpha
+        self._it_min[idx] = self._max_priority ** self._alpha
+
+    def sample(self, batch_size, beta=0):
+        """
+        Sample a batch of experiences.
+
+        compared to ReplayBuffer.sample
+        it also returns importance weights and idxes
+        of sampled experiences.
+
+        :param batch_size: (int) How many transitions to sample.
+        :param beta: (float) To what degree to use importance weights (0 - no corrections, 1 - full correction)
+        :return:
+            - obs_batch: (np.ndarray) batch of observations
+            - act_batch: (numpy float) batch of actions executed given obs_batch
+            - rew_batch: (numpy float) rewards received as results of executing act_batch
+            - next_obs_batch: (np.ndarray) next set of observations seen after executing act_batch
+            - done_mask: (numpy bool) done_mask[i] = 1 if executing act_batch[i] resulted in the end of an episode
+                and 0 otherwise.
+            - weights: (numpy float) Array of shape (batch_size,) and dtype np.float32 denoting importance weight of
+                each sampled transition
+            - idxes: (numpy int) Array of shape (batch_size,) and dtype np.int32 idexes in buffer of sampled experiences
+        """
+        assert beta > 0
+
+        idxes = self._sample_proportional(batch_size)
+
+        weights = []
+        p_min = self._it_min.min() / self._it_sum.sum()
+        max_weight = (p_min * len(self._storage)) ** (-beta)
+
+        for idx in idxes:
+            p_sample = self._it_sum[idx] / self._it_sum.sum()
+            weight = (p_sample * len(self._storage)) ** (-beta)
+            weights.append(weight / max_weight)
+        weights = np.array(weights)
+        encoded_sample = SumRReplayBuffer._encode_sample(self, idxes)
+        return tuple(list(encoded_sample) + [weights, idxes])
+
+
+class MultiWorkerReplayBuffer(SumRReplayBuffer):
+    def __init__(self, size, num_workers=1, gamma=0.99):
         super(MultiWorkerReplayBuffer, self).__init__(size)
         self.num_workers = num_workers
+        self.gamma = gamma
         self.local_transitions = [[] for _ in range(self.num_workers)]
 
     def add(self, obs_t, action, reward, obs_tp1, done):
         assert obs_t.shape[0] == self.num_workers
         for i in range(self.num_workers):
-            self.local_transitions[i].append((obs_t[i], action[i], reward[i], obs_tp1[i], done[i]))
+            self.local_transitions[i].append([obs_t[i], action[i], reward[i], obs_tp1[i], done[i], 0])
             if done[i]:
                 for j in range(len(self.local_transitions[i])):
+                    # Compute discounted r
+                    self.local_transitions[i][j][-1] = discounted_sum(
+                        [self.local_transitions[i][k][2] for k in range(j, len(self.local_transitions[i]))], self.gamma)
                     super().add(*(self.local_transitions[i][j]))
                 self.local_transitions[i] = []
 
 
-class PrioritizedMultiWorkerReplayBuffer(PrioritizedReplayBuffer):
+# TODO: compute priority at first time
+class PrioritizedMultiWorkerReplayBuffer(SumRPrioritizedReplayBuffer):
     def __init__(self, size, alpha, num_workers=1):
         super(PrioritizedMultiWorkerReplayBuffer, self).__init__(size, alpha)
         self.num_workers = num_workers
@@ -41,3 +142,8 @@ class PrioritizedMultiWorkerReplayBuffer(PrioritizedReplayBuffer):
                     self.update_priorities([p_idx], [self.local_priorities[i][j]])
                 self.local_transitions[i] = []
                 self.local_priorities[i] = []
+
+
+def discounted_sum(arr, gamma):
+    arr = np.asarray(arr)
+    return np.sum(arr * np.power(gamma, np.arange(arr.shape[0])))

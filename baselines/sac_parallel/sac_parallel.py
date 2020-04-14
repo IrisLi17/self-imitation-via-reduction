@@ -138,6 +138,7 @@ class SAC_parallel(OffPolicyRLModel):
         self.processed_obs_ph = None
         self.processed_next_obs_ph = None
         self.log_ent_coef = None
+        self.logpac_op = None
 
         if _init_setup_model:
             self.setup_model()
@@ -189,6 +190,7 @@ class SAC_parallel(OffPolicyRLModel):
                                                      name='actions')
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
                     self.importance_weight_ph = tf.placeholder(tf.float32, shape=(None,), name='weights')
+                    self.sum_rs_ph = tf.placeholder(tf.float32, shape=(None, 1), name="sum_rs")
 
                 with tf.variable_scope("model", reuse=False):
                     # Create the policy
@@ -267,10 +269,12 @@ class SAC_parallel(OffPolicyRLModel):
                     # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
                     policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
                     # Add optional SIL loss
+                    self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                     if self.sil:
-                        logp_ac = self.logpac(self.actions_ph)
+                        # policy_kl_loss += self.sil_coef * tf.reduce_mean(
+                        #     -logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn)))
                         policy_kl_loss += self.sil_coef * tf.reduce_mean(
-                            -logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn)))
+                            -logp_ac * tf.stop_gradient(tf.nn.relu(self.sum_rs_ph - value_fn)))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -355,12 +359,12 @@ class SAC_parallel(OffPolicyRLModel):
         # Sample a batch from the replay buffer
         if self.priority_buffer:
             batch = self.replay_buffer.sample(self.batch_size, beta=0.4)
-            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, weights, idxes = batch
+            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs, weights, idxes = batch
             # For debugging.
             # weights = np.ones(batch_obs.shape[0])
         else:
             batch = self.replay_buffer.sample(self.batch_size)
-            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
+            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs = batch
             weights = np.ones(batch_obs.shape[0])
 
         feed_dict = {
@@ -371,6 +375,7 @@ class SAC_parallel(OffPolicyRLModel):
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
             self.learning_rate_ph: learning_rate,
             self.importance_weight_ph: weights,
+            self.sum_rs_ph: batch_sumrs.reshape(self.batch_size, -1),
         }
 
         # out  = [policy_loss, qf1_loss, qf2_loss,
