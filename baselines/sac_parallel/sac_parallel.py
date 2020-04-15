@@ -168,7 +168,7 @@ class SAC_parallel(OffPolicyRLModel):
                                                                             num_workers=self.env.env.num_envs)
                 else:
                     print(self.n_envs)
-                    self.replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=self.n_envs)
+                    self.replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=self.n_envs, gamma=self.gamma)
 
                 with tf.variable_scope("input", reuse=False):
                     # Create policy and target TF objects
