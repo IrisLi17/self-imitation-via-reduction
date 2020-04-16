@@ -119,31 +119,55 @@ class MultiWorkerReplayBuffer(SumRReplayBuffer):
 
 # TODO: compute priority at first time
 class PrioritizedMultiWorkerReplayBuffer(SumRPrioritizedReplayBuffer):
-    def __init__(self, size, alpha, num_workers=1):
+    def __init__(self, size, alpha, num_workers=1, gamma=0.99):
         super(PrioritizedMultiWorkerReplayBuffer, self).__init__(size, alpha)
         self.num_workers = num_workers
+        self.gamma = gamma
         self.local_transitions = [[] for _ in range(self.num_workers)]
-        self.local_priorities = [[] for _ in range(self.num_workers)]
+        self.model = None
 
-    def append_priority(self, p):
-        for i in range(self.num_workers):
-            assert len(self.local_transitions[i]) == len(self.local_priorities[i])
-            self.local_priorities[i].append(p[i])
+    def set_model(self, model):
+        self.model = model
+
+    # # TODO: deprecate this method
+    # def append_priority(self, p):
+    #     for i in range(self.num_workers):
+    #         assert len(self.local_transitions[i]) == len(self.local_priorities[i])
+    #         self.local_priorities[i].append(p[i])
 
     def add(self, obs_t, action, reward, obs_tp1, done):
         assert obs_t.shape[0] == self.num_workers
         for i in range(self.num_workers):
-            self.local_transitions[i].append((obs_t[i], action[i], reward[i], obs_tp1[i], done[i]))
-            assert len(self.local_priorities[i]) == len(self.local_transitions[i])
+            self.local_transitions[i].append([obs_t[i], action[i], reward[i], obs_tp1[i], done[i], 0])
+            # assert len(self.local_priorities[i]) == len(self.local_transitions[i])
             if done[i]:
+                batch_obs, batch_act, batch_reward, batch_next_obs, batch_done, _ = zip(*(self.local_transitions[i]))
+                batch_obs, batch_act, batch_reward, batch_next_obs, batch_done = \
+                    map(lambda v: np.asarray(v),[batch_obs, batch_act, batch_reward, batch_next_obs, batch_done])
+                priorities = compute_priority(self.model, batch_obs, batch_act,
+                                              batch_next_obs, batch_reward, batch_done)
                 for j in range(len(self.local_transitions[i])):
-                    p_idx = self._next_idx # The add call will change self._next_idx
+                    # Compute discounted r
+                    self.local_transitions[i][j][-1] = discounted_sum(
+                        [self.local_transitions[i][k][2] for k in range(j, len(self.local_transitions[i]))], self.gamma)
+                    p_idx = self._next_idx  # The add call will change self._next_idx
                     super().add(*(self.local_transitions[i][j]))
-                    self.update_priorities([p_idx], [self.local_priorities[i][j]])
+                    self.update_priorities([p_idx], [priorities[j]])
                 self.local_transitions[i] = []
-                self.local_priorities[i] = []
 
 
 def discounted_sum(arr, gamma):
     arr = np.asarray(arr)
     return np.sum(arr * np.power(gamma, np.arange(arr.shape[0])))
+
+
+def compute_priority(sac_model, batch_obs, batch_act, batch_next_obs, batch_reward, batch_done):
+    q1, value = sac_model.sess.run([sac_model.step_ops[4], sac_model.value_target], feed_dict={
+        sac_model.observations_ph: batch_obs,
+        sac_model.actions_ph: batch_act,
+        sac_model.next_observations_ph: batch_next_obs,
+    })
+    priorities = np.reshape(batch_reward, q1.shape) + (
+            1 - np.reshape(batch_done, q1.shape)) * sac_model.gamma * value - q1
+    priorities = np.squeeze(np.abs(priorities) + 1e-4, axis=-1).tolist()
+    return priorities
