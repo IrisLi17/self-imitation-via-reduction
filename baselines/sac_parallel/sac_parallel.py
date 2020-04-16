@@ -271,10 +271,10 @@ class SAC_parallel(OffPolicyRLModel):
                     # Add optional SIL loss
                     self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                     if self.sil:
-                        # policy_kl_loss += self.sil_coef * tf.reduce_mean(
-                        #     -logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn)))
                         policy_kl_loss += self.sil_coef * tf.reduce_mean(
-                            -logp_ac * tf.stop_gradient(tf.nn.relu(self.sum_rs_ph - value_fn)))
+                            -logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn)))
+                        # policy_kl_loss += self.sil_coef * tf.reduce_mean(
+                        #     -logp_ac * tf.stop_gradient(tf.nn.relu(self.sum_rs_ph - value_fn)))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -375,7 +375,7 @@ class SAC_parallel(OffPolicyRLModel):
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
             self.learning_rate_ph: learning_rate,
             self.importance_weight_ph: weights,
-            self.sum_rs_ph: batch_sumrs.reshape(self.batch_size, -1),
+            # self.sum_rs_ph: batch_sumrs.reshape(self.batch_size, -1),
         }
 
         # out  = [policy_loss, qf1_loss, qf2_loss,

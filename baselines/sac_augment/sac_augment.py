@@ -280,9 +280,7 @@ class SAC_augment(OffPolicyRLModel):
                     # Self imitation style loss
                     self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                     policy_imitation_loss = tf.reduce_mean(
-                        self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(self.sum_rs_ph - value_fn))))
-                    # policy_imitation_loss = tf.reduce_mean(tf.boolean_mask(
-                    #     -logp_ac * tf.stop_gradient(tf.nn.relu(self.sum_rs_ph - value_fn)), self.is_demo_ph))
+                        self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -389,7 +387,7 @@ class SAC_augment(OffPolicyRLModel):
             self.rewards_ph: batch_rewards.reshape(self.batch_size, -1),
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
             self.learning_rate_ph: learning_rate,
-            self.sum_rs_ph: batch_sumrs.reshape(self.batch_size, -1),
+            # self.sum_rs_ph: batch_sumrs.reshape(self.batch_size, -1),
         }
         if hasattr(self, 'is_demo_ph'):
             feed_dict[self.is_demo_ph] =  batch_is_demo
@@ -932,7 +930,7 @@ class SAC_augment(OffPolicyRLModel):
         sample_obs_buf = []
         subgoal_obs_buf = []
         if 'FetchStack' in self.env_id:
-            filter_subgoal = False
+            filter_subgoal = True  # TODO: see if it works
             sample_height = np.array(tower_height)[sample_t]
             for object_idx in range(0, self.n_object):
                 if abs(sample_height[0] + 0.05 - sample_obs[0][self.obs_dim + self.goal_dim + 2]) > 0.01 \
