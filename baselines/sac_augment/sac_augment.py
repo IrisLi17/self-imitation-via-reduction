@@ -450,7 +450,8 @@ class SAC_augment(OffPolicyRLModel):
             self.replay_buffer = replay_wrapper(self.replay_buffer)
             if self.priority_buffer:
                 self.replay_buffer.set_model(self)
-        self.augment_replay_buffer = self.augment_replay_buffer
+                self.augment_replay_buffer.set_model(self)
+        # self.augment_replay_buffer = self.augment_replay_buffer
 
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
