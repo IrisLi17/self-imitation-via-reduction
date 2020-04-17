@@ -231,9 +231,10 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 train_kwargs['gamma'] = 0.98
                 train_kwargs['batch_size'] = 256
             elif 'MasspointPushDoubleObstacle' in env_name:
+                train_kwargs['ent_coef'] = "auto"
                 train_kwargs['gamma'] = 0.99
-                train_kwargs['batch_size'] = 512
-                train_kwargs['random_exploration'] = 0.1
+                train_kwargs['batch_size'] = 256
+                train_kwargs['random_exploration'] = 0.2
             policy_kwargs = {}
 
             def callback(_locals, _globals):
@@ -267,7 +268,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 policy_kwargs["feature_extraction"] = "attention_mlp"
             elif 'MasspointPushDoubleObstacle' in env_name:
                 policy_kwargs["feature_extraction"] = "attention_mlp_particle"
-                policy_kwargs["layers"] = [256, 256]
+                policy_kwargs["layers"] = [256, 256, 256, 256]
             policy_kwargs["layer_norm"] = True
         elif policy == "CustomSACPolicy":
             policy_kwargs["layer_norm"] = True
@@ -298,11 +299,13 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     if play and rank == 0:
         assert load_path is not None
         model = HER_HACK.load(load_path, env=env)
+        if env_kwargs['max_episode_steps'] is None:
+            env_kwargs['max_episode_steps'] = 500
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
         if 'FetchStack' in env_name:
-            env.env_method('set_task_array', [[(env.get_attr('n_object')[0], 0)]])
+            env.env_method('set_task_array', [[(env.get_attr('n_object')[0], 3)]])
             obs = env.reset()
             while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
@@ -332,7 +335,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             else:
                 plt.pause(0.02)
             if done:
-                print('episode_reward', episode_reward)
+                print('episode_reward', episode_reward, frame_idx)
                 obs = env.reset()
                 if 'FetchStack' in env_name:
                     while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or \
