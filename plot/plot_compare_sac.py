@@ -77,6 +77,6 @@ if __name__ == '__main__':
     # ax[1].set_title('augment steps / original rollout steps')
     ax.grid()
     # ax[1].grid()
-    plt.legend(loc='lower center')
+    plt.legend()
     plt.show()
     

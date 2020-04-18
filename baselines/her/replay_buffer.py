@@ -98,9 +98,9 @@ class HindsightExperienceReplayWrapper(object):
                 next_obs = self.temp_container['next_observation'][_ * self.replay_buffer.num_workers: (_ + 1) * self.replay_buffer.num_workers]
                 next_obs_dict = self.env.convert_obs_to_dict(np.asarray(next_obs))
                 if self.env.goal_dim == 3:
-                    reward = self.env.compute_reward(next_obs_dict['desired_goal'], next_obs_dict['achieved_goal'], [None] * self.replay_buffer.num_workers)
+                    reward = self.env.compute_reward(next_obs_dict['desired_goal'], next_obs_dict['achieved_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
                 else:
-                    reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers)
+                    reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
                 self.temp_container['reward'][_ * self.replay_buffer.num_workers : (_ + 1) * self.replay_buffer.num_workers] = reward.copy()
                 self.temp_container['done'][_ * self.replay_buffer.num_workers : (_ + 1) * self.replay_buffer.num_workers] = (np.array(reward) > 0.5).tolist()
             # Remainer

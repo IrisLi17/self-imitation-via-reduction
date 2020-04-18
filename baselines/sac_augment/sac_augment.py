@@ -277,13 +277,13 @@ class SAC_augment(OffPolicyRLModel):
                     policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
                     self.is_demo_ph = tf.placeholder(tf.float32, shape=(None,), name='is_demo')
                     # Behavior cloning loss
-                    # policy_imitation_loss = tf.reduce_mean(
-                    #     self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
-                    #                                      axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
-                    # Self imitation style loss
-                    self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                     policy_imitation_loss = tf.reduce_mean(
-                        self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
+                        self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
+                                                         axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
+                    # Self imitation style loss
+                    # self.logpac_op = logp_ac = self.logpac(self.actions_ph)
+                    # policy_imitation_loss = tf.reduce_mean(
+                    #     self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -366,13 +366,15 @@ class SAC_augment(OffPolicyRLModel):
 
     def _train_step(self, step, writer, learning_rate):
         # Sample a batch from the replay buffer
-        if self.augment_replay_buffer.can_sample(self.batch_size // 2):
+        sample_aug_ratio = len(self.augment_replay_buffer) / (len(self.augment_replay_buffer) + len(self.replay_buffer))
+        if len(self.augment_replay_buffer) > 0:
+        # if self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
             if self.priority_buffer:
-                batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs, batch1_weights, batch1_idxes = self.replay_buffer.sample(self.batch_size // 2, beta=0.4)
-                batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs, batch2_weights, batch2_idxes = self.augment_replay_buffer.sample(self.batch_size // 2, beta=0.4)
+                batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs, batch1_weights, batch1_idxes = self.replay_buffer.sample(self.batch_size - int(self.batch_size * sample_aug_ratio), beta=0.4)
+                batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs, batch2_weights, batch2_idxes = self.augment_replay_buffer.sample(int(self.batch_size * sample_aug_ratio), beta=0.4)
             else:
-                batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs = self.replay_buffer.sample(self.batch_size // 2)
-                batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs = self.augment_replay_buffer.sample(self.batch_size // 2)
+                batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs = self.replay_buffer.sample(self.batch_size - int(self.batch_size * sample_aug_ratio))
+                batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs = self.augment_replay_buffer.sample(int(self.batch_size * sample_aug_ratio))
                 batch1_weights = np.ones(batch1_obs.shape[0])
                 batch2_weights = np.ones(batch2_obs.shape[0])
             batch_obs = np.concatenate([batch1_obs, batch2_obs])
@@ -415,11 +417,11 @@ class SAC_augment(OffPolicyRLModel):
         # Do one gradient step
         # and optionally compute log for tensorboard
         if writer is not None:
-            out = self.sess.run([self.summary] + self.step_ops, feed_dict)
+            out = self.sess.run([self.summary] + self.step_ops + [self.value_target], feed_dict)
             summary = out.pop(0)
             writer.add_summary(summary, step)
         else:
-            out = self.sess.run(self.step_ops, feed_dict)
+            out = self.sess.run(self.step_ops + [self.value_target], feed_dict)
 
         # Unpack to monitor losses and entropy
         policy_loss, qf1_loss, qf2_loss, value_loss, *values = out
@@ -428,15 +430,23 @@ class SAC_augment(OffPolicyRLModel):
 
         # update priority here
         if self.priority_buffer:
-            priorities = compute_priority(self, batch_obs, batch_actions, batch_next_obs, batch_rewards, batch_dones)
-            if self.augment_replay_buffer.can_sample(self.batch_size // 2):
-                self.replay_buffer.update_priorities(batch1_idxes, priorities[:self.batch_size // 2])
-                self.augment_replay_buffer.update_priorities(batch2_idxes, priorities[self.batch_size // 2:])
+            # priorities = compute_priority(self, batch_obs, batch_actions, batch_next_obs, batch_rewards, batch_dones)
+            qf1 = values[0]
+            value_target = values[-1]
+            batch_rewards = np.reshape(batch_rewards, (self.batch_size, -1))
+            batch_dones = np.reshape(batch_dones, (self.batch_size, -1))
+            priorities = batch_rewards + (1 - batch_dones) * self.gamma * value_target - qf1
+            priorities = np.abs(priorities) + 1e-4
+            priorities = np.squeeze(priorities, axis=-1).tolist()
+            if len(self.augment_replay_buffer) > 0:
+            # if self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
+                self.replay_buffer.update_priorities(batch1_idxes, priorities[:len(batch1_idxes)])
+                self.augment_replay_buffer.update_priorities(batch2_idxes, priorities[len(batch1_idxes):])
             else:
                 self.replay_buffer.update_priorities(batch_idxes, priorities)
 
         if self.log_ent_coef is not None:
-            ent_coef_loss, ent_coef = values[-2:]
+            ent_coef_loss, ent_coef = values[-3:-1]
             return policy_loss, qf1_loss, qf2_loss, value_loss, entropy, ent_coef_loss, ent_coef
 
         return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
@@ -448,6 +458,7 @@ class SAC_augment(OffPolicyRLModel):
 
         if replay_wrapper is not None:
             self.replay_buffer = replay_wrapper(self.replay_buffer)
+            self.augment_replay_buffer = replay_wrapper(self.augment_replay_buffer)
             if self.priority_buffer:
                 self.replay_buffer.set_model(self)
                 self.augment_replay_buffer.set_model(self)
@@ -558,9 +569,11 @@ class SAC_augment(OffPolicyRLModel):
                 if self.curriculum and step % 3000 == 0:
                     if 'FetchStack' in self.env.env.get_attr('spec')[0].id:
                         # Stacking
-                        pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.n_object, 1.0)
+                        pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.n_object, 1.0,
+                                           init_on_table=(self.env.env.get_attr('spec')[0].id=='FetchStack-v2'))
                         pp_sr_buf.append(pp_sr)
-                        stack_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.n_object, 0.0)
+                        stack_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.n_object, 0.0,
+                                              init_on_table=(self.env.env.get_attr('spec')[0].id=='FetchStack-v2'))
                         stack_sr_buf.append(stack_sr)
                         print('Pick-and-place success rate', np.mean(pp_sr_buf))
                         if self.sequential:
@@ -830,7 +843,8 @@ class SAC_augment(OffPolicyRLModel):
                             is_self_aug = temp_subgoals[idx][3]
                             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
                             for i in range(len(env_storage[idx])):
-                                if isinstance(self.augment_replay_buffer, MultiWorkerReplayBuffer) or isinstance(self.augment_replay_buffer, PrioritizedMultiWorkerReplayBuffer):
+                                if isinstance(self.augment_replay_buffer.replay_buffer, MultiWorkerReplayBuffer) \
+                                        or isinstance(self.augment_replay_buffer.replay_buffer, PrioritizedMultiWorkerReplayBuffer):
                                     self.augment_replay_buffer.add(
                                         *([np.expand_dims(item, axis=0) for item in env_storage[idx][i]]))
                                 else:
@@ -840,7 +854,8 @@ class SAC_augment(OffPolicyRLModel):
                                     temp = list(transitions[i])
                                     temp[-1] = True
                                     transitions[i] = tuple(temp)
-                                if isinstance(self.augment_replay_buffer, MultiWorkerReplayBuffer) or isinstance(self.augment_replay_buffer, PrioritizedMultiWorkerReplayBuffer):
+                                if isinstance(self.augment_replay_buffer.replay_buffer, MultiWorkerReplayBuffer) \
+                                        or isinstance(self.augment_replay_buffer.replay_buffer, PrioritizedMultiWorkerReplayBuffer):
                                     self.augment_replay_buffer.add(
                                         *([np.expand_dims(item, axis=0) for item in transitions[i]]))
                                 else:
