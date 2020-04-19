@@ -277,13 +277,13 @@ class SAC_augment(OffPolicyRLModel):
                     policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
                     self.is_demo_ph = tf.placeholder(tf.float32, shape=(None,), name='is_demo')
                     # Behavior cloning loss
-                    # policy_imitation_loss = tf.reduce_mean(
-                    #     self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
-                    #                                      axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
-                    # Self imitation style loss
-                    self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                     policy_imitation_loss = tf.reduce_mean(
-                        self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
+                        self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
+                                                         axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
+                    # Self imitation style loss
+                    # self.logpac_op = logp_ac = self.logpac(self.actions_ph)
+                    # policy_imitation_loss = tf.reduce_mean(
+                    #     self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -557,9 +557,11 @@ class SAC_augment(OffPolicyRLModel):
                 if self.curriculum and step % 3000 == 0:
                     if 'FetchStack' in self.env.env.get_attr('spec')[0].id:
                         # Stacking
-                        pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.n_object, 1.0)
+                        pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.n_object, 1.0,
+                                init_on_table=(self.env.env.get_attr('spec')[0].id == 'FetchStack-v2'))
                         pp_sr_buf.append(pp_sr)
-                        stack_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.n_object, 0.0)
+                        stack_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.n_object, 0.0,
+                                init_on_table=(self.env.env.get_attr('spec')[0].id == 'FetchStack-v2'))
                         stack_sr_buf.append(stack_sr)
                         print('Pick-and-place success rate', np.mean(pp_sr_buf))
                         if self.sequential:

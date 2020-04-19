@@ -8,7 +8,7 @@ from utils.wrapper import DoneOnSuccessWrapper
 from gym.wrappers import FlattenDictWrapper
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from masspoint_env import MasspointPushDoubleObstacleEnv
-from fetch_stack import FetchPureStackEnv, FetchStackEnv
+from fetch_stack import FetchStackEnv, FetchStackEnv_v2
 import gym
 import matplotlib.pyplot as plt
 from stable_baselines.bench import Monitor
@@ -32,6 +32,8 @@ ENTRY_POINT = {
     'MasspointPushDoubleObstacleUnlimit-v1': MasspointPushDoubleObstacleEnv,
     'FetchStack-v1': FetchStackEnv,
     'FetchStackUnlimit-v1': FetchStackEnv,
+    'FetchStack-v2': FetchStackEnv_v2,
+    'FetchStackUnlimit-v2': FetchStackEnv_v2,
     }
 
 hard_test = False
@@ -106,7 +108,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
 
 
 def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None, n_object=None):
-    if env_id == 'FetchStack-v1':
+    if env_id == 'FetchStack-v1' or env_id == 'FetchStack-v2':
         return dict(random_box=True,
                     random_ratio=random_ratio,
                     random_gripper=True,
@@ -231,16 +233,17 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 train_kwargs['gamma'] = 0.98
                 train_kwargs['batch_size'] = 256
             elif 'MasspointPushDoubleObstacle' in env_name:
-                train_kwargs['ent_coef'] = "auto"
+                train_kwargs['ent_coef'] = 0.1
                 train_kwargs['gamma'] = 0.99
-                train_kwargs['batch_size'] = 256
-                train_kwargs['random_exploration'] = 0.2
+                train_kwargs['batch_size'] = 512
+                train_kwargs['random_exploration'] = 0.1
             policy_kwargs = {}
 
             def callback(_locals, _globals):
                 if _locals['step'] % int(1e3) == 0:
                     if 'FetchStack' in env_name:
-                        mean_eval_reward = stack_eval_model(eval_env, _locals["self"])
+                        mean_eval_reward = stack_eval_model(eval_env, _locals["self"],
+                                                            init_on_table=(env_name=='FetchStack-v2'))
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
                     log_eval(_locals['self'].num_timesteps, mean_eval_reward)
@@ -268,7 +271,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 policy_kwargs["feature_extraction"] = "attention_mlp"
             elif 'MasspointPushDoubleObstacle' in env_name:
                 policy_kwargs["feature_extraction"] = "attention_mlp_particle"
-                policy_kwargs["layers"] = [256, 256, 256, 256]
+                policy_kwargs["layers"] = [256, 256]
             policy_kwargs["layer_norm"] = True
         elif policy == "CustomSACPolicy":
             policy_kwargs["layer_norm"] = True
@@ -299,13 +302,11 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     if play and rank == 0:
         assert load_path is not None
         model = HER_HACK.load(load_path, env=env)
-        if env_kwargs['max_episode_steps'] is None:
-            env_kwargs['max_episode_steps'] = 500
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
         if 'FetchStack' in env_name:
-            env.env_method('set_task_array', [[(env.get_attr('n_object')[0], 3)]])
+            env.env_method('set_task_array', [[(env.get_attr('n_object')[0], 0)]])
             obs = env.reset()
             while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
@@ -324,9 +325,13 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)
                          + ', task: ' + tasks[np.argmax(obs['observation'][0][-2:])])
             images.append(img)
-            action, _ = model.predict(obs)
+            action, _ = model.predict(obs, deterministic=True)
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
+            adv, logpac = model.model.sess.run([model.model.step_ops[4] - model.model.step_ops[6], model.model.logpac_op],
+                                      {model.model.observations_ph: np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']], axis=-1),
+                                       model.model.actions_ph: action})
+            print(adv, logpac)
             obs, reward, done, _ = env.step(action)
             episode_reward += reward
             frame_idx += 1
@@ -335,7 +340,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             else:
                 plt.pause(0.02)
             if done:
-                print('episode_reward', episode_reward, frame_idx)
+                print('episode_reward', episode_reward)
                 obs = env.reset()
                 if 'FetchStack' in env_name:
                     while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or \

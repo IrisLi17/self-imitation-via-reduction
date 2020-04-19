@@ -467,9 +467,11 @@ class SAC_parallel(OffPolicyRLModel):
                 if self.curriculum and step % 3000 == 0:
                     if 'FetchStack' in self.env.env.get_attr('spec')[0].id:
                         # Stacking
-                        pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 1.0)
+                        pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 1.0,
+                                           init_on_table=(self.env.env.get_attr('spec')[0].id == 'FetchStack-v2'))
                         pp_sr_buf.append(pp_sr)
-                        stack_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 0.0)
+                        stack_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 0.0,
+                                              init_on_table=(self.env.env.get_attr('spec')[0].id == 'FetchStack-v2'))
                         stack_sr_buf.append(stack_sr)
                         print('Pick-and-place success rate', np.mean(pp_sr_buf))
                         if self.sequential:
