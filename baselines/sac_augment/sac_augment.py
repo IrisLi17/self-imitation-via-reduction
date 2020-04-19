@@ -367,8 +367,8 @@ class SAC_augment(OffPolicyRLModel):
     def _train_step(self, step, writer, learning_rate):
         # Sample a batch from the replay buffer
         sample_aug_ratio = len(self.augment_replay_buffer) / (len(self.augment_replay_buffer) + len(self.replay_buffer))
-        if len(self.augment_replay_buffer) > 0:
-        # if self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
+        # if len(self.augment_replay_buffer) > 0:
+        if int(self.batch_size * sample_aug_ratio) > 0 and self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
             if self.priority_buffer:
                 batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs, batch1_weights, batch1_idxes = self.replay_buffer.sample(self.batch_size - int(self.batch_size * sample_aug_ratio), beta=0.4)
                 batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs, batch2_weights, batch2_idxes = self.augment_replay_buffer.sample(int(self.batch_size * sample_aug_ratio), beta=0.4)
@@ -438,8 +438,8 @@ class SAC_augment(OffPolicyRLModel):
             priorities = batch_rewards + (1 - batch_dones) * self.gamma * value_target - qf1
             priorities = np.abs(priorities) + 1e-4
             priorities = np.squeeze(priorities, axis=-1).tolist()
-            if len(self.augment_replay_buffer) > 0:
-            # if self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
+            # if len(self.augment_replay_buffer) > 0:
+            if int(self.batch_size * sample_aug_ratio) > 0 and self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
                 self.replay_buffer.update_priorities(batch1_idxes, priorities[:len(batch1_idxes)])
                 self.augment_replay_buffer.update_priorities(batch2_idxes, priorities[len(batch1_idxes):])
             else:
