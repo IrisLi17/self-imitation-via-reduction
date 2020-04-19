@@ -165,7 +165,8 @@ class SAC_parallel(OffPolicyRLModel):
 
                 if self.priority_buffer:
                     self.replay_buffer = PrioritizedMultiWorkerReplayBuffer(self.buffer_size, self.alpha,
-                                                                            num_workers=self.env.env.num_envs)
+                                                                            num_workers=self.env.env.num_envs,
+                                                                            gamma=self.gamma)
                 else:
                     print(self.n_envs)
                     self.replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=self.n_envs, gamma=self.gamma)
@@ -269,8 +270,8 @@ class SAC_parallel(OffPolicyRLModel):
                     # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
                     policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
                     # Add optional SIL loss
-                    self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                     if self.sil:
+                        self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                         policy_kl_loss += self.sil_coef * tf.reduce_mean(
                             -logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn)))
                         # policy_kl_loss += self.sil_coef * tf.reduce_mean(
@@ -467,9 +468,11 @@ class SAC_parallel(OffPolicyRLModel):
                 if self.curriculum and step % 3000 == 0:
                     if 'FetchStack' in self.env.env.get_attr('spec')[0].id:
                         # Stacking
-                        pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 1.0)
+                        pp_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 1.0,
+                                           init_on_table=(self.env.env.get_attr('spec')[0].id == 'FetchStack-v2'))
                         pp_sr_buf.append(pp_sr)
-                        stack_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 0.0)
+                        stack_sr = eval_model(self.eval_env, self, current_max_nobject if self.sequential else self.env.env.get_attr('n_object')[0], 0.0,
+                                              init_on_table=(self.env.env.get_attr('spec')[0].id == 'FetchStack-v2'))
                         stack_sr_buf.append(stack_sr)
                         print('Pick-and-place success rate', np.mean(pp_sr_buf))
                         if self.sequential:
