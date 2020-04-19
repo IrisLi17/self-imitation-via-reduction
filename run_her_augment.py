@@ -162,7 +162,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             def callback(_locals, _globals):
                 if _locals['step'] % int(1e3) == 0:
                     if 'FetchStack' in env_name:
-                        mean_eval_reward = stack_eval_model(eval_env, _locals["self"])
+                        mean_eval_reward = stack_eval_model(eval_env, _locals["self"],
+                                                            init_on_table=(env_name=='FetchStack-v2'))
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
                     log_eval(_locals['self'].num_timesteps, mean_eval_reward)

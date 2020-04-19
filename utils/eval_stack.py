@@ -30,10 +30,13 @@ def pp_eval_model(eval_env, model):
     return np.mean(ep_successes)
 
 
-def eval_model(env, model, max_nobject, random_ratio):
+def eval_model(env, model, max_nobject, random_ratio, init_on_table=False):
     # random_ratio 0: stack only, 1: pick and place only
     temp = env.unwrapped.task_array.copy()
-    env.unwrapped.task_array = [(max_nobject, i) for i in range(max_nobject)]
+    if init_on_table:
+        env.unwrapped.task_array = [(max_nobject, i) for i in range(min(2, max_nobject))]
+    else:
+        env.unwrapped.task_array = [(max_nobject, i) for i in range(max_nobject)]
     env.unwrapped.random_ratio = random_ratio
     n_episode = 0
     ep_successes = []
