@@ -12,6 +12,7 @@ from stable_baselines.common import tf_util, OffPolicyRLModel, SetVerbosity, Ten
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 from utils.replay_buffer import MultiWorkerReplayBuffer, PrioritizedMultiWorkerReplayBuffer, compute_priority
+from utils.replay_buffer import DoublePrioritizedReplayWrapper
 from stable_baselines.ppo2.ppo2 import safe_mean, get_schedule_fn
 from stable_baselines.sac.policies import SACPolicy
 from stable_baselines import logger
@@ -113,6 +114,7 @@ class SAC_augment(OffPolicyRLModel):
         self.graph = None
         self.replay_buffer = None
         self.augment_replay_buffer = None
+        self.combined_replay_buffer = None
         self.episode_reward = None
         self.sess = None
         self.tensorboard_log = tensorboard_log
@@ -328,7 +330,7 @@ class SAC_augment(OffPolicyRLModel):
                     with tf.control_dependencies([policy_train_op]):
                         train_values_op = value_optimizer.minimize(values_losses, var_list=values_params)
 
-                        self.infos_names = ['policy_loss', 'qf1_loss', 'qf2_loss', 'value_loss', 'entropy']
+                        self.infos_names = ['policy_loss', 'qf1_loss', 'qf2_loss', 'value_loss', 'entropy', 'demo_ratio']
                         # All ops to call during one training step
                         self.step_ops = [policy_loss, qf1_loss, qf2_loss,
                                          value_loss, qf1, qf2, value_fn, logp_pi,
@@ -365,38 +367,81 @@ class SAC_augment(OffPolicyRLModel):
                 self.summary = tf.summary.merge_all()
 
     def _train_step(self, step, writer, learning_rate):
-        # Sample a batch from the replay buffer
-        sample_aug_ratio = len(self.augment_replay_buffer) / (len(self.augment_replay_buffer) + len(self.replay_buffer))
-        # if len(self.augment_replay_buffer) > 0:
-        if int(self.batch_size * sample_aug_ratio) > 0 and self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
-            if self.priority_buffer:
-                batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs, batch1_weights, batch1_idxes = self.replay_buffer.sample(self.batch_size - int(self.batch_size * sample_aug_ratio), beta=0.4)
-                batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs, batch2_weights, batch2_idxes = self.augment_replay_buffer.sample(int(self.batch_size * sample_aug_ratio), beta=0.4)
-            else:
-                batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs = self.replay_buffer.sample(self.batch_size - int(self.batch_size * sample_aug_ratio))
-                batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs = self.augment_replay_buffer.sample(int(self.batch_size * sample_aug_ratio))
-                batch1_weights = np.ones(batch1_obs.shape[0])
-                batch2_weights = np.ones(batch2_obs.shape[0])
-            batch_obs = np.concatenate([batch1_obs, batch2_obs])
-            batch_actions = np.concatenate([batch1_actions, batch2_actions])
-            batch_rewards = np.concatenate([batch1_rewards, batch2_rewards])
-            batch_next_obs = np.concatenate([batch1_next_obs, batch2_next_obs])
-            batch_dones = np.concatenate([batch1_dones, batch2_dones])
-            batch_sumrs = np.concatenate([batch1_sumrs, batch2_sumrs])
-            batch_weights = np.concatenate([batch1_weights, batch2_weights])
-            batch_is_demo = np.concatenate([np.zeros(batch1_obs.shape[0], dtype=np.float32),
-                                            np.ones(batch2_obs.shape[0], dtype=np.float32)])
-            # print(batch_obs.shape, batch_actions.shape, batch_rewards.shape)
+        # # Sample a batch from the replay buffer
+        # sample_aug_ratio = len(self.augment_replay_buffer) / (len(self.augment_replay_buffer) + len(self.replay_buffer))
+        # # if len(self.augment_replay_buffer) > 0:
+        # if int(self.batch_size * sample_aug_ratio) > 0 and self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
+        #     if self.priority_buffer:
+        #         batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs, batch1_weights, batch1_idxes = self.replay_buffer.sample(self.batch_size - int(self.batch_size * sample_aug_ratio), beta=0.4)
+        #         batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs, batch2_weights, batch2_idxes = self.augment_replay_buffer.sample(int(self.batch_size * sample_aug_ratio), beta=0.4)
+        #     else:
+        #         batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs = self.replay_buffer.sample(self.batch_size - int(self.batch_size * sample_aug_ratio))
+        #         batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs = self.augment_replay_buffer.sample(int(self.batch_size * sample_aug_ratio))
+        #         batch1_weights = np.ones(batch1_obs.shape[0])
+        #         batch2_weights = np.ones(batch2_obs.shape[0])
+        #     batch_obs = np.concatenate([batch1_obs, batch2_obs])
+        #     batch_actions = np.concatenate([batch1_actions, batch2_actions])
+        #     batch_rewards = np.concatenate([batch1_rewards, batch2_rewards])
+        #     batch_next_obs = np.concatenate([batch1_next_obs, batch2_next_obs])
+        #     batch_dones = np.concatenate([batch1_dones, batch2_dones])
+        #     batch_sumrs = np.concatenate([batch1_sumrs, batch2_sumrs])
+        #     batch_weights = np.concatenate([batch1_weights, batch2_weights])
+        #     batch_is_demo = np.concatenate([np.zeros(batch1_obs.shape[0], dtype=np.float32),
+        #                                     np.ones(batch2_obs.shape[0], dtype=np.float32)])
+        #     # print(batch_obs.shape, batch_actions.shape, batch_rewards.shape)
+        # else:
+        #     if self.priority_buffer:
+        #         batch = self.replay_buffer.sample(self.batch_size, beta=0.4)
+        #         batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs, batch_weights, batch_idxes = batch
+        #     else:
+        #         batch = self.replay_buffer.sample(self.batch_size)
+        #         batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs = batch
+        #         batch_weights = np.ones(batch_obs.shape[0])
+        #     batch_is_demo = np.zeros(batch_obs.shape[0], dtype=np.float32)
+
+        def safe_concat(arr1, arr2):
+            if len(arr1) == 0:
+                return arr2
+            if len(arr2) == 0:
+                return arr1
+            return np.concatenate([arr1, arr2])
+
+        if self.priority_buffer:
+            batch1, batch2 = self.combined_replay_buffer.sample(self.batch_size, beta=0.4)
+            batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs, batch1_weights, batch1_idxes = batch1
+            batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs, batch2_weights, batch2_idxes = batch2
+            batch_obs = safe_concat(batch1_obs, batch2_obs)
+            batch_actions = safe_concat(batch1_actions, batch2_actions)
+            batch_rewards = safe_concat(batch1_rewards, batch2_rewards)
+            batch_next_obs = safe_concat(batch1_next_obs, batch2_next_obs)
+            batch_dones = safe_concat(batch1_dones, batch2_dones)
+            batch_sumrs = safe_concat(batch1_sumrs, batch2_sumrs)
+            batch_weights = safe_concat(batch1_weights, batch2_weights)
+            batch_is_demo = safe_concat(np.zeros(batch1_obs.shape[0], dtype=np.float32),
+                                        np.ones(batch2_obs.shape[0], dtype=np.float32))
+            demo_ratio = batch2_obs.shape[0] / batch_obs.shape[0]
         else:
-            if self.priority_buffer:
-                batch = self.replay_buffer.sample(self.batch_size, beta=0.4)
-                batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs, batch_weights, batch_idxes = batch
+            # Uniform sampling
+            if self.augment_replay_buffer.can_sample(self.batch_size // 2):
+                batch1 = self.replay_buffer.sample(self.batch_size // 2)
+                batch2 = self.augment_replay_buffer.sample(self.batch_size // 2)
+                batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs = batch1
+                batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs = batch2
+                batch_obs = safe_concat(batch1_obs, batch2_obs)
+                batch_actions = safe_concat(batch1_actions, batch2_actions)
+                batch_rewards = safe_concat(batch1_rewards, batch2_rewards)
+                batch_next_obs = safe_concat(batch1_next_obs, batch2_next_obs)
+                batch_dones = safe_concat(batch1_dones, batch2_dones)
+                batch_sumrs = safe_concat(batch1_sumrs, batch2_sumrs)
+                batch_is_demo = safe_concat(np.zeros(batch1_obs.shape[0], dtype=np.float32),
+                                            np.ones(batch2_obs.shape[0], dtype=np.float32))
+                demo_ratio = batch2_obs.shape[0] / batch_obs.shape[0]
             else:
                 batch = self.replay_buffer.sample(self.batch_size)
                 batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs = batch
-                batch_weights = np.ones(batch_obs.shape[0])
-            batch_is_demo = np.zeros(batch_obs.shape[0], dtype=np.float32)
-
+                batch_is_demo = np.zeros(batch_obs.shape[0], dtype=np.float32)
+                demo_ratio = 0.0
+            batch_weights = np.ones(batch_obs.shape[0])
         feed_dict = {
             self.observations_ph: batch_obs,
             self.actions_ph: batch_actions,
@@ -438,18 +483,22 @@ class SAC_augment(OffPolicyRLModel):
             priorities = batch_rewards + (1 - batch_dones) * self.gamma * value_target - qf1
             priorities = np.abs(priorities) + 1e-4
             priorities = np.squeeze(priorities, axis=-1).tolist()
-            # if len(self.augment_replay_buffer) > 0:
-            if int(self.batch_size * sample_aug_ratio) > 0 and self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
+            # # if len(self.augment_replay_buffer) > 0:
+            # if int(self.batch_size * sample_aug_ratio) > 0 and self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
+            #     self.replay_buffer.update_priorities(batch1_idxes, priorities[:len(batch1_idxes)])
+            #     self.augment_replay_buffer.update_priorities(batch2_idxes, priorities[len(batch1_idxes):])
+            # else:
+            #     self.replay_buffer.update_priorities(batch_idxes, priorities)
+            if len(batch1_idxes):
                 self.replay_buffer.update_priorities(batch1_idxes, priorities[:len(batch1_idxes)])
-                self.augment_replay_buffer.update_priorities(batch2_idxes, priorities[len(batch1_idxes):])
-            else:
-                self.replay_buffer.update_priorities(batch_idxes, priorities)
+            if len(batch2_idxes):
+                self.augment_replay_buffer.update_priorities(batch2_idxes, priorities[-len(batch2_idxes):])
 
         if self.log_ent_coef is not None:
             ent_coef_loss, ent_coef = values[-3:-1]
-            return policy_loss, qf1_loss, qf2_loss, value_loss, entropy, ent_coef_loss, ent_coef
+            return policy_loss, qf1_loss, qf2_loss, value_loss, entropy, demo_ratio, ent_coef_loss, ent_coef
 
-        return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
+        return policy_loss, qf1_loss, qf2_loss, value_loss, entropy, demo_ratio
 
     def learn(self, total_timesteps, callback=None, seed=None,
               log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None):
@@ -462,6 +511,7 @@ class SAC_augment(OffPolicyRLModel):
             if self.priority_buffer:
                 self.replay_buffer.set_model(self)
                 self.augment_replay_buffer.set_model(self)
+                self.combined_replay_buffer = DoublePrioritizedReplayWrapper(self.replay_buffer.replay_buffer, self.augment_replay_buffer.replay_buffer)
         # self.augment_replay_buffer = self.augment_replay_buffer
 
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \

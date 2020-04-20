@@ -1,5 +1,6 @@
 from stable_baselines.deepq import ReplayBuffer, PrioritizedReplayBuffer
 import numpy as np
+import random
 
 
 class SumRReplayBuffer(ReplayBuffer):
@@ -95,6 +96,57 @@ class SumRPrioritizedReplayBuffer(PrioritizedReplayBuffer, SumRReplayBuffer):
         weights = np.array(weights)
         encoded_sample = SumRReplayBuffer._encode_sample(self, idxes)
         return tuple(list(encoded_sample) + [weights, idxes])
+
+
+class DoublePrioritizedReplayWrapper(object):
+    def __init__(self, buffer1, buffer2):
+        assert isinstance(buffer1, SumRPrioritizedReplayBuffer)
+        assert isinstance(buffer2, SumRPrioritizedReplayBuffer)
+        self.buffer1 = buffer1
+        self.buffer2 = buffer2
+        self.min_tree_operation = buffer1._it_min._operation
+        self.sum_tree_operation = buffer1._it_sum._operation
+
+    def _sample_proportional(self, batch_size):
+        res1, res2 = [], []
+        _sum1 = self.buffer1._it_sum.sum(0, len(self.buffer1._storage) - 1)
+        _sum2 = self.buffer2._it_sum.sum(0, len(self.buffer2._storage) - 1)
+        for i in range(batch_size):
+            mass = random.random() * (_sum1 + _sum2)
+            if mass < _sum1:
+                idx = self.buffer1._it_sum.find_prefixsum_idx(mass)
+                res1.append(idx)
+            else:
+                idx = self.buffer2._it_sum.find_prefixsum_idx(mass - _sum1)
+                res2.append(idx)
+        return res1, res2
+
+    def sample(self, batch_size, beta=0):
+        assert beta > 0
+
+        idxes1, idxes2 = self._sample_proportional(batch_size)
+
+        weights1, weights2 = [],  []
+        buf_idxes = []
+        p_min = self.min_tree_operation(self.buffer1._it_min.min(), self.buffer2._it_min.min()) / self.sum_tree_operation(self.buffer1._it_sum.sum(), self.buffer2._it_sum.sum())
+        max_weight = (p_min * (len(self.buffer1._storage) + len(self.buffer2._storage))) ** (-beta)
+
+        for idx in idxes1:
+            p_sample = self.buffer1._it_sum[idx] / self.buffer1._it_sum.sum()
+            weight = (p_sample * len(self.buffer1._storage)) ** (-beta)
+            weights1.append(weight / max_weight)
+            buf_idxes.append(0)
+        for idx in idxes2:
+            p_sample = self.buffer2._it_sum[idx] / self.buffer2._it_sum.sum()
+            weight = (p_sample * len(self.buffer2._storage)) ** (-beta)
+            weights2.append(weight / max_weight)
+            buf_idxes.append(1)
+
+        weights1 = np.array(weights1)
+        weights2 = np.array(weights2)
+        encoded_sample1 = self.buffer1._encode_sample(idxes1)
+        encoded_sample2 = self.buffer2._encode_sample(idxes2)
+        return tuple(list(encoded_sample1) + [weights1, idxes1]), tuple(list(encoded_sample2) + [weights2, idxes2])
 
 
 class MultiWorkerReplayBuffer(SumRReplayBuffer):
