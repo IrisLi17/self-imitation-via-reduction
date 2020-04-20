@@ -127,20 +127,17 @@ class DoublePrioritizedReplayWrapper(object):
         idxes1, idxes2 = self._sample_proportional(batch_size)
 
         weights1, weights2 = [],  []
-        buf_idxes = []
         p_min = self.min_tree_operation(self.buffer1._it_min.min(), self.buffer2._it_min.min()) / self.sum_tree_operation(self.buffer1._it_sum.sum(), self.buffer2._it_sum.sum())
         max_weight = (p_min * (len(self.buffer1._storage) + len(self.buffer2._storage))) ** (-beta)
 
         for idx in idxes1:
-            p_sample = self.buffer1._it_sum[idx] / self.buffer1._it_sum.sum()
-            weight = (p_sample * len(self.buffer1._storage)) ** (-beta)
+            p_sample = self.buffer1._it_sum[idx] / (self.buffer1._it_sum.sum() + self.buffer2._it_sum.sum())
+            weight = (p_sample * (len(self.buffer1._storage) + len(self.buffer2._storage))) ** (-beta)
             weights1.append(weight / max_weight)
-            buf_idxes.append(0)
         for idx in idxes2:
-            p_sample = self.buffer2._it_sum[idx] / self.buffer2._it_sum.sum()
-            weight = (p_sample * len(self.buffer2._storage)) ** (-beta)
+            p_sample = self.buffer2._it_sum[idx] / (self.buffer1._it_sum.sum() + self.buffer2._it_sum.sum())
+            weight = (p_sample * (len(self.buffer1._storage) + len(self.buffer2._storage))) ** (-beta)
             weights2.append(weight / max_weight)
-            buf_idxes.append(1)
 
         weights1 = np.array(weights1)
         weights2 = np.array(weights2)
