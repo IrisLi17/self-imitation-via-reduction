@@ -109,8 +109,8 @@ class DoublePrioritizedReplayWrapper(object):
 
     def _sample_proportional(self, batch_size):
         res1, res2 = [], []
-        _sum1 = self.buffer1._it_sum.sum(0, len(self.buffer1._storage) - 1)
-        _sum2 = self.buffer2._it_sum.sum(0, len(self.buffer2._storage) - 1)
+        _sum1 = self.buffer1._it_sum.sum()
+        _sum2 = self.buffer2._it_sum.sum()
         for i in range(batch_size):
             mass = random.random() * (_sum1 + _sum2)
             if mass < _sum1:
