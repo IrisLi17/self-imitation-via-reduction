@@ -310,6 +310,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             obs = env.reset()
             while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
+        elif 'FetchPushWallObstacle' in env_name:
+            while np.argmax(obs['desired_goal'][0][3:]) != 0:
+                obs = env.reset()
         print('goal', obs['desired_goal'][0], 'obs', obs['observation'][0])
         episode_reward = 0.0
         images = []
@@ -328,10 +331,10 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             action, _ = model.predict(obs, deterministic=True)
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
-            adv, logpac = model.model.sess.run([model.model.step_ops[4] - model.model.step_ops[6], model.model.logpac_op],
-                                      {model.model.observations_ph: np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']], axis=-1),
-                                       model.model.actions_ph: action})
-            print(adv, logpac)
+            # adv, logpac = model.model.sess.run([model.model.step_ops[4] - model.model.step_ops[6], model.model.logpac_op],
+            #                           {model.model.observations_ph: np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']], axis=-1),
+            #                            model.model.actions_ph: action})
+            # print(adv, logpac)
             obs, reward, done, _ = env.step(action)
             episode_reward += reward
             frame_idx += 1
@@ -345,6 +348,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 if 'FetchStack' in env_name:
                     while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or \
                                     env.get_attr('task_mode')[0] != 1:
+                        obs = env.reset()
+                elif 'FetchPushWallObstacle' in env_name:
+                    while np.argmax(obs['desired_goal'][0][3:]) != 0:
                         obs = env.reset()
                 print('goal', obs['desired_goal'][0])
                 episode_reward = 0.0
