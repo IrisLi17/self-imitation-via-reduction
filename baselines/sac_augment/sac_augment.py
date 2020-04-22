@@ -277,15 +277,15 @@ class SAC_augment(OffPolicyRLModel):
                     # Compute the policy loss
                     # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
                     policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
-                    self.is_demo_ph = tf.placeholder(tf.float32, shape=(None,), name='is_demo')
+                    # self.is_demo_ph = tf.placeholder(tf.float32, shape=(None,), name='is_demo')
                     # Behavior cloning loss
-                    policy_imitation_loss = tf.reduce_mean(
-                        self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
-                                                         axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
-                    # Self imitation style loss
-                    # self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                     # policy_imitation_loss = tf.reduce_mean(
-                    #     self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
+                    #     self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
+                    #                                      axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
+                    # Self imitation style loss
+                    self.logpac_op = logp_ac = self.logpac(self.actions_ph)
+                    policy_imitation_loss = tf.reduce_mean(
+                        (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
