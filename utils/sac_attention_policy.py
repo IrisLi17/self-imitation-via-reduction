@@ -26,7 +26,7 @@ class AttentionPolicy(SACPolicy):
 
     def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, layers=None,
                  cnn_extractor=None, feature_extraction="cnn", n_object=2, reg_weight=0.0,
-                 layer_norm=False, act_fun=tf.nn.relu, **kwargs):
+                 layer_norm=False, act_fun=tf.nn.relu, fix_logstd=None, **kwargs):
         super(AttentionPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                               reuse=reuse, scale=(feature_extraction == "cnn"))
 
@@ -44,6 +44,7 @@ class AttentionPolicy(SACPolicy):
         self.reg_weight = reg_weight
         self.entropy = None
         self.n_object = n_object
+        self.fix_logstd = fix_logstd
 
         assert len(layers) >= 1, "Error: must have at least one hidden layer for the policy."
 
@@ -71,9 +72,13 @@ class AttentionPolicy(SACPolicy):
             pi_h = mlp(pi_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
 
             self.act_mu = mu_ = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
-            # Important difference with SAC and other algo such as PPO:
-            # the std depends on the state, so we cannot use stable_baselines.common.distribution
-            log_std = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
+            if self.fix_logstd is not None:
+                assert isinstance(self.fix_logstd, float)
+                log_std = tf.constant(self.fix_logstd, dtype=tf.float32, shape=self.ac_space.shape[0])
+            else:
+                # Important difference with SAC and other algo such as PPO:
+                # the std depends on the state, so we cannot use stable_baselines.common.distribution
+                log_std = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
 
         # Regularize policy output (not used for now)
         # reg_loss = self.reg_weight * 0.5 * tf.reduce_mean(log_std ** 2)

@@ -126,7 +126,7 @@ def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None,
                     random_ratio=random_ratio,
                     random_gripper=True,
                     max_episode_steps=100, )
-    elif env_id == 'MasspointPushDoubleObstacle-v1':
+    elif env_id == 'MasspointPushDoubleObstacle-v1' or env_id == 'MasspointPushDoubleObstacle-v2':
         return dict(random_box=True,
                     random_ratio=random_ratio,
                     random_pusher=True,
@@ -284,6 +284,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             elif 'MasspointPushDoubleObstacle' in env_name:
                 policy_kwargs["feature_extraction"] = "attention_mlp_particle"
                 policy_kwargs["layers"] = [256, 256, 256, 256]
+                policy_kwargs["fix_logstd"] = -2.0
             policy_kwargs["layer_norm"] = True
         elif policy == "CustomSACPolicy":
             policy_kwargs["layer_norm"] = True
