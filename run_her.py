@@ -323,7 +323,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             obs = env.reset()
             while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
-        elif 'MasspointPushDoubleObstacle' in env_name:
+        elif 'MasspointPushDoubleObstacle' in env_name or 'FetchPushWallObstacle' in env_name:
             while np.argmax(obs['desired_goal'][0][3:]) != 0:
                 obs = env.reset()
         print('goal', obs['desired_goal'][0], 'obs', obs['observation'][0])
@@ -362,7 +362,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                     while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or \
                                     env.get_attr('task_mode')[0] != 1:
                         obs = env.reset()
-                elif 'MasspointPushDoubleObstacle' in env_name:
+                elif 'MasspointPushDoubleObstacle' in env_name or 'FetchPushWallObstacle' in env_name:
                     while np.argmax(obs['desired_goal'][0][3:]) != 0:
                         obs = env.reset()
                 print('goal', obs['desired_goal'][0])
