@@ -185,7 +185,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         class CustomSACPolicy(SACPolicy):
             def __init__(self, *args, **kwargs):
                 super(CustomSACPolicy, self).__init__(*args, **kwargs,
-                                                    layers=[256, 256, 256, 256],
+                                                    layers=[256, 256] if 'MasspointPushDoubleObstacle' in env_name else [256, 256, 256, 256],
                                                     feature_extraction="mlp")
         register_policy('CustomSACPolicy', CustomSACPolicy)
         from utils.sac_attention_policy import AttentionPolicy
