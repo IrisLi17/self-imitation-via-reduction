@@ -74,7 +74,7 @@ class AttentionPolicy(SACPolicy):
             self.act_mu = mu_ = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
             if self.fix_logstd is not None:
                 assert isinstance(self.fix_logstd, float)
-                log_std = tf.constant(self.fix_logstd, dtype=tf.float32, shape=self.ac_space.shape[0])
+                log_std = tf.constant(self.fix_logstd, dtype=tf.float32, shape=self.ac_space.shape)
             else:
                 # Important difference with SAC and other algo such as PPO:
                 # the std depends on the state, so we cannot use stable_baselines.common.distribution
