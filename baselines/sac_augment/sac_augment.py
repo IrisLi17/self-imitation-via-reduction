@@ -277,15 +277,15 @@ class SAC_augment(OffPolicyRLModel):
                     # Compute the policy loss
                     # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
                     policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
-                    self.is_demo_ph = tf.placeholder(tf.float32, shape=(None,), name='is_demo')
+                    # self.is_demo_ph = tf.placeholder(tf.float32, shape=(None,), name='is_demo')
                     # Behavior cloning loss
-                    policy_imitation_loss = tf.reduce_mean(
-                        self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
-                                                         axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
-                    # Self imitation style loss
-                    # self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                     # policy_imitation_loss = tf.reduce_mean(
-                    #     self.is_demo_ph * (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
+                    #     self.is_demo_ph * tf.reduce_mean(tf.square(self.deterministic_action - self.actions_ph),
+                    #                                      axis=-1) * tf.stop_gradient(tf.cast(tf.greater(qf1, qf1_pi), tf.float32)))
+                    # Self imitation style loss
+                    self.logpac_op = logp_ac = self.logpac(self.actions_ph)
+                    policy_imitation_loss = tf.reduce_mean(
+                        (-logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn))))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -1067,6 +1067,8 @@ class SAC_augment(OffPolicyRLModel):
             for object_idx in range(self.n_object):  # Also search self position
                 obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
                 # Path2
+                if self.env_id is 'MasspointPushDoubleObstacle-v2':
+                    sample_obs[0: 2] = obstacle_xy
                 sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
                 sample_obs[:, 3*(object_idx+1+self.n_object):3*(object_idx+1+self.n_object)+2] \
                     = sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] - sample_obs[:, 0:2]

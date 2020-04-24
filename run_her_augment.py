@@ -147,7 +147,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             if n_workers == 1:
                 pass
                 # del train_kwargs['priority_buffer']
-            if 'FetchStack' in env_name or 'MasspointPushDoubleObstacle' in env_name:
+            if 'FetchStack' in env_name:
                 train_kwargs['ent_coef'] = "auto"
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
@@ -157,6 +157,12 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
                 train_kwargs['batch_size'] = 256
+            elif 'MasspointPushDoubleObstacle' in env_name:
+                train_kwargs['buffer_size'] = int(5e5)
+                train_kwargs['ent_coef'] = "auto"
+                train_kwargs['gamma'] = 0.99
+                train_kwargs['batch_size'] = 256
+                train_kwargs['random_exploration'] = 0.2
             policy_kwargs = {}
 
             def callback(_locals, _globals):
@@ -190,7 +196,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 policy_kwargs["feature_extraction"] = "attention_mlp"
             elif 'MasspointPushDoubleObstacle' in env_name:
                 policy_kwargs["feature_extraction"] = "attention_mlp_particle"
-                policy_kwargs["layers"] = [256, 256]
+                policy_kwargs["layers"] = [256, 256, 256, 256]
             policy_kwargs["layer_norm"] = True
         elif policy == "CustomSACPolicy":
             policy_kwargs["layer_norm"] = True

@@ -3,6 +3,7 @@ import copy
 from gym import utils
 from masspoint_base import MasspointPushEnv
 import gym.envs.robotics.utils as robot_utils
+from gym.envs.robotics import rotations
 import numpy as np
 
 
@@ -535,6 +536,131 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
                 and abs(pos[1] - 2.5) > 0.5:
             return True
         return False
+
+
+class MasspointPushDoubleObstacleEnv_v2(MasspointPushDoubleObstacleEnv):
+    def __init__(self, reward_type='sparse', random_box=True,
+                 random_ratio=1.0, random_pusher=False):
+        XML_PATH = MODEL_XML_PATH
+        initial_qpos = {
+            'masspoint:slidex': 2.5,
+            'masspoint:slidey': 2.5,
+            'masspoint:slidez': 0.15,
+            # 'object0:slidex': 0.0,
+            # 'object0:slidey': 0.0,
+            'object0:slidez': 0.15,
+            # 'object1:slidex': 0,
+            # 'object1:slidey': 0,
+            'object1:slidez': 0.15,
+            # 'object2:slidex': 0,
+            # 'object2:slidey': 0,
+            'object2:slidez': 0.15,
+        }
+        self.random_box = random_box
+        self.random_ratio = random_ratio
+        self.random_pusher = random_pusher
+        MasspointPushEnv.__init__(
+            self, XML_PATH, n_substeps=10,
+            target_in_the_air=False, target_offset=0.0,
+            obj_range=1.5, target_range=1.5, distance_threshold=0.30,
+            initial_qpos=initial_qpos, reward_type=reward_type, n_object=4)
+        utils.EzPickle.__init__(self)
+        self.pos_wall0 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
+        self.pos_wall2 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall2')]
+        self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
+        self.size_obstacle = self.sim.model.geom_size[self.sim.model.geom_name2id('object1')]
+        self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
+
+    def _get_obs(self):
+        # Agent itself goes into objects as well
+        # positions
+        # grip_pos = self.sim.data.get_site_xpos('robot0:grip')
+        masspoint_pos = self.sim.data.get_site_xpos('masspoint')
+        dt = self.sim.nsubsteps * self.sim.model.opt.timestep
+        # grip_velp = self.sim.data.get_site_xvelp('robot0:grip') * dt
+        masspoint_velp = self.sim.data.get_site_xvelp('masspoint') * dt
+        # robot_qpos, robot_qvel = utils.robot_get_obs(self.sim)
+        object_pos = [self.sim.data.get_site_xpos('object' + str(i)) for i in range(self.n_object - 1)]
+        object_pos += [masspoint_pos]
+        # rotations
+        object_rot = [rotations.mat2euler(self.sim.data.get_site_xmat('object' + str(i))) for i in range(self.n_object - 1)]
+        object_rot += [rotations.mat2euler(self.sim.data.get_site_xmat('masspoint'))]
+        # velocities
+        object_velp = [self.sim.data.get_site_xvelp('object' + str(i)) * dt for i in range(self.n_object - 1)]
+        object_velp += [self.sim.data.get_site_xvelp('masspoint') * dt]
+        object_velr = [self.sim.data.get_site_xvelr('object' + str(i)) * dt for i in range(self.n_object - 1)]
+        object_velr += [self.sim.data.get_site_xvelr('masspoint') * dt]
+        # gripper state
+        object_rel_pos = [object_pos[i] - masspoint_pos for i in range(self.n_object)]
+        object_velp = [object_velp[i] - masspoint_velp for i in range(self.n_object)]
+        object_pos = np.concatenate(object_pos)
+        object_rot = np.concatenate(object_rot)
+        object_velp = np.concatenate(object_velp)
+        object_velr = np.concatenate(object_velr)
+        object_rel_pos = np.concatenate(object_rel_pos)
+        # gripper_state = robot_qpos[-2:]
+        # gripper_vel = robot_qvel[-2:] * dt  # change to a scalar if the gripper is made symmetric
+
+        # achieved_goal = np.squeeze(object_pos.copy())
+        one_hot = self.goal[3:]
+        idx = np.argmax(one_hot)
+        achieved_goal = np.concatenate([object_pos[3 * idx: 3 * (idx + 1)].copy(), one_hot])
+        obs = np.concatenate([
+            masspoint_pos, object_pos.ravel(), object_rel_pos.ravel(), object_rot.ravel(),
+            object_velp.ravel(), object_velr.ravel(), masspoint_velp,
+        ])
+
+        return {
+            'observation': obs.copy(),
+            'achieved_goal': achieved_goal.copy(),
+            'desired_goal': self.goal.copy(),
+        }
+
+    def _sample_goal(self):
+        if not hasattr(self, 'size_wall'):
+            self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
+        if not hasattr(self, 'size_object'):
+            self.size_object = self.sim.model.geom_size[self.sim.model.geom_name2id('object0')]
+        if not hasattr(self, 'pos_wall0'):
+            self.pos_wall0 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
+        if not hasattr(self, 'pos_wall2'):
+            self.pos_wall2 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall2')]
+        g_idx = np.random.randint(self.n_object)
+        one_hot = np.zeros(self.n_object)
+        one_hot[g_idx] = 1
+        goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+
+        def same_side(pos0, pos1, sep):
+            if (pos0 - sep) * (pos1 - sep) > 0:
+                return True
+            return False
+
+        if hasattr(self, 'sample_hard') and self.sample_hard and g_idx == 0:
+            # g_idx = 0
+            # one_hot = np.zeros(self.n_object)
+            # one_hot[g_idx] = 1
+            if hasattr(self, 'sample_harder') and self.sample_harder:
+                # print('sample harder')
+                masspoint_pos = self.sim.data.get_site_xpos('masspoint')
+                object_pos = self.sim.data.get_site_xpos('object0')
+                while (same_side(goal[0], object_pos[0], self.pos_wall0[0]) and same_side(goal[0], object_pos[0], self.pos_wall2[0])
+                       or (same_side(goal[0], masspoint_pos[0], self.pos_wall0[0]) and same_side(goal[0], masspoint_pos[0], self.pos_wall2[0]))
+                       or self.inside_wall(goal)):
+                    goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+            else:
+                while (same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.pos_wall0[0]) and
+                       same_side(goal[0], self.sim.data.get_site_xpos('object0')[0], self.pos_wall2[0])) \
+                        or self.inside_wall(goal):
+                    goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+        else:
+            while self.inside_wall(goal):
+                goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+        goal_height = self.sim.data.get_site_xpos('object' + str(g_idx))[2:3] \
+            if g_idx < self.n_object - 1 else self.initial_masspoint_xpos[2:3]
+        goal = np.concatenate([goal, goal_height, one_hot])
+        if self.target_in_the_air and self.np_random.uniform() < 0.5:
+            goal[2] += self.np_random.uniform(0, 0.45)
+        return goal.copy()
 
 class MasspointMazeEnv(MasspointPushEnv, utils.EzPickle):
     def __init__(self, reward_type='sparse', random_box=True,

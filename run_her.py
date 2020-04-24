@@ -7,7 +7,8 @@ from baselines import HER_HACK, SAC_parallel
 from utils.wrapper import DoneOnSuccessWrapper
 from gym.wrappers import FlattenDictWrapper
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
-from masspoint_env import MasspointPushDoubleObstacleEnv
+from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointSMazeEnv
+from masspoint_env import MasspointPushDoubleObstacleEnv_v2
 from fetch_stack import FetchStackEnv, FetchStackEnv_v2
 import gym
 import matplotlib.pyplot as plt
@@ -30,6 +31,10 @@ ENTRY_POINT = {
     'FetchPushWallObstacleUnlimit-v4': FetchPushWallObstacleEnv_v4,
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
     'MasspointPushDoubleObstacleUnlimit-v1': MasspointPushDoubleObstacleEnv,
+    'MasspointPushDoubleObstacle-v2': MasspointPushDoubleObstacleEnv_v2,
+    'MasspointPushDoubleObstacleUnlimit-v2': MasspointPushDoubleObstacleEnv_v2,
+    'MasspointMaze-v2': MasspointSMazeEnv,
+    'MasspointMazeUnlimit-v2': MasspointSMazeEnv,
     'FetchStack-v1': FetchStackEnv,
     'FetchStackUnlimit-v1': FetchStackEnv,
     'FetchStack-v2': FetchStackEnv_v2,
@@ -126,6 +131,11 @@ def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None,
                     random_ratio=random_ratio,
                     random_pusher=True,
                     max_episode_steps=150, )
+    elif env_id == 'MasspointMaze-v2':
+        return dict(random_box=True,
+                    random_ratio=random_ratio,
+                    random_pusher=True,
+                    max_episode_steps=100, )
     else:
         raise NotImplementedError
 
@@ -233,10 +243,11 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 train_kwargs['gamma'] = 0.98
                 train_kwargs['batch_size'] = 256
             elif 'MasspointPushDoubleObstacle' in env_name:
-                train_kwargs['ent_coef'] = 0.1
+                train_kwargs['buffer_size'] = int(5e5)
+                train_kwargs['ent_coef'] = "auto"
                 train_kwargs['gamma'] = 0.99
-                train_kwargs['batch_size'] = 512
-                train_kwargs['random_exploration'] = 0.1
+                train_kwargs['batch_size'] = 256
+                train_kwargs['random_exploration'] = 0.2
             policy_kwargs = {}
 
             def callback(_locals, _globals):
@@ -259,19 +270,20 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         class CustomSACPolicy(SACPolicy):
             def __init__(self, *args, **kwargs):
                 super(CustomSACPolicy, self).__init__(*args, **kwargs,
-                                                    layers=[256, 256, 256, 256],
+                                                    layers=[256, 256] if 'MasspointPushDoubleObstacle' in env_name else [256, 256, 256, 256],
                                                     feature_extraction="mlp")
         register_policy('CustomSACPolicy', CustomSACPolicy)
         # policy = CustomSACPolicy
         from utils.sac_attention_policy import AttentionPolicy
         register_policy('AttentionPolicy', AttentionPolicy)
         if policy == 'AttentionPolicy':
+            assert env_name is not 'MasspointPushDoubleObstacle-v2', 'attention policy not supported!'
             if 'FetchStack' in env_name:
                 policy_kwargs["n_object"] = n_object
                 policy_kwargs["feature_extraction"] = "attention_mlp"
             elif 'MasspointPushDoubleObstacle' in env_name:
                 policy_kwargs["feature_extraction"] = "attention_mlp_particle"
-                policy_kwargs["layers"] = [256, 256]
+                policy_kwargs["layers"] = [256, 256, 256, 256]
             policy_kwargs["layer_norm"] = True
         elif policy == "CustomSACPolicy":
             policy_kwargs["layer_norm"] = True
@@ -310,6 +322,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             obs = env.reset()
             while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
+        elif 'MasspointPushDoubleObstacle' in env_name:
+            while np.argmax(obs['desired_goal'][0][3:]) != 0:
+                obs = env.reset()
         print('goal', obs['desired_goal'][0], 'obs', obs['observation'][0])
         episode_reward = 0.0
         images = []
@@ -328,10 +343,10 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             action, _ = model.predict(obs, deterministic=True)
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
-            adv, logpac = model.model.sess.run([model.model.step_ops[4] - model.model.step_ops[6], model.model.logpac_op],
-                                      {model.model.observations_ph: np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']], axis=-1),
-                                       model.model.actions_ph: action})
-            print(adv, logpac)
+            # adv, logpac = model.model.sess.run([model.model.step_ops[4] - model.model.step_ops[6], model.model.logpac_op],
+            #                           {model.model.observations_ph: np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']], axis=-1),
+            #                            model.model.actions_ph: action})
+            # print(adv, logpac)
             obs, reward, done, _ = env.step(action)
             episode_reward += reward
             frame_idx += 1
@@ -345,6 +360,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 if 'FetchStack' in env_name:
                     while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or \
                                     env.get_attr('task_mode')[0] != 1:
+                        obs = env.reset()
+                elif 'MasspointPushDoubleObstacle' in env_name:
+                    while np.argmax(obs['desired_goal'][0][3:]) != 0:
                         obs = env.reset()
                 print('goal', obs['desired_goal'][0])
                 episode_reward = 0.0
