@@ -60,6 +60,11 @@ class HERGoalEnvWrapper(object):
         else:
             raise NotImplementedError("{} space is not supported".format(type(self.spaces[0])))
 
+        if isinstance(self.env, VecEnv):
+            self.reward_type = self.env.get_attr('reward_type')[0]
+        else:
+            self.reward_type = self.env.reward_type
+
 
     def convert_dict_to_obs(self, obs_dict):
         """
@@ -100,6 +105,11 @@ class HERGoalEnvWrapper(object):
         if isinstance(self.env, VecEnv):
             return self.env.env_method('compute_reward', achieved_goal, desired_goal, info, indices=indices)
         return self.env.compute_reward(achieved_goal, desired_goal, info)
+
+    def compute_reward_and_success(self, achieved_goal, desired_goal, info, indices=None):
+        if isinstance(self.env, VecEnv):
+            return self.env.env_method('compute_reward_and_success', achieved_goal, desired_goal, info, indices=indices)
+        return self.env.compute_reward_and_success(achieved_goal, desired_goal, info)
 
     def render(self, mode='human'):
         return self.env.render(mode)

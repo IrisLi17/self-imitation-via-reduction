@@ -358,8 +358,9 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         if task_mode == 0:
             # r = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal[0:3], info)
             if self.reward_type == 'dense':
-                previous_achieved_goal = info['previous_obs']['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
-                r = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(achieved_goal - goal[0:3])
+                # previous_achieved_goal = info['previous_obs']['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
+                # r = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(achieved_goal - goal[0:3])
+                r = -np.linalg.norm(achieved_goal - goal[0:3])
             else:
                 r = -((self._goal_distance(achieved_goal, goal[0:3]) > self.distance_threshold).astype(np.float32))
                 if abs(achieved_goal[2] - goal[2]) > 0.01:
@@ -370,9 +371,10 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         else:
             # r_achieve = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal[0:3], info)
             if self.reward_type == 'dense':
-                previous_achieved_goal = info['previous_obs']['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
-                r_achieve = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(
-                    achieved_goal - goal[0:3])
+                # previous_achieved_goal = info['previous_obs']['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
+                # r_achieve = np.linalg.norm(previous_achieved_goal - goal[0:3]) - np.linalg.norm(
+                #     achieved_goal - goal[0:3])
+                r_achieve = -np.linalg.norm(achieved_goal - goal[0:3])
                 if np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold:
                     r = r_achieve
                     gripper_far = np.linalg.norm(observation[0:3] - achieved_goal) > self.distance_threshold

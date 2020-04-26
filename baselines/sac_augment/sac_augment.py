@@ -836,15 +836,23 @@ class SAC_augment(OffPolicyRLModel):
                             relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs, ultimate_goals, self.task_mode)
                             env_reward = self.aug_env.env_method('compute_reward', _retask_env_next_obs, ultimate_goals,
                                                                  temp_info)
+                            if self.reward_type != "sparse":
+                                env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
+                                                                                 _retask_env_next_obs, ultimate_goals,
+                                                                                 temp_info)
                         else:
                             relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs,
                                                                            ultimate_goals)
                             env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals,
                                                                  temp_info)
-                        if self.reward_type == 'dense':
-                            env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
-                                                                             _retask_env_next_obs, ultimate_goals,
-                                                                             temp_info)
+                            if self.reward_type != "sparse":
+                                env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
+                                                                                 env_next_obs, ultimate_goals,
+                                                                                 temp_info)
+                        # if self.reward_type != 'sparse':
+                        #     env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
+                        #                                                      _retask_env_next_obs, ultimate_goals,
+                        #                                                      temp_info)
                         for idx in range(self.aug_env.num_envs):
                             # obs, act, reward, next_obs, done
                             env_increment_storage[idx].append(
@@ -860,7 +868,7 @@ class SAC_augment(OffPolicyRLModel):
                             if self.reward_type == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] is False:
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
-                            elif self.reward_type == 'dense' and env_reward_and_success[idx][1] and env_end_flag[
+                            elif self.reward_type != 'sparse' and env_reward_and_success[idx][1] and env_end_flag[
                                 idx] is False:
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
