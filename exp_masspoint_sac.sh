@@ -8,4 +8,6 @@ CUDA_VISIBLE_DEVICES=0 python run_her.py --env MasspointPushDoubleObstacle-v1 --
 
 # S-Maze
 CUDA_VISIBLE_DEVICES=0 python run_her.py --env MasspointMaze-v2 --num_timesteps 1e5 --num_workers 4 --log_path logs/MasspointMaze-v2/her_sac_4workers/0
+CUDA_VISIBLE_DEVICES=0 python run_her.py --env MasspointMaze-v2 --num_timesteps 1e5 --num_workers 4 --sil --sil_coef 0.1 --log_path logs/MasspointMaze-v2/her_sac_sil_4workers/coef0.1
+CUDA_VISIBLE_DEVICES=0 python run_her_augment.py --env MasspointMaze-v2 --num_timesteps 1e5 --num_workers 4 --start_augment 0 --imitation_coef 0.1 --log_path logs/MasspointMaze-v2/her_sac_aug_4workers/start0_silloss0.1
 
