@@ -804,6 +804,7 @@ class MasspointSMazeEnv(MasspointPushEnv, utils.EzPickle):
         self.pos_wall0 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall0')]
         self.pos_wall1 = self.sim.model.geom_pos[self.sim.model.geom_name2id('wall1')]
         self.size_wall = self.sim.model.geom_size[self.sim.model.geom_name2id('wall0')]
+        self.size_obstacle = np.array([1., 1., 1.])  # Used to determine noise_mag only.
 
     def _get_obs(self):
         # positions

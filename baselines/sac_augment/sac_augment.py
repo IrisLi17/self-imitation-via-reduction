@@ -592,6 +592,10 @@ class SAC_augment(OffPolicyRLModel):
                     if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] >= 2:
                         return True
                     return False
+                elif 'MasspointMaze' in self.env_id:
+                    if not infos[idx]['is_success']:
+                        return True
+                    return False
                 else:
                     if (not infos[idx]['is_success']) and np.argmax(goal[3:]) == 0:
                         return True
@@ -836,15 +840,23 @@ class SAC_augment(OffPolicyRLModel):
                             relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs, ultimate_goals, self.task_mode)
                             env_reward = self.aug_env.env_method('compute_reward', _retask_env_next_obs, ultimate_goals,
                                                                  temp_info)
+                            if self.reward_type != "sparse":
+                                env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
+                                                                                 _retask_env_next_obs, ultimate_goals,
+                                                                                 temp_info)
                         else:
                             relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs,
                                                                            ultimate_goals)
                             env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals,
                                                                  temp_info)
-                        if self.reward_type == 'dense':
-                            env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
-                                                                             _retask_env_next_obs, ultimate_goals,
-                                                                             temp_info)
+                            if self.reward_type != "sparse":
+                                env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
+                                                                                 env_next_obs, ultimate_goals,
+                                                                                 temp_info)
+                        # if self.reward_type != 'sparse':
+                        #     env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
+                        #                                                      _retask_env_next_obs, ultimate_goals,
+                        #                                                      temp_info)
                         for idx in range(self.aug_env.num_envs):
                             # obs, act, reward, next_obs, done
                             env_increment_storage[idx].append(
@@ -860,7 +872,7 @@ class SAC_augment(OffPolicyRLModel):
                             if self.reward_type == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] is False:
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
-                            elif self.reward_type == 'dense' and env_reward_and_success[idx][1] and env_end_flag[
+                            elif self.reward_type != 'sparse' and env_reward_and_success[idx][1] and env_end_flag[
                                 idx] is False:
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
@@ -890,7 +902,7 @@ class SAC_augment(OffPolicyRLModel):
                         if end_step <= self.get_horizon(self.current_nobject[idx] if 'FetchStack' in self.env_id else None):
                             # log_debug_value(self.debug_value1[idx], self.debug_value2[idx], np.argmax(temp_subgoals[idx][3:]), True)
                             # print(temp_subgoals[idx])
-                            is_self_aug = temp_subgoals[idx][3]
+                            # is_self_aug = temp_subgoals[idx][3]
                             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
                             for i in range(len(env_storage[idx])):
                                 if isinstance(self.augment_replay_buffer.replay_buffer, MultiWorkerReplayBuffer) \
@@ -1016,11 +1028,11 @@ class SAC_augment(OffPolicyRLModel):
             return np.array([]), np.array([])
         sample_t = np.random.randint(0, len(transition_buf), 4096)
         sample_obs = obs_buf[sample_t]
-        ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
         noise = np.random.uniform(low=-self.noise_mag, high=self.noise_mag, size=(len(sample_t), 2))
         sample_obs_buf = []
         subgoal_obs_buf = []
         if 'FetchStack' in self.env_id:
+            ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
             filter_subgoal = True  # TODO: see if it works
             sample_height = np.array(tower_height)[sample_t]
             for object_idx in range(0, self.n_object):
@@ -1062,7 +1074,21 @@ class SAC_augment(OffPolicyRLModel):
                 # object_idx + 1) + 2:3 * (object_idx + 1) + 3]
                 subgoal_obs[:, self.obs_dim + self.goal_dim + 3:self.obs_dim + self.goal_dim * 2] = one_hot
                 subgoal_obs_buf.append(subgoal_obs)
+        elif 'MasspointMaze' in self.env_id:
+            filter_subgoal = True
+            ego_xy = sample_obs[:, 0:2] + noise
+            # Path 2
+            sample_obs[:, 0: 2] = ego_xy
+            sample_obs[:, self.obs_dim: self.obs_dim + 2] = ego_xy
+            sample_obs_buf.append(sample_obs.copy())
+            # Path 1
+            subgoal_obs = obs_buf[sample_t]
+            subgoal_obs[:, self.obs_dim:self.obs_dim + 3] = subgoal_obs[:, 0:3]
+            subgoal_obs[:, self.obs_dim + self.goal_dim:self.obs_dim + self.goal_dim + 2] = ego_xy
+            subgoal_obs[:, self.obs_dim + self.goal_dim + 2:self.obs_dim + self.goal_dim + 3] = subgoal_obs[:, 2:3]
+            subgoal_obs_buf.append(subgoal_obs)
         else:
+            ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
             filter_subgoal = True
             for object_idx in range(self.n_object):  # Also search self position
                 obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise

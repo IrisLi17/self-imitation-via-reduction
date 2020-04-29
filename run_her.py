@@ -105,7 +105,10 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     if 'FetchStack' in env_id and ('Unlimit' not in env_id) and max_episode_steps is None:
         from utils.wrapper import FlexibleTimeLimitWrapper
         env = FlexibleTimeLimitWrapper(env, 100)
-    env = DoneOnSuccessWrapper(env)
+    if 'FetchStack' in env_id and kwargs['reward_type'] != 'sparse':
+        env = DoneOnSuccessWrapper(env, 0.0)
+    else:
+        env = DoneOnSuccessWrapper(env)
     if log_dir is not None:
         env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets, info_keywords=('is_success',))
     # env.seed(seed + 10000 * rank)

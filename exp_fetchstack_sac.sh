@@ -9,6 +9,7 @@ CUDA_VISIBLE_DEVICES=1 python run_her.py --env FetchStack-v1 --num_timesteps 1e7
 CUDA_VISIBLE_DEVICES=1 python run_her.py --env FetchStack-v1 --num_timesteps 1e7 --curriculum --num_workers 32 --policy AttentionPolicy --reward_type sparse --n_object 2 --priority --log_path logs/FetchStack-v1_adapt/her_sac_32workers/attention_critic_2obj_priority
 CUDA_VISIBLE_DEVICES=0 python run_her_augment.py --env FetchStack-v1 --num_timesteps 2.5e6 --curriculum --num_workers 32 --policy AttentionPolicy --reward_type sparse --n_object 2 --imitation_coef 0.1 --priority --log_path logs/FetchStack-v1_adapt/her_sac_aug_32workers/attention_critic_2obj_silloss0.1_auto_threshold_priority
 CUDA_VISIBLE_DEVICES=1 python run_her.py --env FetchStack-v1 --num_timesteps 1e7 --curriculum --num_workers 32 --policy AttentionPolicy --reward_type sparse --n_object 2 --sil --sil_coef 0.1 --priority --log_path logs/FetchStack-v1_adapt/her_sac_sil_32workers/attention_critic_2obj_0.1_priority
+CUDA_VISIBLE_DEVICES=1 python run_her.py --env FetchStack-v1 --num_timesteps 1e7 --curriculum --num_workers 32 --policy AttentionPolicy --reward_type dense --n_object 2 --priority --log_path logs/FetchStack-v1_adapt/her_sac_32workers/attention_critic_2obj_ds_priority
 
 CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchReach-v1 --num_timesteps 1e5 --num_workers 16 --policy CustomSACPolicy
 CUDA_VISIBLE_DEVICES=2 python run_her.py --env FetchPush-v1 --num_timesteps 1e7 --num_workers 16 --policy CustomSACPolicy --log_path logs/FetchPush-v1/her_sac_16workers/no_priority

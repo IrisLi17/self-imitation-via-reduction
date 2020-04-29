@@ -98,23 +98,42 @@ class HindsightExperienceReplayWrapper(object):
                 next_obs = self.temp_container['next_observation'][_ * self.replay_buffer.num_workers: (_ + 1) * self.replay_buffer.num_workers]
                 next_obs_dict = self.env.convert_obs_to_dict(np.asarray(next_obs))
                 if self.env.goal_dim == 3:
+                    assert self.env.reward_type == 'sparse'
                     reward = self.env.compute_reward(next_obs_dict['desired_goal'], next_obs_dict['achieved_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                    success = (np.array(reward) > 0.5).tolist()
                 else:
-                    reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                    if self.env.reward_type != 'sparse':
+                        reward_and_success = self.env.compute_reward_and_success(next_obs, next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                        reward, success = zip(*reward_and_success)
+                        reward = list(reward)
+                        success = list(success)
+                    else:
+                        reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                        success = (np.array(reward) > 0.5).tolist()
                 self.temp_container['reward'][_ * self.replay_buffer.num_workers : (_ + 1) * self.replay_buffer.num_workers] = reward.copy()
-                self.temp_container['done'][_ * self.replay_buffer.num_workers : (_ + 1) * self.replay_buffer.num_workers] = (np.array(reward) > 0.5).tolist()
+                self.temp_container['done'][_ * self.replay_buffer.num_workers : (_ + 1) * self.replay_buffer.num_workers] = success.copy()
             # Remainer
             if len(self.temp_container['observation']) % self.replay_buffer.num_workers:
                 next_obs = self.temp_container['next_observation'][len(self.temp_container['observation']) // self.replay_buffer.num_workers * self.replay_buffer.num_workers : len(self.temp_container['observation'])]
                 next_obs_dict = self.env.convert_obs_to_dict(np.asarray(next_obs))
                 if self.env.goal_dim == 3:
+                    assert self.env.reward_type == 'sparse'
                     reward = self.env.compute_reward(next_obs_dict['desired_goal'], next_obs_dict['achieved_goal'],
                                                      [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                    success = (np.array(reward) > 0.5).tolist()
                 else:
-                    reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'],
-                                                     [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                    if self.env.reward_type != 'sparse':
+                        reward_and_success = self.env.compute_reward_and_success(next_obs, next_obs_dict['desired_goal'],
+                                                                                 [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                        reward, success = zip(*reward_and_success)
+                        reward = list(reward)
+                        success = list(success)
+                    else:
+                        reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'],
+                                                         [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                        success = (np.array(reward) > 0.5).tolist()
                 self.temp_container['reward'][len(self.temp_container['observation']) // self.replay_buffer.num_workers * self.replay_buffer.num_workers : len(self.temp_container['observation'])] = reward.copy()
-                self.temp_container['done'][len(self.temp_container['observation']) // self.replay_buffer.num_workers * self.replay_buffer.num_workers : len(self.temp_container['observation'])] = (np.array(reward) > 0.5).tolist()
+                self.temp_container['done'][len(self.temp_container['observation']) // self.replay_buffer.num_workers * self.replay_buffer.num_workers : len(self.temp_container['observation'])] = success.copy()
 
             self.reward_time += time.time() - reward_time0
             # Store into buffer now
