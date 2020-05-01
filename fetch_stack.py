@@ -367,7 +367,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                     r = -1
             success = np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold and abs(achieved_goal[2] - goal[2]) < 0.01
             if self.reward_type == 'dense':
-                r += success
+                r = 0.1 * r + success
         else:
             # r_achieve = fetch_env.FetchEnv.compute_reward(self, achieved_goal, goal[0:3], info)
             if self.reward_type == 'dense':
@@ -396,7 +396,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
                 else:
                     r = r_achieve
                     success = 0.0
-                r += success
+                r = 0.1 * r + success
             elif self.reward_type == 'incremental':
                 if self.current_nobject == 2:
                     achieved_goal = observation[3 : 3 + 3 * self.n_object]

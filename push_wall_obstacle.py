@@ -569,8 +569,8 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
     Universal pushing. Concatenate a one-hot array to the goal space which indicates which object should be moved to the specific location.
     TODO: modidy sample_goal, compute reward. Side remark, in her wrapper, we should also modify observation when resampling goal
     '''
-    def __init__(self, reward_type='sparse', penaltize_height=False, heavy_obstacle=False, random_box=True,
-                 random_ratio=1.0, hack_obstacle=False, random_gripper=False):
+    def __init__(self, reward_type='sparse', penaltize_height=False, heavy_obstacle=True, random_box=True,
+                 random_ratio=1.0, hack_obstacle=False, random_gripper=True):
         if heavy_obstacle:
             XML_PATH = MODEL_XML_PATH2
         else:
@@ -703,30 +703,31 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
         if self.has_object:
             if self.random_box and self.np_random.uniform() < self.random_ratio:
                 self.sample_hard = False
-                object_xpos = self.initial_gripper_xpos[:2]
+                object_xpos = np.array([1.25, 0.75])
                 stick_xpos = object_xpos.copy()
                 while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1
                        or abs(object_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_object[0] or abs(
                         stick_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_obstacle[0]
                        or (abs(object_xpos[0] - stick_xpos[0]) < self.size_object[0] + self.size_obstacle[0] and abs(
                             object_xpos[1] - stick_xpos[1]) < self.size_object[1] + self.size_obstacle[1])):
-                    object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
+                    object_xpos = np.array([1.25, 0.75]) + self.np_random.uniform(-self.obj_range,
                                                                                          self.obj_range, size=2)
-                    stick_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range,
+                    stick_xpos = np.array([1.25, 0.75]) + self.np_random.uniform(-self.obj_range, self.obj_range,
                                                                                         size=2)
                     # stick_xpos = np.concatenate(([1.40], self.initial_gripper_xpos[1:2])) + \
                     #              np.array([2 / 3, 1.0]) * self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
             else:
                 self.sample_hard = True
                 # object_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range * 0.9, self.obj_range / 2])
-                object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+                object_xpos = np.array([1.25, 0.75]) + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
                 stick_xpos = np.asarray([self.pos_wall[0] + self.size_wall[0] + self.size_obstacle[0], self.initial_gripper_xpos[1]])
                 while (np.linalg.norm(object_xpos - self.initial_gripper_xpos[:2]) < 0.1
+                       or object_xpos[0] - stick_xpos[0] < self.size_object[0] + self.size_obstacle[0]
                        or abs(object_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_object[0] or abs(
                         stick_xpos[0] - self.pos_wall[0]) < self.size_wall[0] + self.size_obstacle[0]
                        or (abs(object_xpos[0] - stick_xpos[0]) < self.size_object[0] + self.size_obstacle[0] and abs(
                             object_xpos[1] - stick_xpos[1]) < self.size_object[1] + self.size_obstacle[1])):
-                    object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+                    object_xpos = np.array([1.25, 0.75]) + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
                 # stick_xpos = self.initial_gripper_xpos[:2] + np.asarray([self.obj_range / 4, 0])
             # Set the position of box. (two slide joints)
             sim_state = self.sim.get_state()
@@ -763,10 +764,14 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
             g_idx = np.random.randint(2)
             one_hot = np.zeros(2)
             one_hot[g_idx] = 1
-            goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+            goal = np.array([1.25, 0.75, 0.413]) + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
             if hasattr(self, 'sample_hard') and self.sample_hard and g_idx == 0:
-                while (goal[0] - self.pos_wall[0]) * (self.sim.data.get_site_xpos('object0')[0] - self.pos_wall[0]) > 0:
-                    goal = self.initial_gripper_xpos[:3] + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+                while self.inside_wall(goal) or \
+                        (goal[0] - self.pos_wall[0]) * (self.sim.data.get_site_xpos('object0')[0] - self.pos_wall[0]) > 0:
+                    goal = np.array([1.25, 0.75, 0.413]) + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
+            else:
+                while self.inside_wall(goal):
+                    goal = np.array([1.25, 0.75, 0.413]) + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=3)
             if g_idx == 0:
                 goal[2] = self.sim.data.get_site_xpos('object0')[2]
             else:
@@ -775,7 +780,7 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
             if self.target_in_the_air and self.np_random.uniform() < 0.5:
                 goal[2] += self.np_random.uniform(0, 0.45)
         else:
-            goal = self.initial_gripper_xpos[:3] + self.np_random.uniform(-0.15, 0.15, size=3)
+            goal = np.array([1.25, 0.75, 0.413]) + self.np_random.uniform(-0.15, 0.15, size=3)
         return goal.copy()
 
     def compute_reward(self, observation, goal, info):
@@ -822,6 +827,11 @@ class FetchPushWallObstacleEnv_v4(fetch_env.FetchEnv, utils.EzPickle):
         self.viewer.cam.distance = 1.0
         self.viewer.cam.azimuth = 90.
         self.viewer.cam.elevation = -45.
+
+    def inside_wall(self, pos):
+        if abs(pos[0] - self.pos_wall[0]) < self.size_wall[0] and abs(pos[1] - 0.75) > 0.1:
+            return True
+        return False
 
 class FetchPushWallObstacleEnv_v5(fetch_env.FetchEnv, utils.EzPickle):
     '''
