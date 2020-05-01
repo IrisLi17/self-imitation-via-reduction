@@ -592,7 +592,7 @@ class SAC_augment(OffPolicyRLModel):
                     if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] >= 2:
                         return True
                     return False
-                elif 'MasspointMaze' in self.env_id:
+                elif 'MasspointMaze' in self.env_id or 'MasspointPushDoubleObstacle' in self.env_id :
                     if not infos[idx]['is_success']:
                         return True
                     return False
