@@ -280,7 +280,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         from utils.sac_attention_policy import AttentionPolicy
         register_policy('AttentionPolicy', AttentionPolicy)
         if policy == 'AttentionPolicy':
-            assert env_name is not 'MasspointPushDoubleObstacle-v2', 'attention policy not supported!'
+            # assert env_name is not 'MasspointPushDoubleObstacle-v2', 'attention policy not supported!'
             if 'FetchStack' in env_name:
                 policy_kwargs["n_object"] = n_object
                 policy_kwargs["feature_extraction"] = "attention_mlp"
