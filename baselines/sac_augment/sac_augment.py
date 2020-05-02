@@ -422,9 +422,11 @@ class SAC_augment(OffPolicyRLModel):
             demo_ratio = batch2_obs.shape[0] / batch_obs.shape[0]
         else:
             # Uniform sampling
-            if self.augment_replay_buffer.can_sample(self.batch_size // 2):
-                batch1 = self.replay_buffer.sample(self.batch_size // 2)
-                batch2 = self.augment_replay_buffer.sample(self.batch_size // 2)
+            n_augment = int(self.batch_size * (len(self.augment_replay_buffer) /
+                                               (len(self.augment_replay_buffer) + len(self.replay_buffer))))
+            if n_augment > 0 and self.augment_replay_buffer.can_sample(n_augment):
+                batch1 = self.replay_buffer.sample(self.batch_size - n_augment)
+                batch2 = self.augment_replay_buffer.sample(n_augment)
                 batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs = batch1
                 batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs = batch2
                 batch_obs = safe_concat(batch1_obs, batch2_obs)
@@ -1093,7 +1095,7 @@ class SAC_augment(OffPolicyRLModel):
             for object_idx in range(self.n_object):  # Also search self position
                 obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
                 # Path2
-                if self.env_id is 'MasspointPushDoubleObstacle-v2':
+                if object_idx == self.n_object - 1 and self.env_id is 'MasspointPushDoubleObstacle-v2':
                     sample_obs[0: 2] = obstacle_xy
                 sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
                 sample_obs[:, 3*(object_idx+1+self.n_object):3*(object_idx+1+self.n_object)+2] \
@@ -1143,6 +1145,7 @@ class SAC_augment(OffPolicyRLModel):
         # subgoal = subgoal_obs[best_idx, 45:50]
         if filter_subgoal:
             mean_values = (value1[good_ind] + value2[good_ind]) / 2
+            print(mean_values)
             assert mean_values.shape[0] == k
             # for i in range(k):
             #     self.mean_value_buf.append(mean_values[i])
