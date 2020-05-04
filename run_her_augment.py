@@ -157,12 +157,15 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
                 train_kwargs['batch_size'] = 256
+                train_kwargs['random_exploration'] = 0.1
             elif 'MasspointPushDoubleObstacle' in env_name:
                 train_kwargs['buffer_size'] = int(5e5)
                 train_kwargs['ent_coef'] = "auto"
                 train_kwargs['gamma'] = 0.99
                 train_kwargs['batch_size'] = 256
                 train_kwargs['random_exploration'] = 0.2
+            elif 'MasspointMaze' in env_name:
+                train_kwargs['n_subgoal'] = 1
             policy_kwargs = {}
 
             def callback(_locals, _globals):

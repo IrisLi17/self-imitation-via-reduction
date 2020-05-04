@@ -1033,6 +1033,11 @@ class SAC_augment(OffPolicyRLModel):
         noise = np.random.uniform(low=-self.noise_mag, high=self.noise_mag, size=(len(sample_t), 2))
         sample_obs_buf = []
         subgoal_obs_buf = []
+        filter_low = 0.5
+        filter_high = 1.0
+        if 'FetchPushWallobstacle' in self.env_id:
+            filter_low = 0.7
+            filter_high = 0.9
         if 'FetchStack' in self.env_id:
             ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
             filter_subgoal = True  # TODO: see if it works
@@ -1152,7 +1157,7 @@ class SAC_augment(OffPolicyRLModel):
             # filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
             # Filter by hard threshold
             # In the beginning, the value fn tends to over estimate
-            filtered_idx = np.where(np.logical_and(mean_values < 1.0, mean_values > 0.5))[0]
+            filtered_idx = np.where(np.logical_and(mean_values < filter_high, mean_values > filter_low))[0]
             good_ind = good_ind[filtered_idx]
 
         restart_step = sample_t[good_ind % len(sample_t)]
