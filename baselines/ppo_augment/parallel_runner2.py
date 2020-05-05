@@ -492,11 +492,15 @@ class ParallelRunner2(AbstractEnvRunner):
         sample_obs_buf = []
         subgoal_obs_buf = []
         if dim == 2:
-            for object_idx in range(1, self.n_object):
+            for object_idx in range(0, self.n_object):
+                ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
                 obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
                 sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
                 sample_obs[:, 3*(object_idx+1+self.n_object):3*(object_idx+1+self.n_object)+2] \
                     = sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] - sample_obs[:, 0:2]
+                # achieved_goal
+                sample_obs[:, self.obs_dim:self.obs_dim + 3] \
+                    = sample_obs[:, 3 * (ultimate_idx + 1):3 * (ultimate_idx + 1) + 3]
                 sample_obs_buf.append(sample_obs.copy())
 
                 subgoal_obs = obs_buf[sample_t]
