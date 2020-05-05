@@ -1,4 +1,4 @@
-from baselines import PPO2_augment
+from baselines import PPO2_augment, PPO2_augment_sil
 from stable_baselines import logger
 from stable_baselines.bench import Monitor
 from stable_baselines.common import set_global_seeds
@@ -294,13 +294,20 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             dim_candidate = 3
         else:
             dim_candidate = 2
-        model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
-                             gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
-                             cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
-                             policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
-                             reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
-                             curriculum=curriculum, self_imitate=self_imitate,
-                             )
+        if not self_imitate:
+            model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
+                                 gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
+                                 cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
+                                 policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
+                                 reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
+                                 curriculum=curriculum, self_imitate=self_imitate,
+                                 )
+        else:
+            model = PPO2_augment_sil(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
+                                     gamma=0.99, noptepochs=10, ent_coef=0.1, learning_rate=3e-4,
+                                     cliprange=0.2, parallel=parallel, policy_kwargs=policy_kwargs,
+                                     aug_adv_weight=aug_adv_weight, curriculum=curriculum,
+                                     )
         def callback(_locals, _globals):
             num_update = _locals["update"]
             if 'FetchStack' in env_name:
@@ -308,15 +315,15 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             else:
                 mean_eval_reward = eval_model(eval_env, _locals["self"])
             log_eval(num_update, mean_eval_reward)
-            aug_obs = _locals["self"].aug_obs
-            aug_done = _locals["self"].aug_done
-            aug_obs = list(filter(lambda v:v is not None, aug_obs))
-            aug_done = list(filter(lambda v:v is not None, aug_done))
-            if len(aug_obs):
-                aug_obs = np.concatenate(aug_obs, axis=0)
-                aug_done = np.concatenate(aug_done, axis=0)
-                log_traj(aug_obs, aug_done, num_update, goal_dim=eval_env.goal.shape[0],
-                         n_obstacle=eval_env.n_object)
+            # aug_obs = _locals["self"].aug_obs
+            # aug_done = _locals["self"].aug_done
+            # aug_obs = list(filter(lambda v:v is not None, aug_obs))
+            # aug_done = list(filter(lambda v:v is not None, aug_done))
+            # if len(aug_obs):
+            #     aug_obs = np.concatenate(aug_obs, axis=0)
+            #     aug_done = np.concatenate(aug_done, axis=0)
+            #     log_traj(aug_obs, aug_done, num_update, goal_dim=eval_env.goal.shape[0],
+            #              n_obstacle=eval_env.n_object)
             if num_update % 10 == 0:
                 model_path = os.path.join(log_dir, 'model_' + str(num_update // 10))
                 model.save(model_path)
