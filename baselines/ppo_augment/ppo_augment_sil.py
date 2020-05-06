@@ -160,8 +160,11 @@ class PPO2_augment_sil(ActorCriticRLModel):
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
                     self.clip_range_ph = tf.placeholder(tf.float32, [], name="clip_range_ph")
                     self.importance_weight_ph = tf.placeholder(tf.float32, [None], name="importance_weight_ph")
+                    self.sil_adv_mean_ph = tf.placeholder(tf.float32, [], name="sil_adv_mean_ph")
+                    self.sil_adv_std_ph = tf.placeholder(tf.float32, [], name="sil_adv_std_ph")
 
-                    self.sil_adv = self.rewards_ph - train_model.value_flat
+                    self.raw_sil_adv = self.rewards_ph - train_model.value_flat
+                    self.sil_adv = (self.rewards_ph - train_model.value_flat - self.sil_adv_mean_ph) / self.sil_adv_std_ph
                     mask = tf.where(self.sil_adv > 0.0, tf.ones_like(self.rewards_ph), tf.zeros_like(self.rewards_ph))
                     self.sil_num_samples = num_valid_samples = tf.maximum(tf.reduce_sum(mask), 1e-6)
 
@@ -212,12 +215,13 @@ class PPO2_augment_sil(ActorCriticRLModel):
                     self.clipfrac = tf.reduce_mean(tf.cast(tf.greater(tf.abs(ratio - 1.0),
                                                                       self.clip_range_ph), tf.float32))
                     clip_neglogpac = tf.minimum(neglogpac, 100)
-                    clip_adv = tf.maximum(self.sil_adv, 0)
+                    clip_adv = tf.stop_gradient(tf.clip_by_value(self.sil_adv, 0, 5))
                     self.aug_pg_loss = tf.reduce_sum(self.importance_weight_ph * clip_adv * clip_neglogpac) / num_valid_samples
                     # self.aug_clipfrac = tf.reduce_mean(tf.cast(tf.greater(tf.abs(aug_ratio - 1.0),
                     #                                                       self.clip_range_ph), tf.float32))
                     loss = self.pg_loss - self.entropy * self.ent_coef + self.vf_loss * self.vf_coef
-                    sil_loss = self.aug_adv_weight * (self.aug_pg_loss - self.aug_entropy * self.ent_coef + self.aug_vf_loss * self.vf_coef)
+                    # sil_loss = self.aug_adv_weight * (self.aug_pg_loss - self.aug_entropy * self.ent_coef + self.aug_vf_loss * self.vf_coef)
+                    sil_loss = self.aug_adv_weight * (self.aug_pg_loss)
 
                     tf.summary.scalar('entropy_loss', self.entropy)
                     tf.summary.scalar('policy_gradient_loss', self.pg_loss)
@@ -345,19 +349,21 @@ class PPO2_augment_sil(ActorCriticRLModel):
 
         return policy_loss, value_loss, policy_entropy, approxkl, clipfrac
 
-    def _sil_train_step(self, writer, batch_size, learning_rate, cliprange):
+    def _sil_train_step(self, writer, batch_size, learning_rate, cliprange, adv_mean, adv_std):
         batch = self.aug_replay.sample(batch_size, beta=0.4)
         batch_obs, batch_actions, _, _, _, batch_sumrs, weights, idxes = batch
         td_map = {self.train_model.obs_ph: batch_obs, self.action_ph: batch_actions,
                   self.rewards_ph: batch_sumrs, self.importance_weight_ph: weights,
                   self.learning_rate_ph: learning_rate, self.clip_range_ph: cliprange,
+                  self.sil_adv_mean_ph: adv_mean, self.sil_adv_std_ph: adv_std,
                   }
         adv, sil_num_samples, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-            [self.sil_adv, self.sil_num_samples, self.aug_pg_loss, self.aug_vf_loss, self.aug_entropy, self._sil_train],
+            [self.raw_sil_adv, self.sil_num_samples, self.aug_pg_loss, self.aug_vf_loss, self.aug_entropy, self._sil_train],
             td_map)
+        mean_adv = np.mean(adv)
         priority = np.abs(adv) + 1e-4
         self.aug_replay.update_priorities(idxes, priority)
-        return sil_num_samples
+        return sil_num_samples, policy_loss, value_loss, policy_entropy, mean_adv
 
     def learn(self, total_timesteps, callback=None, seed=None, log_interval=1, tb_log_name="PPO2",
               reset_num_timesteps=True):
@@ -486,6 +492,7 @@ class PPO2_augment_sil(ActorCriticRLModel):
                 total_episodes = np.sum(masks)
                 mb_loss_vals = []
                 mb_sil_num_samples = []
+                mb_sil_policy_loss, mb_sil_value_loss, mb_sil_entropy, mb_sil_adv = [], [], [], []
                 if states is None:  # nonrecurrent version
                     update_fac = self.n_batch // self.nminibatches // self.noptepochs + 1
                     inds = np.arange(self.n_batch)
@@ -504,11 +511,22 @@ class PPO2_augment_sil(ActorCriticRLModel):
                                                                  ))
                         # Do sil train
                         sil_batch_size = batch_size
+                        # adv_mean = np.mean(returns - values)
+                        # adv_std = np.std(returns - values) + 1e-6
+                        adv_mean = 0.
+                        adv_std = 1.
+                        # print('adv mean', adv_mean, 'adv_std', adv_std)
                         if self.aug_replay.can_sample(sil_batch_size):
-                            sil_num_samples = self._sil_train_step(writer, sil_batch_size, lr_now, cliprange_now)
+                            sil_num_samples, policy_loss, value_loss, entropy, mean_adv = self._sil_train_step(
+                                writer, sil_batch_size, lr_now, cliprange_now, adv_mean, adv_std)
                         else:
                             sil_num_samples = 0
+                            policy_loss, value_loss, entropy, mean_adv = np.nan, np.nan, np.nan, np.nan
                         mb_sil_num_samples.append(sil_num_samples)
+                        mb_sil_policy_loss.append(policy_loss)
+                        mb_sil_value_loss.append(value_loss)
+                        mb_sil_entropy.append(entropy)
+                        mb_sil_adv.append(mean_adv)
                 else:  # recurrent version
                     update_fac = self.n_batch // self.nminibatches // self.noptepochs // self.n_steps + 1
                     assert self.n_envs % self.nminibatches == 0
@@ -555,6 +573,10 @@ class PPO2_augment_sil(ActorCriticRLModel):
                     # logger.logkv("original_success", original_success)
                     # logger.logkv("total_success", total_success)
                     logger.logkv('sil_num_samples', np.mean(mb_sil_num_samples))
+                    logger.logkv('sil_policy_loss', np.mean(mb_sil_policy_loss))
+                    logger.logkv('sil_value_loss', np.mean(mb_sil_value_loss))
+                    logger.logkv('sil_entropy', np.mean(mb_sil_entropy))
+                    logger.logkv('sil_adv', np.mean(mb_sil_adv))
                     logger.dumpkvs()
 
                 if callback is not None:
