@@ -70,9 +70,9 @@ if __name__ == '__main__':
     plt.rcParams.update({'font.size': 20, 'xtick.labelsize': 20, 'ytick.labelsize': 20,
                          'axes.labelsize': 20})
     obs = env.reset()
-    while not (obs[4] > 0.70 and obs[4] < 0.80):
+    while not (obs[4] > 0.70 and obs[4] < 0.80 and obs[3] < 1.5):
         obs = env.reset()
-    env.set_goal(np.array([1.2, 0.75, 0.425, 1, 0]))
+    env.set_goal(np.array([1.195, 0.75, 0.425, 1, 0]))
     obs = env.get_obs()
     obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
     img = env.render(mode='rgb_array')
