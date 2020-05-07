@@ -113,10 +113,21 @@ class ParallelRunner2(AbstractEnvRunner):
 
             # restart_steps = [[] for _ in range(self.model.n_envs)]
             # subgoals = [[] for _ in range(self.model.n_envs)]
+            def augment_cond():
+                if 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
+                    if not infos[idx]['is_success']:
+                        return True
+                    return False
+                else:
+                    if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
+                        return True
+                    return False
+
             for idx, done in enumerate(self.dones):
                 if self.model.num_timesteps >= self.model.start_augment and done:
                     goal = self.ep_transition_buf[idx][0][0][-self.goal_dim:]
-                    if (self.dim_candidate == 2 and np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success'])) or (self.dim_candidate == 3 and (not infos[idx]['is_success'])):
+                    if augment_cond():
+                    # if (self.dim_candidate == 2 and np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success'])) or (self.dim_candidate == 3 and (not infos[idx]['is_success'])):
                         # Do augmentation
                         # Sample start step and perturbation
                         _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate,
