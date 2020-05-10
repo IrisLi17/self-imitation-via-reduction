@@ -115,7 +115,7 @@ class ParallelRunner2(AbstractEnvRunner):
             # subgoals = [[] for _ in range(self.model.n_envs)]
             def augment_cond():
                 if 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
-                    if not infos[idx]['is_success']:
+                    if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
                         return True
                     return False
                 else:
