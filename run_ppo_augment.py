@@ -122,8 +122,10 @@ def eval_model(eval_env, model):
         assert abs(env.unwrapped.random_ratio) < 1e-4
     n_episode = 0
     ep_rewards = []
+    ep_successes = []
     while n_episode < 20:
         ep_reward = 0.0
+        ep_success = 0.0
         obs = env.reset()
         goal_dim = env.goal.shape[0]
         if goal_dim > 3:
@@ -134,9 +136,38 @@ def eval_model(eval_env, model):
             action, _ = model.predict(obs)
             obs, reward, done, info = env.step(action)
             ep_reward += reward
+            ep_success += info['is_success']
         ep_rewards.append(ep_reward)
+        ep_successes.append(ep_success)
         n_episode += 1
-    return np.mean(ep_rewards)
+    return np.mean(ep_successes)
+
+
+def egonav_eval_model(eval_env, model, random_ratio=0.0):
+    env = eval_env
+    if hasattr(env.unwrapped, 'random_ratio'):
+        env.unwrapped.random_ratio = random_ratio
+    n_episode = 0
+    ep_rewards = []
+    ep_successes = []
+    while n_episode < 20:
+        ep_reward = 0.0
+        ep_success = 0.0
+        obs = env.reset()
+        goal_dim = env.goal.shape[0]
+        if goal_dim > 3:
+            while (np.argmax(obs[-goal_dim + 3:]) != env.unwrapped.n_object - 1):
+                obs = env.reset()
+        done = False
+        while not done:
+            action, _ = model.predict(obs)
+            obs, reward, done, info = env.step(action)
+            ep_reward += reward
+            ep_success += info['is_success']
+        ep_rewards.append(ep_reward)
+        ep_successes.append(ep_success)
+        n_episode += 1
+    return np.mean(ep_successes)
 
 
 def stack_eval_model(eval_env, model, init_on_table=False):
@@ -295,6 +326,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         else:
             dim_candidate = 2
         if not self_imitate:
+        # if True:
             model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
                                  gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
                                  cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
