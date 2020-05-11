@@ -503,7 +503,8 @@ class ParallelRunner2(AbstractEnvRunner):
         sample_obs_buf = []
         subgoal_obs_buf = []
         if dim == 2:
-            for object_idx in range(0, self.n_object):
+            start_object_idx = 0 if 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id else 1
+            for object_idx in range(start_object_idx, self.n_object):
                 ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
                 obstacle_xy = sample_obs[:, 3 * (object_idx+1):3*(object_idx+1) + 2] + noise
                 sample_obs[:, 3*(object_idx+1):3*(object_idx+1)+2] = obstacle_xy
