@@ -21,13 +21,15 @@ def smooth(array, window):
 if __name__ == '__main__':
     folder_name = sys.argv[1]
     env_name = sys.argv[2]
-    assert env_name in ['push', 'stack2']
+    assert env_name in ['push', 'stack2', 'stack3']
     # assert mode in ['train', 'hard', 'iteration']
     max_timesteps = {'push': 1.45e7,
                      'stack2': 2.8e7,
+                     'stack3': 1e8,
                      }
     max_iterationss = {'push': 440000,
                        'stack2': 8.9e5,
+                       'stack3': 2.5e6,
                        }
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_eval_iteration, df_legend_iteration = [], [], [], [], [], [], []
     subfolders = ['sac', 'sir']
@@ -37,7 +39,7 @@ if __name__ == '__main__':
         subfolders = ['ppo', 'sir_re1-8']
     elif 'push_random0.7' in folder_name:
         subfolders = ['sac', 'sir', 'sil']
-    elif 'stack_2obj' in folder_name:
+    elif 'stack_2obj' in folder_name or 'stack_3obj' in folder_name:
         subfolders = ['sac', 'sir', 'sil', 'ds']
     for subfolder in subfolders:
         last_sr = []
