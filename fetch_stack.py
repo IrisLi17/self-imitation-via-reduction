@@ -503,7 +503,7 @@ class FetchStackEnv(fetch_env.FetchEnv, utils.EzPickle):
         lookat = self.sim.data.body_xpos[body_id]
         for idx, value in enumerate(lookat):
             self.viewer.cam.lookat[idx] = value
-        self.viewer.cam.distance = 2.0
+        self.viewer.cam.distance = 1.0
         self.viewer.cam.azimuth = 132.
         self.viewer.cam.elevation = -30.
 
