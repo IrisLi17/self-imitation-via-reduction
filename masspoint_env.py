@@ -5,6 +5,7 @@ from masspoint_base import MasspointPushEnv
 import gym.envs.robotics.utils as robot_utils
 from gym.envs.robotics import rotations
 import numpy as np
+from mujoco_py import MujocoException
 
 
 MODEL_XML_PATH0 = os.path.join(os.path.dirname(__file__), 'assets', 'masspoint', 'single_obstacle.xml')
@@ -508,17 +509,24 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
         return r
 
     def step(self, action):
-        action = np.clip(action, self.action_space.low, self.action_space.high)
-        self._set_action(action * 20)
-        self.sim.step()
-        self._step_callback()
-        obs = self._get_obs()
+        try:
+            action = np.clip(action, self.action_space.low, self.action_space.high)
+            self._set_action(action * 20)
+            self.sim.step()
+            self._step_callback()
+            obs = self._get_obs()
 
-        done = False
-        info = {
-            'is_success': self._is_success(obs['achieved_goal'][0:3], self.goal[0:3]),
-        }
-        reward = self.compute_reward(obs['observation'], self.goal, info)
+            done = False
+            info = {
+                'is_success': self._is_success(obs['achieved_goal'][0:3], self.goal[0:3]),
+            }
+            reward = self.compute_reward(obs['observation'], self.goal, info)
+        except MujocoException:
+            obs = self.reset()
+            done = True
+            info = {'is_success': False}
+            reward = -1
+            print('catch mujoco error, reset env')
         return obs, reward, done, info
 
     def _viewer_setup(self):

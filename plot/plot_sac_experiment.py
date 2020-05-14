@@ -21,11 +21,15 @@ def smooth(array, window):
 if __name__ == '__main__':
     folder_name = sys.argv[1]
     env_name = sys.argv[2]
-    assert env_name in ['push']
+    assert env_name in ['push', 'stack2', 'stack3']
     # assert mode in ['train', 'hard', 'iteration']
     max_timesteps = {'push': 1.45e7,
+                     'stack2': 2.8e7,
+                     'stack3': 1e8,
                      }
     max_iterationss = {'push': 440000,
+                       'stack2': 8.9e5,
+                       'stack3': 2.5e6,
                        }
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_eval_iteration, df_legend_iteration = [], [], [], [], [], [], []
     subfolders = ['sac', 'sir']
@@ -35,6 +39,8 @@ if __name__ == '__main__':
         subfolders = ['ppo', 'sir_re1-8']
     elif 'push_random0.7' in folder_name:
         subfolders = ['sac', 'sir', 'sil']
+    elif 'stack_2obj' in folder_name or 'stack_3obj' in folder_name:
+        subfolders = ['sac', 'sir', 'sil', 'ds']
     for subfolder in subfolders:
         last_sr = []
         last_eval = []
@@ -43,7 +49,10 @@ if __name__ == '__main__':
                 continue
             progress_file = os.path.join(folder_name, subfolder, str(i), 'progress.csv')
             eval_file = os.path.join(folder_name, subfolder, str(i), 'eval.csv')
-            raw_success_rate = get_item(progress_file, 'ep_rewmean')
+            if subfolder is 'ds':
+                raw_success_rate = get_item(progress_file, 'success rate')
+            else:
+                raw_success_rate = get_item(progress_file, 'ep_rewmean')
             raw_total_timesteps = get_item(progress_file, 'total timesteps')
             try:
                 raw_original_timesteps = get_item(progress_file, 'original_timesteps')
@@ -104,7 +113,7 @@ if __name__ == '__main__':
     plt.style.use("ggplot")
     # plt.rcParams.update({'legend.fontsize': 14})
     p = sns.color_palette()
-    sns.set_palette([p[0], p[1], p[2]])
+    sns.set_palette([p[i] for i in range(len(subfolders))])
     f, axes = plt.subplots(1, 3, figsize=(width, height))
     sns.lineplot(x='samples', y='success_rate', hue='algo', ax=axes[0], data=sr_timesteps)
     axes[0].set_xlabel('samples')
@@ -115,6 +124,7 @@ if __name__ == '__main__':
     axes[1].set_ylabel('')
     axes[1].get_legend().remove()
     sns.lineplot(x='iterations', y='eval', hue='algo', ax=axes[2], data=eval_iteration)
+    axes[2].xaxis.get_major_formatter().set_powerlimits((0, 1))
     axes[2].set_xlabel('iterations')
     axes[2].set_ylabel('')
     axes[2].get_legend().remove()
@@ -131,7 +141,7 @@ if __name__ == '__main__':
     # axes.set_ylabel('success rate')
     # axes.get_legend().remove()
     # handles, labels = axes.get_legend_handles_labels()
-    f.legend(handles[1:], ['SAC', 'SIR', 'SIL'], loc="lower right", ncol=1, bbox_to_anchor=(0.99, 0.18), title='')
+    f.legend(handles[1:], ['SAC', 'SIR', 'SIL', 'DS'][:len(subfolders)], loc="lower right", ncol=1, bbox_to_anchor=(0.99, 0.18), title='')
     f.subplots_adjust(top=1. - margin / height, bottom=0.21, wspace=wspace, left=left, right=1. - margin / width)
     plt.savefig(os.path.join(folder_name, '../', os.path.basename(folder_name) + '.pdf'))
     plt.show()

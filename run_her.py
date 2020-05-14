@@ -19,7 +19,7 @@ import os, time
 import imageio
 import argparse
 import numpy as np
-from run_ppo_augment import stack_eval_model, eval_model, log_eval
+from run_ppo_augment import stack_eval_model, eval_model, log_eval, egonav_eval_model
 
 try:
     from mpi4py import MPI
@@ -261,6 +261,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                     if 'FetchStack' in env_name:
                         mean_eval_reward = stack_eval_model(eval_env, _locals["self"],
                                                             init_on_table=(env_name=='FetchStack-v2'))
+                    elif 'MasspointPushDoubleObstacle-v2' in env_name:
+                        mean_eval_reward = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"])
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
                     log_eval(_locals['self'].num_timesteps, mean_eval_reward)
@@ -283,7 +285,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         from utils.sac_attention_policy import AttentionPolicy
         register_policy('AttentionPolicy', AttentionPolicy)
         if policy == 'AttentionPolicy':
-            # assert env_name is not 'MasspointPushDoubleObstacle-v2', 'attention policy not supported!'
+            assert env_name is not 'MasspointPushDoubleObstacle-v2', 'attention policy not supported!'
             if 'FetchStack' in env_name:
                 policy_kwargs["n_object"] = n_object
                 policy_kwargs["feature_extraction"] = "attention_mlp"
