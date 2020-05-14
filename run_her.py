@@ -105,7 +105,8 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     if 'FetchStack' in env_id and ('Unlimit' not in env_id) and max_episode_steps is None:
         from utils.wrapper import FlexibleTimeLimitWrapper
         env = FlexibleTimeLimitWrapper(env, 100)
-    if 'FetchStack' in env_id and kwargs['reward_type'] != 'sparse':
+    if ('FetchStack' in env_id and kwargs['reward_type'] != 'sparse') \
+            or ('FetchPushWallObstacle' in env_id and kwargs['reward_type'] != 'sparse'):
         env = DoneOnSuccessWrapper(env, 0.0)
     else:
         env = DoneOnSuccessWrapper(env)
@@ -128,6 +129,7 @@ def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None,
                     heavy_obstacle=True,
                     random_ratio=random_ratio,
                     random_gripper=True,
+                    reward_type=reward_type,
                     max_episode_steps=100, )
     elif env_id == 'MasspointPushDoubleObstacle-v1' or env_id == 'MasspointPushDoubleObstacle-v2':
         return dict(random_box=True,
@@ -327,6 +329,15 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             obs = env.reset()
             while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
                 obs = env.reset()
+        elif 'FetchPushWallObstacle' in env_name:
+            while not (obs['observation'][0][4] > 0.7 and obs['observation'][0][4] < 0.8):
+                obs = env.reset()
+            env.env_method('set_goal', [np.array([1.18, 0.8, 0.425, 1, 0])])
+            obs = env.env_method('get_obs')
+            obs = {'observation': obs[0]['observation'][None],
+                    'achieved_goal': obs[0]['achieved_goal'][None],
+                    'desired_goal': obs[0]['desired_goal'][None]}
+            # obs[0] = np.concatenate([obs[0][key] for key in ['observation', 'achieved_goal', 'desired_goal']])
         elif 'MasspointPushDoubleObstacle' in env_name or 'FetchPushWallObstacle' in env_name:
             while np.argmax(obs['desired_goal'][0][3:]) != 0:
                 obs = env.reset()

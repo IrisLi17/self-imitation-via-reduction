@@ -10,4 +10,5 @@ CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchPushWallObstacle-v4 --random
 CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e6 --num_workers 32 --priority --log_path logs/FetchPushWallObstacle-v4new_random0.7/her_sac_32workers/0_priority
 CUDA_VISIBLE_DEVICES=0 python run_her_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e6 --num_workers 32 --start_augment 0 --imitation_coef 0.1 --priority --log_path logs/FetchPushWallObstacle-v4new_random0.7/her_sac_aug_32workers/start0_silloss0.1uni_threshold_priority
 CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --sil --num_timesteps 1e6 --num_workers 32 --sil_coef 0.1 --priority --log_path logs/FetchPushWallObstacle-v4new_random0.7/her_sac_sil_32workers/coef0.1_priority
+CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --reward_type dense --num_timesteps 1e6 --num_workers 32 --priority --log_path logs/FetchPushWallObstacle-v4new_random0.7/her_sac_32workers/ds_priority
 
