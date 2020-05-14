@@ -500,13 +500,26 @@ class MasspointPushDoubleObstacleEnv(MasspointPushEnv, utils.EzPickle):
         return goal.copy()
 
     def compute_reward(self, observation, goal, info):
-        # Note: the input is different from other environments.
+        # # Note: the input is different from other environments.
+        # one_hot = goal[3:]
+        # idx = np.argmax(one_hot)
+        # # HACK: parse the corresponding object position from observation
+        # achieved_goal = observation[3 + 3 * idx : 3 + 3 * (idx + 1)]
+        # r = MasspointPushEnv.compute_reward(self, achieved_goal, goal[0:3], info)
+        # return r
+        r, _ = self.compute_reward_and_success(observation, goal, info)
+        return r
+
+    def compute_reward_and_success(self, observation, goal, info):
         one_hot = goal[3:]
         idx = np.argmax(one_hot)
-        # HACK: parse the corresponding object position from observation
-        achieved_goal = observation[3 + 3 * idx : 3 + 3 * (idx + 1)]
-        r = MasspointPushEnv.compute_reward(self, achieved_goal, goal[0:3], info)
-        return r
+        achieved_goal = observation[3 + 3 * idx: 3 + 3 * (idx + 1)]
+        success = np.linalg.norm(achieved_goal - goal[0:3]) < self.distance_threshold
+        if self.reward_type == "dense":
+            r = 0.1 * MasspointPushEnv.compute_reward(self, achieved_goal, goal[0:3], info) + success
+        else:
+            r = MasspointPushEnv.compute_reward(self, achieved_goal, goal[0:3], info)
+        return r, success
 
     def step(self, action):
         try:
