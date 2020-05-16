@@ -38,7 +38,7 @@ if __name__ == '__main__':
     elif 'particle_random1.0' in folder_name:
         subfolders = ['ppo', 'sir_re1-8']
     elif 'push_random0.7' in folder_name:
-        subfolders = ['sac', 'sir', 'sil']
+        subfolders = ['sac', 'sir', 'sil', 'ds2']
     elif 'stack_2obj' in folder_name or 'stack_3obj' in folder_name:
         subfolders = ['sac', 'sir', 'sil', 'ds']
     for subfolder in subfolders:
@@ -49,7 +49,7 @@ if __name__ == '__main__':
                 continue
             progress_file = os.path.join(folder_name, subfolder, str(i), 'progress.csv')
             eval_file = os.path.join(folder_name, subfolder, str(i), 'eval.csv')
-            if subfolder is 'ds':
+            if subfolder is 'ds' or subfolder is 'ds2':
                 raw_success_rate = get_item(progress_file, 'success rate')
             else:
                 raw_success_rate = get_item(progress_file, 'ep_rewmean')

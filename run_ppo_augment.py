@@ -325,8 +325,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             dim_candidate = 3
         else:
             dim_candidate = 2
-        if not self_imitate:
-        # if True:
+        # if not self_imitate:
+        if True:
             model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
                                  gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
                                  cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
@@ -334,12 +334,12 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                                  reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
                                  curriculum=curriculum, self_imitate=self_imitate,
                                  )
-        else:
-            model = PPO2_augment_sil(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
-                                     gamma=0.99, noptepochs=10, ent_coef=0.1, learning_rate=3e-4,
-                                     cliprange=0.2, parallel=parallel, policy_kwargs=policy_kwargs,
-                                     aug_adv_weight=aug_adv_weight, curriculum=curriculum,
-                                     )
+        # else:
+        #     model = PPO2_augment_sil(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
+        #                              gamma=0.99, noptepochs=10, ent_coef=0.1, learning_rate=3e-4,
+        #                              cliprange=0.2, parallel=parallel, policy_kwargs=policy_kwargs,
+        #                              aug_adv_weight=aug_adv_weight, curriculum=curriculum,
+        #                              )
         def callback(_locals, _globals):
             num_update = _locals["update"]
             if 'FetchStack' in env_name:
