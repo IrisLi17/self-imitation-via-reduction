@@ -143,7 +143,7 @@ def eval_model(eval_env, model):
     return np.mean(ep_successes)
 
 
-def egonav_eval_model(eval_env, model, random_ratio=0.0):
+def egonav_eval_model(eval_env, model, random_ratio=0.0, goal_idx=3):
     env = eval_env
     if hasattr(env.unwrapped, 'random_ratio'):
         env.unwrapped.random_ratio = random_ratio
@@ -156,7 +156,7 @@ def egonav_eval_model(eval_env, model, random_ratio=0.0):
         obs = env.reset()
         goal_dim = env.goal.shape[0]
         if goal_dim > 3:
-            while (np.argmax(obs[-goal_dim + 3:]) != env.unwrapped.n_object - 1):
+            while np.argmax(obs[-goal_dim + 3:]) != goal_idx:
                 obs = env.reset()
         done = False
         while not done:
@@ -202,13 +202,13 @@ def stack_eval_model(eval_env, model, init_on_table=False):
         n_episode += 1
     return np.mean(ep_successes)
 
-def log_eval(num_update, mean_eval_reward):
-    if not os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
-        with open(os.path.join(logger.get_dir(), 'eval.csv'), 'a', newline='') as csvfile:
+def log_eval(num_update, mean_eval_reward, file_name='eval.csv'):
+    if not os.path.exists(os.path.join(logger.get_dir(), file_name)):
+        with open(os.path.join(logger.get_dir(), file_name), 'a', newline='') as csvfile:
             csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
             title = ['n_updates', 'mean_eval_reward']
             csvwriter.writerow(title)
-    with open(os.path.join(logger.get_dir(), 'eval.csv'), 'a', newline='') as csvfile:
+    with open(os.path.join(logger.get_dir(), file_name), 'a', newline='') as csvfile:
         csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
         data = [num_update, mean_eval_reward]
         csvwriter.writerow(data)
@@ -325,8 +325,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             dim_candidate = 3
         else:
             dim_candidate = 2
-        if not self_imitate:
-        # if True:
+        # if not self_imitate:
+        if True:
             model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
                                  gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
                                  cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
@@ -334,12 +334,12 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                                  reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
                                  curriculum=curriculum, self_imitate=self_imitate,
                                  )
-        else:
-            model = PPO2_augment_sil(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
-                                     gamma=0.99, noptepochs=10, ent_coef=0.1, learning_rate=3e-4,
-                                     cliprange=0.2, parallel=parallel, policy_kwargs=policy_kwargs,
-                                     aug_adv_weight=aug_adv_weight, curriculum=curriculum,
-                                     )
+        # else:
+        #     model = PPO2_augment_sil(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
+        #                              gamma=0.99, noptepochs=10, ent_coef=0.1, learning_rate=3e-4,
+        #                              cliprange=0.2, parallel=parallel, policy_kwargs=policy_kwargs,
+        #                              aug_adv_weight=aug_adv_weight, curriculum=curriculum,
+        #                              )
         def callback(_locals, _globals):
             num_update = _locals["update"]
             if 'FetchStack' in env_name:
