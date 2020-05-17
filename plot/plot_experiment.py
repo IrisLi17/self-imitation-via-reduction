@@ -37,7 +37,7 @@ if __name__ == '__main__':
     elif 'particle_random1.0' in folder_name:
         subfolders = ['ppo', 'sir_re1-8']
     elif 'push_random0.7' in folder_name:
-        subfolders = ['ppo', 'sir_re8', 'ppo_sil_clip0.2']
+        subfolders = ['ppo', 'sir', 'sil']
     for subfolder in subfolders:
         last_sr = []
         last_eval = []
