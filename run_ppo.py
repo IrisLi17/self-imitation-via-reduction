@@ -96,7 +96,7 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     if env_id in PICK_ENTRY_POINT.keys() and (kwargs['reward_type'] == 'dense' or kwargs['reward_type'] == 'incremental'):
         env = DoneOnSuccessWrapper(env, reward_offset=0.0)
         env = ScaleRewardWrapper(env, reward_scale=100.0)
-    elif env_id in MASS_ENTRY_POINT.keys() and kwargs['reward_type'] != "sparse":
+    elif (env_id in MASS_ENTRY_POINT.keys() or env_id in ENTRY_POINT.keys()) and kwargs['reward_type'] != "sparse":
         env = DoneOnSuccessWrapper(env, reward_offset=0.0)
     else:
         env = DoneOnSuccessWrapper(env)
@@ -127,7 +127,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                           heavy_obstacle=True,
                           random_ratio=random_ratio,
                           random_gripper=True,
-                          max_episode_steps=100, )
+                          max_episode_steps=100,
+                          reward_type=reward_type,)
     elif env_name in MASS_ENTRY_POINT.keys():
         env_kwargs = dict(random_box=True,
                           random_ratio=random_ratio,
@@ -155,7 +156,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                                heavy_obstacle=True,
                                random_ratio=0.0,
                                random_gripper=True,
-                               max_episode_steps=100, )
+                               max_episode_steps=100,
+                               reward_type=reward_type,)
     elif env_name in MASS_ENTRY_POINT.keys():
         eval_env_kwargs = dict(random_box=True,
                                random_ratio=0.0,

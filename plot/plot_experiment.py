@@ -37,7 +37,7 @@ if __name__ == '__main__':
     elif 'particle_random1.0' in folder_name:
         subfolders = ['ppo', 'sir_re1-8']
     elif 'push_random0.7' in folder_name:
-        subfolders = ['ppo', 'sir_re8', 'ppo_sil_clip0.2']
+        subfolders = ['ppo', 'sir', 'sil', 'ds']
     for subfolder in subfolders:
         last_sr = []
         last_eval = []
@@ -46,7 +46,10 @@ if __name__ == '__main__':
                 continue
             progress_file = os.path.join(folder_name, subfolder, str(i), 'progress.csv')
             eval_file = os.path.join(folder_name, subfolder, str(i), 'eval.csv')
-            raw_success_rate = get_item(progress_file, 'ep_reward_mean')
+            if subfolder == 'ds':
+                raw_success_rate = get_item(progress_file, 'ep_success_rate')
+            else:
+                raw_success_rate = get_item(progress_file, 'ep_reward_mean')
             raw_total_timesteps = get_item(progress_file, 'total_timesteps')
             raw_eval_reward = get_item(eval_file, 'mean_eval_reward')
             print(raw_total_timesteps.shape, raw_eval_reward.shape)
@@ -98,7 +101,7 @@ if __name__ == '__main__':
     plt.style.use("ggplot")
     # plt.rcParams.update({'legend.fontsize': 14})
     p = sns.color_palette()
-    sns.set_palette([p[0], p[1], p[2]])
+    sns.set_palette([p[i] for i in range(len(subfolders))])
     f, axes = plt.subplots(1, 3, figsize=(width, height))
     sns.lineplot(x='samples', y='success_rate', hue='algo', ax=axes[0], data=sr_timesteps)
     axes[0].set_xlabel('samples')
@@ -125,7 +128,7 @@ if __name__ == '__main__':
     # axes.set_ylabel('success rate')
     # axes.get_legend().remove()
     # handles, labels = axes.get_legend_handles_labels()
-    f.legend(handles[1:], ['PPO', 'SIR', 'SIL'], loc="lower right", ncol=1, bbox_to_anchor=(0.99, 0.18), title='')
+    f.legend(handles[1:], ['PPO', 'SIR', 'SIL', 'DS'], loc="lower right", ncol=1, bbox_to_anchor=(0.99, 0.18), title='')
     f.subplots_adjust(top=1. - margin / height, bottom=0.21, wspace=wspace, left=left, right=1. - margin / width)
     plt.savefig(os.path.join(folder_name, '../', os.path.basename(folder_name) + '.pdf'))
     # plt.show()

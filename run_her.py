@@ -345,6 +345,15 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         elif 'MasspointPushDoubleObstacle' in env_name or 'FetchPushWallObstacle' in env_name:
             while np.argmax(obs['desired_goal'][0][3:]) != 0:
                 obs = env.reset()
+        elif 'MasspointMaze-v2' in env_name:
+            while obs['observation'][0][0] < 3 or obs['observation'][0][1] < 3:
+                obs = env.reset()
+            env.env_method('set_goal', [np.array([1., 1., 0.15])])
+            obs = env.env_method('get_obs')
+            obs = {'observation': obs[0]['observation'][None],
+                    'achieved_goal': obs[0]['achieved_goal'][None],
+                    'desired_goal': obs[0]['desired_goal'][None]}
+
         print('goal', obs['desired_goal'][0], 'obs', obs['observation'][0])
         episode_reward = 0.0
         images = []
@@ -388,8 +397,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 episode_reward = 0.0
                 frame_idx = 0
                 num_episode += 1
-                if num_episode >= 10:
+                if num_episode >= 1:
                     break
+        exit()
         if export_gif:
             os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
