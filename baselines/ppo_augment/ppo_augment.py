@@ -51,7 +51,7 @@ class PPO2_augment(ActorCriticRLModel):
     def __init__(self, policy, env, aug_env=None, eval_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
                  cliprange_vf=None, n_candidate=4, dim_candidate=2, parallel=False, reuse_times=1, start_augment=0,
-                 horizon=100, aug_adv_weight=1.0, curriculum=False, self_imitate=False,
+                 horizon=100, aug_adv_weight=1.0, curriculum=False, self_imitate=False, sil_clip=0.2,
                  verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
@@ -78,6 +78,7 @@ class PPO2_augment(ActorCriticRLModel):
         self.start_augment = start_augment
         self.curriculum = curriculum
         self.self_imitate = self_imitate
+        self.sil_clip = sil_clip
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
 
@@ -509,8 +510,8 @@ class PPO2_augment(ActorCriticRLModel):
                 print([item.shape[0] if item is not None else 0 for item in self.aug_obs])
                 # if self.aug_obs is not None:
                 if augment_steps > 0:
-                    if self.self_imitate and augment_steps / self.n_batch > 0.2:
-                        aug_sample_idx = np.random.randint(0, augment_steps, int(self.n_batch * 0.2))
+                    if self.self_imitate and augment_steps / self.n_batch > self.sil_clip:
+                        aug_sample_idx = np.random.randint(0, augment_steps, int(self.n_batch * self.sil_clip))
                     else:
                         aug_sample_idx = np.arange(augment_steps)
                     _aug_return = np.concatenate(list(filter(lambda v:v is not None, self.aug_return)), axis=0)
