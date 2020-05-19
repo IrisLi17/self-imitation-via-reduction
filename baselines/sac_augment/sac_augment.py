@@ -1038,6 +1038,9 @@ class SAC_augment(OffPolicyRLModel):
         if 'FetchPushWallobstacle' in self.env_id:
             filter_low = 0.7
             filter_high = 0.9
+        elif 'MasspointMaze' in self.env_id:
+            filter_low = 0.7
+            filter_high = 0.9
         if 'FetchStack' in self.env_id:
             ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
             filter_subgoal = True  # TODO: see if it works

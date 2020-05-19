@@ -8,7 +8,7 @@ CUDA_VISIBLE_DEVICES=0 python run_her.py --env MasspointPushDoubleObstacle-v1 --
 CUDA_VISIBLE_DEVICES=0 python run_her_augment.py --env MasspointPushDoubleObstacle-v1 --random_ratio 0.7 --policy AttentionPolicy --num_timesteps 3e6 --num_workers 32 --start_augment 1e7 --imitation_coef 0.1 --priority --log_path logs/MasspointPushDoubleObstacle-v1_random0.7_new2/her_sac_aug_32workers/attention_logstd0.0_start1e7_silloss0.1_priority
 
 # S-Maze
-CUDA_VISIBLE_DEVICES=0 python run_her.py --env MasspointMaze-v2 --num_timesteps 1e5 --num_workers 4 --log_path logs/MasspointMaze-v2/her_sac_4workers/0
-CUDA_VISIBLE_DEVICES=0 python run_her.py --env MasspointMaze-v2 --num_timesteps 1e5 --num_workers 4 --sil --sil_coef 0.1 --log_path logs/MasspointMaze-v2/her_sac_sil_4workers/coef0.1
-CUDA_VISIBLE_DEVICES=0 python run_her_augment.py --env MasspointMaze-v2 --num_timesteps 1e5 --num_workers 4 --start_augment 0 --imitation_coef 0.1 --log_path logs/MasspointMaze-v2/her_sac_aug_4workers/start0_silloss0.1
+CUDA_VISIBLE_DEVICES=0 python run_her.py --env MasspointMaze-v2 --num_timesteps 2.5e5 --num_workers 4 --priority --log_path logs/MasspointMaze-v2/her_sac_4workers/0_priority
+CUDA_VISIBLE_DEVICES=0 python run_her.py --env MasspointMaze-v2 --num_timesteps 2.5e5 --num_workers 4 --sil --sil_coef 0.1 --priority --log_path logs/MasspointMaze-v2/her_sac_sil_4workers/coef0.1_priority
+CUDA_VISIBLE_DEVICES=0 python run_her_augment.py --env MasspointMaze-v2 --num_timesteps 2.5e5 --num_workers 4 --start_augment 1e5 --imitation_coef 0.1 --priority --log_path logs/MasspointMaze-v2/her_sac_aug_4workers/start1e5_silloss0.1_filter0.70.9_priority
 
