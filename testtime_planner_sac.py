@@ -17,7 +17,7 @@ def no_reduction(env, model, initial_state, ultimate_goal, horizon):
     done = False
     step_so_far = 0
     while not done:
-        action, _ = model.predict(obs)
+        action, _ = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
         step_so_far += 1
         if step_so_far >= horizon:
@@ -32,7 +32,7 @@ def search_subgoal(obs, model):
     sample_obs = np.tile(obs, (noise.shape[0], 1))
     subgoal_obs = np.tile(obs, (noise.shape[0], 1))
     ultimate_idx = np.argmax(obs[model.model.obs_dim + model.model.goal_dim + 3:])
-    for object_idx in range(model.model.n_object):
+    for object_idx in range(1, model.model.n_object):
         obstacle_xy = np.expand_dims(obs[3 * (object_idx + 1): 3 * (object_idx + 1) + 2], axis=0) + noise
         # Path2
         sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 2] = obstacle_xy
@@ -78,7 +78,19 @@ def reduction(env, model, initial_state, ultimate_goal, horizon):
     env.set_goal(ultimate_goal)
     obs = env.get_obs()
     obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+    obs1 = obs.copy()
+    obs1[model.model.obs_dim:model.model.obs_dim + model.model.goal_dim] = np.concatenate([obs1[6:9], np.array([0, 1])])
+    obs1[model.model.obs_dim + model.model.goal_dim:] = np.concatenate([obs1[6:9], np.array([0, 1])])
+    feed_dict = {model.model.observations_ph: np.expand_dims(obs1, axis=0)}
+    original_value1 = np.squeeze(model.model.sess.run(model.model.step_ops[6], feed_dict), axis=-1)
+    feed_dict = {model.model.observations_ph: np.expand_dims(obs, axis=0)}
+    original_value2 = np.squeeze(model.model.sess.run(model.model.step_ops[6], feed_dict), axis=-1)
+    original_value = (original_value1 + original_value2) / 2
     subgoal, mean_value = search_subgoal(obs, model)
+    # if np.argmax(ultimate_goal[3:]) != 0 or mean_value < original_value:
+    # if mean_value < original_value:
+    #     return no_reduction(env, model, initial_state, ultimate_goal, horizon)
+    print('original value', original_value, 'mean value', mean_value, 'subgoal', subgoal)
     done = False
     step_so_far = 0
     # Run towards subgoal
@@ -86,12 +98,13 @@ def reduction(env, model, initial_state, ultimate_goal, horizon):
     obs = env.get_obs()
     obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
     while not done:
-        action, _ = model.predict(obs)
+        action, _ = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
         step_so_far += 1
         if step_so_far >= horizon:
             break
     if not done:
+        print('Path1 fails')
         return False, step_so_far
     done = False
     # Run towards ultimate goal
@@ -99,18 +112,26 @@ def reduction(env, model, initial_state, ultimate_goal, horizon):
     obs = env.get_obs()
     obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
     while not done:
-        action, _ = model.predict(obs)
+        action, _ = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
         step_so_far += 1
         if step_so_far >= horizon:
             break
+    if not done:
+        print('Path2 fails')
     return done, step_so_far
 
 
 if __name__ == '__main__':
+    # CUDA_VISIBLE_DEVICES=0 python testtime_planner_sac.py FetchPushWallObstacle-v4 logs/FetchPushWallObstacle-v4new_random0.7/her_sac_32workers/obj0.15new_exp0.1_priority/model_19.zip
+    # (horizon150) random_ratio=0.0, no reduction success 40, reduction success 51.
+    # (horizon150) but random_ratio=1.0, no reduction success 55, reduction success 42.
+    # CUDA_VISIBLE_DEVICES=0 python testtime_planner_sac.py FetchPushWallObstacle-v4 logs/FetchPushWallObstacle-v4new_random1.0/her_sac_32workers/0_priority/model_20.zip
+    # (horizon100) random_ratio=0.0, no reduction success 38, reduction success 81
+    # (horizon100) random_ratio=1.0, no reduction success 69, reduction success 63
     env_id = sys.argv[1]
     model_path = sys.argv[2]
-    env_kwargs = get_env_kwargs(env_id, random_ratio=0.7)
+    env_kwargs = get_env_kwargs(env_id, random_ratio=1.0)
 
     def make_thunk(rank):
         return lambda: make_env(env_id=env_id, seed=0, rank=rank, kwargs=env_kwargs)
@@ -137,13 +158,25 @@ if __name__ == '__main__':
 
     count1 = 0
     count2 = 0
-    for i in range(10):
+    fail1 = [0, 0]
+    fail2 = [0, 0]
+    for i in range(1000):
         obs = env.reset()
         ultimate_goal = obs['desired_goal'][0]
         initial_state = env.env_method('get_state')[0]
-        success1, _ = no_reduction(aug_env, model, initial_state, ultimate_goal, env_kwargs['max_episode_steps'])
+        success1, _ = no_reduction(aug_env, model, initial_state, ultimate_goal, 1. * env_kwargs['max_episode_steps'])
+        if not success1:
+            print(i, 'Original fail')
+            fail1[np.argmax(ultimate_goal[3:])] += 1
+        else:
+            print(i, 'Original success')
         count1 += int(success1)
-        success2, _ = reduction(aug_env, model, initial_state, ultimate_goal, env_kwargs['max_episode_steps'])
+        success2, _ = reduction(aug_env, model, initial_state, ultimate_goal, 1. * env_kwargs['max_episode_steps'])
+        if not success2:
+            fail2[np.argmax(ultimate_goal[3:])] += 1
+        else:
+            print(i, 'Reduction success')
         count2 += int(success2)
     print('No reduction success', count1)
     print('Reduction success', count2)
+    print('Failure detail', fail1, fail2)
