@@ -216,10 +216,14 @@ class PPO2_augment(ActorCriticRLModel):
 
                     ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
                     if self.self_imitate:
-                        ratio = tf.exp(self.old_neglog_pac_ph - tf.minimum(neglogpac, 100))
+                        ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
                                                                   self.clip_range_ph)
+                    # if True:
+                    #     pg_losses = -tf.clip_by_value(self.advs_ph, -1., 1.) * ratio
+                    #     pg_losses2 = -tf.clip_by_value(self.advs_ph, -1., 1.) * tf.clip_by_value(
+                    #         ratio, 1.0 - self.clip_range_ph, 1.0 + self.clip_range_ph)
                     self.pg_loss = tf.reduce_mean(tf.maximum(pg_losses, pg_losses2))
                     self.approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - self.old_neglog_pac_ph))
                     self.clipfrac = tf.reduce_mean(tf.cast(tf.greater(tf.abs(ratio - 1.0),
@@ -317,7 +321,8 @@ class PPO2_augment(ActorCriticRLModel):
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
         for i in range(advs.shape[0]):
             if is_demo[i]:
-                advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
+                # advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
+                advs[i] = np.clip(advs[i], 0., 1.) * self.aug_adv_weight
         if aug_adv_slice is not None:
             aug_adv_slice = (aug_adv_slice - aug_adv_slice.mean()) / (aug_adv_slice.std() + 1e-8)
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
