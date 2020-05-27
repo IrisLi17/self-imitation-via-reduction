@@ -24,16 +24,16 @@ if __name__ == '__main__':
     assert env_name in ['push', 'particle', 'maze', 'stacking']
     # assert mode in ['train', 'hard', 'iteration']
     max_timesteps = {'push': 4.99e7,
-                     'particle': 2.8e8,
+                     'particle': 2.5e8,
                      'maze': 1.5e6,
                      'stacking': 2e8,}
     max_iterationss = {'push': 750,
-                       'particle': 510,
+                       'particle': 550,
                        'maze': 245,}
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_eval_iteration, df_legend_iteration = [], [], [], [], [], [], []
-    subfolders = ['ppo', 'sir_re8']
+    subfolders = ['ppo', 'sir']
     if 'particle_random0.7' in folder_name:
-        subfolders = ['ppo', 'sir_re1-8']
+        subfolders = ['ppo', 'sir2', 'sil', 'ds']
     elif 'particle_random1.0' in folder_name:
         subfolders = ['ppo', 'sir_re1-8']
     elif 'push_random0.7' in folder_name:
@@ -94,15 +94,16 @@ if __name__ == '__main__':
     wspace = .3
     bottom = .3
     margin = .1
-    left = .08
-    width = 3.5 / ((1. - left) / (2 + wspace + margin / 2))
+    # left = .08
+    left = .1
+    width = 2.15 / ((1. - left) / (2 + wspace + margin / 2))
     height = 1.5 / ((1. - bottom) / (1 + margin / 2))
 
     plt.style.use("ggplot")
     # plt.rcParams.update({'legend.fontsize': 14})
     p = sns.color_palette()
     sns.set_palette([p[i] for i in range(len(subfolders))])
-    f, axes = plt.subplots(1, 3, figsize=(width, height))
+    f, axes = plt.subplots(1, 2, figsize=(width, height))
     sns.lineplot(x='samples', y='success_rate', hue='algo', ax=axes[0], data=sr_timesteps)
     axes[0].set_xlabel('samples')
     axes[0].set_ylabel('success_rate')
@@ -111,11 +112,11 @@ if __name__ == '__main__':
     axes[1].set_xlabel('samples')
     axes[1].set_ylabel('')
     axes[1].get_legend().remove()
-    sns.lineplot(x='iterations', y='eval', hue='algo', ax=axes[2], data=eval_iteration)
-    axes[2].set_xlabel('iterations')
-    axes[2].set_ylabel('')
-    axes[2].get_legend().remove()
-    handles, labels = axes[2].get_legend_handles_labels()
+    # sns.lineplot(x='iterations', y='eval', hue='algo', ax=axes[2], data=eval_iteration)
+    # axes[2].set_xlabel('iterations')
+    # axes[2].set_ylabel('')
+    # axes[2].get_legend().remove()
+    handles, labels = axes[1].get_legend_handles_labels()
     # if mode == 'train':
     #     sns.lineplot(x='samples', y='success_rate', hue='algo', data=sr_timesteps)
     #     axes.set_xlabel('samples')
@@ -131,4 +132,4 @@ if __name__ == '__main__':
     f.legend(handles[1:], ['PPO', 'SIR', 'SIL', 'DS'], loc="lower right", ncol=1, bbox_to_anchor=(0.99, 0.18), title='')
     f.subplots_adjust(top=1. - margin / height, bottom=0.21, wspace=wspace, left=left, right=1. - margin / width)
     plt.savefig(os.path.join(folder_name, '../', os.path.basename(folder_name) + '.pdf'))
-    # plt.show()
+    plt.show()

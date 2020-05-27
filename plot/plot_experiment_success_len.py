@@ -27,7 +27,7 @@ if __name__ == '__main__':
     # assert mode in ['train', 'hard', 'iteration']
     if alg == 'ppo':
         max_timesteps = {'push': 4.99e7,
-                         'particle': 2.8e8,
+                         'particle': 2.5e8,
                          'maze': 1.5e6,
                          'stacking': 2e8,}
     elif alg == 'sac':
@@ -39,9 +39,9 @@ if __name__ == '__main__':
     df_iteration, df_len_mean, df_legend_iteration = [], [], []
     subfolders = [alg, 'sir', 'sil']
     if 'particle_random0.7' in folder_name:
-        subfolders = ['ppo', 'sir_re1-8']
+        subfolders = ['ppo', 'sir', 'sil']
     elif 'particle_random1.0' in folder_name:
-        subfolders = ['ppo', 'sir_re1-8']
+        subfolders = ['ppo', 'sir', 'sil']
     elif 'maze' in folder_name:
         subfolders = ['ppo', 'sir_re2']
     for subfolder in subfolders:
