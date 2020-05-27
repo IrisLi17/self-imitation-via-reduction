@@ -118,6 +118,13 @@ class PPO2_augment(ActorCriticRLModel):
         self.aug_done = []
         self.aug_reward = []
         self.is_selfaug = []
+        self.self_obs = []
+        self.self_act = []
+        self.self_neglogp = []
+        self.self_return = []
+        self.self_value = []
+        self.self_done = []
+        self.self_reward = []
         self.num_aug_steps = 0  # every interaction with simulator should be counted
         self.horizon = horizon
         self.aug_adv_weight = aug_adv_weight
@@ -214,8 +221,7 @@ class PPO2_augment(ActorCriticRLModel):
                     vf_losses2 = tf.square(vpred_clipped - self.rewards_ph)
                     self.vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
 
-                    ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
-                    if self.self_imitate:
+                    if True:
                         ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
@@ -500,6 +506,8 @@ class PPO2_augment(ActorCriticRLModel):
                     self.aug_done = [None]
                     self.aug_reward = [None]
                     self.is_selfaug = [None]
+                self.self_obs, self.self_act, self.self_neglogp, self.self_return, self.self_value, self.self_done, self.self_reward \
+                    = [None], [None], [None], [None], [None], [None], [None]
                 # true_reward is the reward without discount
                 temp_time0 = time.time()
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
@@ -511,33 +519,35 @@ class PPO2_augment(ActorCriticRLModel):
                 total_success = original_success
 
                 # augment_steps = 0 if self.aug_obs is None else self.aug_obs.shape[0]
-                augment_steps = sum([item.shape[0] if item is not None else 0 for item in self.aug_obs])
-                print([item.shape[0] if item is not None else 0 for item in self.aug_obs])
+                augment_steps = sum([item.shape[0] if item is not None else 0 for item in self.aug_obs + self.self_obs])
+                print([item.shape[0] if item is not None else 0 for item in self.aug_obs + self.self_obs])
                 # if self.aug_obs is not None:
                 if augment_steps > 0:
-                    if self.self_imitate and augment_steps / self.n_batch > self.sil_clip:
+                    # if self.self_imitate and augment_steps / self.n_batch > self.sil_clip:
+                    if augment_steps / self.n_batch > self.sil_clip:
                         aug_sample_idx = np.random.randint(0, augment_steps, int(self.n_batch * self.sil_clip))
                     else:
                         aug_sample_idx = np.arange(augment_steps)
-                    _aug_return = np.concatenate(list(filter(lambda v:v is not None, self.aug_return)), axis=0)
-                    _aug_value = np.concatenate(list(filter(lambda v: v is not None, self.aug_value)), axis=0)
+                    _aug_return = np.concatenate(list(filter(lambda v:v is not None, self.aug_return + self.self_return)), axis=0)
+                    _aug_value = np.concatenate(list(filter(lambda v: v is not None, self.aug_value + self.self_value)), axis=0)
                     adv_clip_frac = np.sum((_aug_return - _aug_value) < (np.mean(returns - values) + self.aug_clip * np.std(returns - values))) / _aug_return.shape[0]
                     print('demo adv below average + %f std' % self.aug_clip, adv_clip_frac)
-                    if self.self_imitate:
-                        _aug_obs = np.concatenate(list(filter(lambda  v: v is not None, self.aug_obs)), axis=0)[aug_sample_idx]
+                    # if self.self_imitate:
+                    if True:
+                        _aug_obs = np.concatenate(list(filter(lambda  v: v is not None, self.aug_obs + self.self_obs)), axis=0)[aug_sample_idx]
                         obs = np.concatenate([obs, _aug_obs], axis=0)
                         _aug_return = _aug_return[aug_sample_idx]
                         returns = np.concatenate([returns, _aug_return], axis=0)
-                        _aug_mask = np.concatenate(list(filter(lambda v: v is not None, self.aug_done)), axis=0)[aug_sample_idx]
+                        _aug_mask = np.concatenate(list(filter(lambda v: v is not None, self.aug_done + self.self_done)), axis=0)[aug_sample_idx]
                         masks = np.concatenate([masks, _aug_mask], axis=0)
-                        _aug_action = np.concatenate(list(filter(lambda v: v is not None, self.aug_act)), axis=0)[aug_sample_idx]
+                        _aug_action = np.concatenate(list(filter(lambda v: v is not None, self.aug_act + self.self_act)), axis=0)[aug_sample_idx]
                         actions = np.concatenate([actions, _aug_action], axis=0)
-                        _aug_value = np.concatenate(list(filter(lambda v: v is not None, self.aug_value)), axis=0)[aug_sample_idx]
+                        _aug_value = np.concatenate(list(filter(lambda v: v is not None, self.aug_value + self.self_value)), axis=0)[aug_sample_idx]
                         values = np.concatenate([values, _aug_value], axis=0)
-                        _aug_neglogpac = np.concatenate(list(filter(lambda v: v is not None, self.aug_neglogp)), axis=0)[aug_sample_idx]
+                        _aug_neglogpac = np.concatenate(list(filter(lambda v: v is not None, self.aug_neglogp + self.self_neglogp)), axis=0)[aug_sample_idx]
                         neglogpacs = np.concatenate([neglogpacs, _aug_neglogpac], axis=0)
                         is_demo = np.concatenate([is_demo, np.ones(len(aug_sample_idx))], axis=0)
-                        _aug_reward = np.concatenate(list(filter(lambda v: v is not None, self.aug_reward)), axis=0)[aug_sample_idx]
+                        _aug_reward = np.concatenate(list(filter(lambda v: v is not None, self.aug_reward + self.self_reward)), axis=0)[aug_sample_idx]
                         total_success += np.sum(_aug_reward)
                         augment_steps = len(aug_sample_idx)
                     else:
