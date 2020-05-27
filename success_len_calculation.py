@@ -1,21 +1,32 @@
 import sys, os
 import numpy as np
-from run_her import make_env, get_env_kwargs
-from baselines import HER_HACK
+# from run_her import make_env, get_env_kwargs
+from baselines import HER_HACK, PPO2
 from gym.wrappers import FlattenDictWrapper
 
 
 if __name__ == '__main__':
     env_id = sys.argv[1]
-    model_paths = sys.argv[2:]
-    env_kwargs = get_env_kwargs(env_id, random_ratio=0.7)
+    algo = sys.argv[2]
+    assert algo in ['sac', 'ppo']
+    model_paths = sys.argv[3:]
+    if algo == 'sac':
+        from run_her import make_env
+    elif algo == 'ppo':
+        from run_ppo_augment import make_env
+    from run_her import get_env_kwargs
+    env_kwargs = get_env_kwargs(env_id, random_ratio=0.0, n_object=3)
 
     aug_env_id = env_id.split('-')[0] + 'Unlimit-' + env_id.split('-')[1]
     aug_env_kwargs = env_kwargs.copy()
     aug_env_kwargs['max_episode_steps'] = None
 
     aug_env = make_env(aug_env_id, seed=0, rank=0, kwargs=aug_env_kwargs)
-    aug_env = FlattenDictWrapper(aug_env, ['observation', 'achieved_goal', 'desired_goal'])
+    if algo == 'sac':
+        aug_env = FlattenDictWrapper(aug_env, ['observation', 'achieved_goal', 'desired_goal'])
+
+    if env_id == 'FetchStack-v1':
+        aug_env.set_task_array([(env_kwargs['n_object'], i) for i in range(env_kwargs['n_object'])])
 
     goal_dim = aug_env.goal.shape[0]
     obs_dim = aug_env.observation_space.shape[0] - 2 * goal_dim
@@ -35,7 +46,10 @@ if __name__ == '__main__':
         test_states.append(initial_state)
         test_goals.append(goal)
     for model_path in model_paths:
-        model = HER_HACK.load(model_path)
+        if algo == 'sac':
+            model = HER_HACK.load(model_path)
+        elif algo == 'ppo':
+            model = PPO2.load(model_path)
         success_len = []
         for i in range(len(test_states)):
             aug_env.set_state(test_states[i])
