@@ -22,9 +22,9 @@ if __name__ == '__main__':
     folder_name = sys.argv[1]
     env_name = sys.argv[2]
     assert env_name in ['smaze', 'maze_ego', 'maze_box']
-    max_timesteps = {'smaze': 1e6, 'maze_ego': 3e7, 'maze_box': 4.9e7}
+    max_timesteps = {'smaze': 1e6, 'maze_ego': 2.5e7, 'maze_box': 4.9e7}
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_success_rate_iteration, df_legend_iteration = [], [], [], [], [], [], []
-    subfolders = ['sac', 'sir', 'hiro']
+    subfolders = ['sir', 'hiro']
     if env_name == 'smaze':
         for subfolder in subfolders:
             last_sr = []
@@ -116,7 +116,7 @@ if __name__ == '__main__':
 
     handles, labels = axes.get_legend_handles_labels()
 
-    f.legend(handles[1:], ['SAC', 'SIR', 'HIRO'], loc="lower right", ncol=1, bbox_to_anchor=(0.99, 0.18), title='')
+    f.legend(handles[1:], ['SIR', 'HIRO'], loc="lower right", ncol=1, bbox_to_anchor=(0.99, 0.18), title='')
     f.subplots_adjust(top=1. - margin / height, bottom=0.21, wspace=wspace, left=left, right=1. - margin / width)
     plt.savefig(os.path.join(folder_name, '../', os.path.basename(folder_name) + env_name + '.pdf'))
     plt.show()
