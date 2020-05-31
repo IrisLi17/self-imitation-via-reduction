@@ -143,47 +143,6 @@ class ParallelRunner2(AbstractEnvRunner):
                             if self.dim_candidate == 3:
                                 self.current_nobject.append(self.ep_current_nobject[idx][0])
                                 self.task_mode.append(self.ep_task_mode[idx][0])
-                if done and infos[idx]['is_success']:
-                    # Original successful trajectory
-                    ori_obs, ori_actions, ori_values, ori_neglogpacs, ori_dones, ori_rewards = zip(*self.ep_transition_buf[idx])
-                    # Compute returns
-                    ori_returns = self.compute_adv(ori_values, ori_dones, ori_rewards)
-                    if self.model.self_obs[-1] is None:
-                        self.model.self_obs[-1] = np.array(ori_obs)
-                        self.model.self_act[-1] = np.array(ori_actions)
-                        self.model.self_neglogp[-1] = np.array(ori_neglogpacs)
-                        self.model.self_value[-1] = np.array(ori_values)
-                        self.model.self_return[-1] = ori_returns
-                        self.model.self_done[-1] = np.array(ori_dones)
-                        self.model.self_reward[-1] = np.array(ori_rewards)
-                        # self.model.is_selfaug[-1] = np.array(augment_isselfaug_buf)
-                        for reuse_idx in range(len(self.model.self_obs) - 1):
-                            # Update previous data with new value and policy parameters
-                            if self.model.self_obs[reuse_idx] is not None:
-                                self.model.self_neglogp[reuse_idx] = \
-                                    self.model.sess.run(self.model.aug_neglogpac_op,
-                                                        {self.model.train_aug_model.obs_ph: self.model.self_obs[reuse_idx],
-                                                         self.model.aug_action_ph: self.model.self_act[reuse_idx]})
-                                self.model.self_value[reuse_idx] = self.model.value(self.model.self_obs[reuse_idx])
-                                self.model.self_return[reuse_idx] = self.compute_adv(
-                                    self.model.self_value[reuse_idx], self.model.self_done[reuse_idx],
-                                    self.model.self_reward[reuse_idx])
-                    else:
-                        self.model.self_obs[-1] = np.concatenate(
-                            [self.model.self_obs[-1], np.array(ori_obs)], axis=0)
-                        self.model.self_act[-1] = np.concatenate(
-                            [self.model.self_act[-1], np.array(ori_actions)], axis=0)
-                        self.model.self_neglogp[-1] = np.concatenate(
-                            [self.model.self_neglogp[-1], np.array(ori_neglogpacs)], axis=0)
-                        self.model.self_value[-1] = np.concatenate(
-                            [self.model.self_value[-1], np.array(ori_values)], axis=0)
-                        self.model.self_return[-1] = np.concatenate([self.model.self_return[-1], ori_returns], axis=0)
-                        self.model.self_done[-1] = np.concatenate(
-                            [self.model.self_done[-1], np.array(ori_dones)], axis=0)
-                        self.model.self_reward[-1] = np.concatenate(
-                            [self.model.self_reward[-1], np.array(ori_rewards)], axis=0)
-                        # self.model.is_selfaug[-1] = np.concatenate(
-                        #     [self.model.is_selfaug[-1], np.array(augment_isselfaug_buf)], axis=0)
                 if done:
                     self.ep_state_buf[idx] = []
                     self.ep_transition_buf[idx] = []
@@ -343,11 +302,8 @@ class ParallelRunner2(AbstractEnvRunner):
                                 [self.model.aug_done[-1], np.array(augment_done_buf)], axis=0)
                             self.model.aug_reward[-1] = np.concatenate(
                                 [self.model.aug_reward[-1], np.array(augment_reward_buf)], axis=0)
-                            try:
-                                self.model.is_selfaug[-1] = np.concatenate(
-                                    [self.model.is_selfaug[-1], np.array(augment_isselfaug_buf)], axis=0)
-                            except ValueError:
-                                self.model.is_selfaug[-1] = np.array(augment_isselfaug_buf)
+                            self.model.is_selfaug[-1] = np.concatenate(
+                                [self.model.is_selfaug[-1], np.array(augment_isselfaug_buf)], axis=0)
 
 
                 self.restart_steps = self.restart_steps[self.aug_env.num_envs:]
