@@ -33,7 +33,7 @@ if __name__ == '__main__':
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_eval_iteration, df_legend_iteration = [], [], [], [], [], [], []
     subfolders = ['ppo', 'sir']
     if 'particle_random0.7' in folder_name:
-        subfolders = ['ppo', 'sir2', 'sil', 'ds']
+        subfolders = ['ppo', 'sir', 'sil', 'ds']
     elif 'particle_random1.0' in folder_name:
         subfolders = ['ppo', 'sir', 'sil', 'ds']
     elif 'push_random0.7' in folder_name:
@@ -106,7 +106,7 @@ if __name__ == '__main__':
     f, axes = plt.subplots(1, 2, figsize=(width, height))
     sns.lineplot(x='samples', y='success_rate', hue='algo', ax=axes[0], data=sr_timesteps)
     axes[0].set_xlabel('samples')
-    axes[0].set_ylabel('avg. succc. rate')
+    axes[0].set_ylabel('avg. succ. rate')
     axes[0].get_legend().remove()
     sns.lineplot(x='samples', y='eval', hue='algo', ax=axes[1], data=eval_timesteps)
     axes[1].set_xlabel('samples')
