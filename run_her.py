@@ -106,7 +106,8 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
         from utils.wrapper import FlexibleTimeLimitWrapper
         env = FlexibleTimeLimitWrapper(env, 100)
     if ('FetchStack' in env_id and kwargs['reward_type'] != 'sparse') \
-            or ('FetchPushWallObstacle' in env_id and kwargs['reward_type'] != 'sparse'):
+            or ('FetchPushWallObstacle' in env_id and kwargs['reward_type'] != 'sparse') \
+            or ('MasspointPushDoubleObstacle' in env_id and kwargs['reward_type'] != 'sparse'):
         env = DoneOnSuccessWrapper(env, 0.0)
     else:
         env = DoneOnSuccessWrapper(env)
@@ -135,6 +136,7 @@ def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None,
         return dict(random_box=True,
                     random_ratio=random_ratio,
                     random_pusher=True,
+                    reward_type=reward_type,
                     max_episode_steps=150, )
     elif env_id == 'MasspointMaze-v2':
         return dict(random_box=True,
