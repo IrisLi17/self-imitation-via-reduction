@@ -28,7 +28,10 @@ if __name__ == '__main__':
         else:
             eval_reward = get_item(eval_file, 'mean_eval_reward')
             total_timesteps = get_item(progress_file, 'total timesteps')
-            original_timesteps = get_item(progress_file, 'original_timesteps')
+            try:
+                original_timesteps = get_item(progress_file, 'original_timesteps')
+            except KeyError:
+                original_timesteps = total_timesteps
             step_expand_fn = interpolate.interp1d(original_timesteps, total_timesteps, fill_value="extrapolate")
             eval_step = get_item(eval_file, 'n_updates')
         if option == 'eval':
