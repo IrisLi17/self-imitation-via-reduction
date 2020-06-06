@@ -26,7 +26,8 @@ if __name__ == '__main__':
         aug_env = FlattenDictWrapper(aug_env, ['observation', 'achieved_goal', 'desired_goal'])
 
     if env_id == 'FetchStack-v1':
-        aug_env.set_task_array([(env_kwargs['n_object'], i) for i in range(env_kwargs['n_object'])])
+        # aug_env.set_task_array([(env_kwargs['n_object'], i) for i in range(env_kwargs['n_object'])])
+        aug_env.set_task_array([(3, 0), (3, 1), (3, 2)])
 
     goal_dim = aug_env.goal.shape[0]
     obs_dim = aug_env.observation_space.shape[0] - 2 * goal_dim
@@ -39,21 +40,32 @@ if __name__ == '__main__':
     # model.model.n_object = n_object
 
     test_states, test_goals = [], []
-    for i in range(100):
+    test_selected_objects, test_current_nobject = [], []
+    for i in range(500):
         obs = aug_env.reset()
         goal = obs[-goal_dim:]
         initial_state = aug_env.get_state()
         test_states.append(initial_state)
         test_goals.append(goal)
+        if env_id == 'FetchStack-v1':
+            test_selected_objects.append(aug_env.selected_objects)
+            test_current_nobject.append(aug_env.current_nobject)
     for model_path in model_paths:
         if algo == 'sac':
             model = HER_HACK.load(model_path)
         elif algo == 'ppo':
             model = PPO2.load(model_path)
+        if 'ds' in model_path:
+            aug_env.unwrapped.reward_type = 'dense'
+        else:
+            aug_env.unwrapped.reward_type = 'sparse'
         success_len = []
         for i in range(len(test_states)):
             aug_env.set_state(test_states[i])
             aug_env.set_goal(test_goals[i])
+            if env_id == 'FetchStack-v1':
+                aug_env.unwrapped.selected_objects = test_selected_objects[i]
+                aug_env.unwrapped.current_nobject = test_current_nobject[i]
             obs = aug_env.get_obs()
             obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
             done = False

@@ -33,7 +33,7 @@ if __name__ == '__main__':
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_eval_iteration, df_legend_iteration = [], [], [], [], [], [], []
     subfolders = ['ppo', 'sir']
     if 'particle_random0.7' in folder_name:
-        subfolders = ['ppo', 'sir2', 'sil', 'ds']
+        subfolders = ['ppo', 'sir', 'sil', 'ds']
     elif 'particle_random1.0' in folder_name:
         subfolders = ['ppo', 'sir', 'sil', 'ds']
     elif 'push_random' in folder_name:
