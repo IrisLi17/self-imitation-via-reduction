@@ -1,8 +1,9 @@
 # Uniform.
 # PPO
-CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --log_path logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/ppo/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --log_path logs/FetchPushWallObstacle-v4new_random1.0/ppo/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --reward_type dense --log_path logs/FetchPushWallObstacle-v4new_random1.0/ppo/ds_0
 # SIR
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 8 --log_path logs/FetchPushWallObstacle-v4_heavy_purerandom_fixz/sir_re8/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 8 --log_path logs/FetchPushWallObstacle-v4new_random1.0/sir_re8/0
 
 # Hard 30%
 CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --log_path logs/FetchPushWallObstacle-v4new_random0.7/ppo/0
@@ -25,4 +26,4 @@ CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 
 
 # Self imitate
 CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --n_subgoal 2 --parallel --self_imitate --aug_clip 0.0 --reuse_times 1 --log_path logs/FetchPushWallObstacle-v4new_random0.7/ppo_sil/original
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --parallel --self_imitate --aug_adv_weight 1.0 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/ppo_sil/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --n_subgoal 2 --parallel --self_imitate --aug_clip 0.0 --reuse_times 1 --log_path logs/FetchPushWallObstacle-v4new_random1.0/ppo_sil/original

@@ -32,19 +32,21 @@ if __name__ == '__main__':
                        'stack3': 2.5e6,
                        }
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_eval_iteration, df_legend_iteration = [], [], [], [], [], [], []
-    subfolders = ['sac', 'sir', 'sil']
+    subfolders = ['sac', 'sir', 'sil', 'ds']
     if 'particle_random0.7' in folder_name:
         subfolders = ['ppo', 'sir_re1-8']
     elif 'particle_random1.0' in folder_name:
         subfolders = ['ppo', 'sir_re1-8']
     elif 'push_random0.7' in folder_name:
         subfolders = ['sac', 'sir', 'sil', 'ds2']
+    elif 'push_random1.0' in folder_name:
+        subfolders = ['sac', 'sir', 'sil', 'ds']
     elif 'stack_2obj' in folder_name or 'stack_3obj' in folder_name:
         subfolders = ['sac', 'sir', 'sil', 'ds']
     for subfolder in subfolders:
         last_sr = []
         last_eval = []
-        for i in range(3):
+        for i in range(4):
             if not os.path.exists(os.path.join(folder_name, subfolder, str(i), 'progress.csv')):
                 continue
             progress_file = os.path.join(folder_name, subfolder, str(i), 'progress.csv')
@@ -120,11 +122,11 @@ if __name__ == '__main__':
     f, axes = plt.subplots(1, 2, figsize=(width, height))
     sns.lineplot(x='samples', y='success_rate', hue='algo', ax=axes[0], data=sr_timesteps)
     axes[0].set_xlabel('samples')
-    axes[0].set_ylabel('success_rate')
+    axes[0].set_ylabel('avg. succ. rate')
     axes[0].get_legend().remove()
     sns.lineplot(x='samples', y='eval', hue='algo', ax=axes[1], data=eval_timesteps)
     axes[1].set_xlabel('samples')
-    axes[1].set_ylabel('')
+    axes[1].set_ylabel('hard succ. rate')
     axes[1].get_legend().remove()
     # sns.lineplot(x='iterations', y='eval', hue='algo', ax=axes[2], data=eval_iteration)
     # axes[2].xaxis.get_major_formatter().set_powerlimits((0, 1))
@@ -133,7 +135,7 @@ if __name__ == '__main__':
     # axes[2].get_legend().remove()
     handles, labels = axes[1].get_legend_handles_labels()
 
-    f.legend(handles[1:], ['SAC', 'SIR', 'SIL', 'DS'][:len(subfolders)], loc="lower right", ncol=1, bbox_to_anchor=(0.99, 0.18), title='')
+    f.legend(handles[1:], ['SAC', 'SIR', 'SIL', 'DS'][:len(subfolders)], loc="lower right", ncol=1, bbox_to_anchor=(0.49, 0.18), title='')
     f.subplots_adjust(top=1. - margin / height, bottom=0.21, wspace=wspace, left=left, right=1. - margin / width)
     plt.savefig(os.path.join(folder_name, '../', os.path.basename(folder_name) + '.pdf'))
     plt.show()
