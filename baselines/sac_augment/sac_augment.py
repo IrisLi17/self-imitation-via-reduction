@@ -1037,7 +1037,7 @@ class SAC_augment(OffPolicyRLModel):
         filter_high = 1.0
         if 'FetchPushWallobstacle' in self.env_id:
             filter_low = 0.7
-            filter_high = 0.9
+            filter_high = 0.9 if self.env.env.get_attr('random_ratio')[0] < 1 else 1.0
         elif 'MasspointMaze' in self.env_id:
             filter_low = 0.7
             filter_high = 0.9

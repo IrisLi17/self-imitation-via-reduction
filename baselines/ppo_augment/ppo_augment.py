@@ -216,7 +216,10 @@ class PPO2_augment(ActorCriticRLModel):
 
                     ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
                     if self.self_imitate:
-                        ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
+                        if not 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
+                            ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 100) - tf.minimum(neglogpac, 100))
+                        else:
+                            ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
                                                                   self.clip_range_ph)
@@ -321,8 +324,10 @@ class PPO2_augment(ActorCriticRLModel):
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
         for i in range(advs.shape[0]):
             if is_demo[i]:
-                # advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
-                advs[i] = np.clip(advs[i], 0., 1.) * self.aug_adv_weight
+                if not 'MasspointPushDoubleObstacle' in self.env.get_attr('spce')[0].id:
+                    advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
+                else:
+                    advs[i] = np.clip(advs[i], 0., 1.) * self.aug_adv_weight
         if aug_adv_slice is not None:
             aug_adv_slice = (aug_adv_slice - aug_adv_slice.mean()) / (aug_adv_slice.std() + 1e-8)
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
