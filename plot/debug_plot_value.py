@@ -22,7 +22,7 @@ if __name__ == '__main__':
     min_value = np.min(np.concatenate([np.expand_dims(value1, axis=0), np.expand_dims(value2, axis=0)], axis=0), axis=0)
     is_success = get_item(log_path, 'is_success')[0:]
     num_timesteps = get_item(log_path, 'num_timesteps')[0:]
-    print(num_timesteps[20000], num_timesteps[40000])
+    print(num_timesteps[20000], num_timesteps[40000], num_timesteps[-1])
     success_idx = np.where(is_success > 0.5)[0]
     fail_idx = np.where(is_success < 0.5)[0]
     print(value1.shape)
@@ -37,8 +37,8 @@ if __name__ == '__main__':
     # Mean value
     ax.scatter(fail_idx, (value1[fail_idx] + value2[fail_idx]) / 2, c='tab:orange', s=1.0, label='fail mean value')
     ax.scatter(success_idx, (value1[success_idx] + value2[success_idx]) / 2, c='tab:green', s=4.0, label='success mean value')
-    ax.axhline(0.5, linestyle='--', c='tab:blue')
-    ax.axhline(1.0, linestyle='--', c='tab:blue')
+    # ax.axhline(0.5, linestyle='--', c='tab:blue')
+    # ax.axhline(1.0, linestyle='--', c='tab:blue')
     # ax.plot(smooth(np.arange(len(value1)), 500), smooth((value1 + value2) / 2, 500), c='tab:red', label='smoothed mean value')
     # Min value
     # ax.scatter(fail_idx, min_value[fail_idx], c='tab:orange', s=1.0, label='fail min value')
@@ -46,7 +46,8 @@ if __name__ == '__main__':
     # ax.plot(smooth(np.arange(len(min_value)), 500), smooth(min_value, 500), c='tab:red', label='smoothed min value')
     # ax.scatter(fail_idx, original_value[fail_idx], c='tab:orange', s=0.1, label='fail original value')
     # ax.scatter(success_idx, original_value[success_idx], c='tab:green', s=4.0, label='success original value')
+    # ax.set_yscale('log')
     plt.legend(loc="upper right", bbox_to_anchor=(1.0, 1.0))
     plt.tight_layout(pad=0.05)
-    plt.savefig('value_sigma.png')
+    plt.savefig('value_sigma_sac.png')
     plt.show()
