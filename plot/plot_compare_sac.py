@@ -22,7 +22,8 @@ if __name__ == '__main__':
     for log_path in log_paths:
         progress_file = os.path.join(log_path, 'progress.csv')
         eval_file = os.path.join(log_path, 'eval.csv')
-        success_rate = get_item(progress_file, 'ep_rewmean')
+        # success_rate = get_item(progress_file, 'ep_rewmean')
+        success_rate = get_item(progress_file, 'success rate')
         total_timesteps = get_item(progress_file, 'total timesteps')
         entropy = get_item(progress_file, 'entropy')
         try:
