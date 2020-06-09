@@ -1,29 +1,29 @@
-# Uniform.
-# PPO
-CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --log_path logs/FetchPushWallObstacle-v4new_random1.0/ppo/0
-CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --reward_type dense --log_path logs/FetchPushWallObstacle-v4new_random1.0/ppo/ds_0
+# SAC-based
+# Hard case 30%.
+# SAC
+CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e6 --num_workers 32 --priority --log_path logs/FetchPushWallObstacle-v4_random0.7/her_sac_32workers/0
 # SIR
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 8 --log_path logs/FetchPushWallObstacle-v4new_random1.0/sir_re8/0
+CUDA_VISIBLE_DEVICES=0 python run_her_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e6 --num_workers 32 --start_augment 0 --imitation_coef 0.1 --priority --log_path logs/FetchPushWallObstacle-v4_random0.7/her_sac_sir_32workers/0
+# SIL
+CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --sil --num_timesteps 1e6 --num_workers 32 --sil_coef 0.1 --priority --log_path logs/FetchPushWallObstacle-v4_random0.7/her_sac_sil_32workers/0
+# DS
+CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --reward_type dense --num_timesteps 1e6 --num_workers 32 --priority --log_path logs/FetchPushWallObstacle-v4_random0.7/her_sac_ds_32workers/0
 
-# Hard 30%
-CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --log_path logs/FetchPushWallObstacle-v4new_random0.7/ppo/0
-CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --reward_type dense --log_path logs/FetchPushWallObstacle-v4new_random0.7/ppo/ds_0
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 1e8 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 8 --log_path logs/FetchPushWallObstacle-v4new_random0.7/sir_re8/0
+# Uniform.
+CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 1e6 --num_workers 32 --priority --log_path logs/FetchPushWallObstacle-v4_random1.0/her_sac_32workers/0
+CUDA_VISIBLE_DEVICES=0 python run_her_augment.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 1e6 --num_workers 32 --start_augment 0 --imitation_coef 0.1 --priority --log_path logs/FetchPushWallObstacle-v4_random1.0/her_sac_sir_32workers/0
+CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --sil --num_timesteps 1e6 --num_workers 32 --sil_coef 0.1 --priority --log_path logs/FetchPushWallObstacle-v4_random1.0/her_sac_sil_32workers/0
+CUDA_VISIBLE_DEVICES=0 python run_her.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --reward_type dense --num_timesteps 1e6 --num_workers 32 --priority --log_path logs/FetchPushWallObstacle-v4_random1.0/her_sac_ds_32workers/0
 
-# Hard 70%
-CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 0.3 --num_timesteps 5e7 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.3_fixz/ppo/0
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.3 --num_timesteps 5e7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 8 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.3_fixz/sir_re8/0
+# PPO-based
+# Hard 30%.
+CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --log_path logs/FetchPushWallObstacle-v4_random0.7/ppo/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 8 --log_path logs/FetchPushWallObstacle-v4_random0.7/ppo_sir/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --n_subgoal 2 --parallel --self_imitate --aug_clip 0.0 --reuse_times 1 --log_path logs/FetchPushWallObstacle-v4_random0.7/ppo_sil/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --reward_type dense --log_path logs/FetchPushWallObstacle-v4_random0.7/ppo_ds/0
 
-# Adaptive curriculum
-CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --num_timesteps 5e7 --curriculum --log_path logs/FetchPushWallObstacle-v4_heavy_cu_fixz/ppo/0
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --num_timesteps 5e7 --curriculum --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 8 --log_path logs/FetchPushWallObstacle-v4_heavy_cu_fixz/sir_re8/0
-
-# Data staleness
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 1 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/sir_re1/0
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 2 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/sir_re2/0
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 4 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/sir_re4/0
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 16 --log_path logs/FetchPushWallObstacle-v4_heavy_random0.7_fixz/sir_re16/0
-
-# Self imitate
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 0.7 --num_timesteps 5e7 --n_subgoal 2 --parallel --self_imitate --aug_clip 0.0 --reuse_times 1 --log_path logs/FetchPushWallObstacle-v4new_random0.7/ppo_sil/original
-CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --n_subgoal 2 --parallel --self_imitate --aug_clip 0.0 --reuse_times 1 --log_path logs/FetchPushWallObstacle-v4new_random1.0/ppo_sil/original
+# Uniform.
+CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --log_path logs/FetchPushWallObstacle-v4_random1.0/ppo/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 8 --log_path logs/FetchPushWallObstacle-v4_random1.0/ppo_sir/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --n_subgoal 2 --parallel --self_imitate --aug_clip 0.0 --reuse_times 1 --log_path logs/FetchPushWallObstacle-v4_random1.0/ppo_sil/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env FetchPushWallObstacle-v4 --random_ratio 1.0 --num_timesteps 5e7 --reward_type dense --log_path logs/FetchPushWallObstacle-v4_random1.0/ppo_ds/0
