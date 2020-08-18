@@ -11,6 +11,7 @@ from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 # from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
 from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv
+from masspoint_env import MasspointPushMultiObstacleEnv
 from fetch_stack import FetchStackEnv
 # from push_wall import FetchPushWallEnv
 # from push_box import FetchPushBoxEnv
@@ -34,6 +35,7 @@ MASS_ENTRY_POINT = {
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
     'MasspointMaze-v1': MasspointMazeEnv,
     'MasspointMaze-v2': MasspointSMazeEnv,
+    'MasspointpushMultiObstacle-v1': MasspointPushMultiObstacleEnv,
 }
 
 PICK_ENTRY_POINT = {
@@ -113,7 +115,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     set_global_seeds(seed)
 
     n_cpu = 32 if not play else 1
-    if 'MasspointPushDoubleObstacle' in env_name:
+    if 'MasspointPushDoubleObstacle' in env_name or 'MasspointPushMultiObstacle' in env_name:
         n_cpu = 64 if not play else 1
     elif 'FetchStack' in env_name:
         n_cpu = 128 if not play else 1
@@ -139,6 +141,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             env_kwargs['max_episode_steps']=200
         if 'MasspointPushDoubleObstacle' in env_name:
             env_kwargs['max_episode_steps']=150
+        if 'MasspointPushMultiObstacle' in env_name:
+            env_kwargs['n_object'] = n_object
+            env_kwargs['max_episode_steps'] = 50 * n_object
     elif env_name in PICK_ENTRY_POINT.keys():
         env_kwargs = dict(random_box=True,
                           random_ratio=random_ratio,
@@ -159,13 +164,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                                max_episode_steps=100,
                                reward_type=reward_type,)
     elif env_name in MASS_ENTRY_POINT.keys():
-        eval_env_kwargs = dict(random_box=True,
-                               random_ratio=0.0,
-                               random_pusher=True,
-                               max_episode_steps=100,
-                               reward_type=reward_type,)
-        if 'MasspointPushDoubleObstacle' in env_name:
-            env_kwargs['max_episode_steps']=150
+        eval_env_kwargs = env_kwargs.copy()
+        eval_env_kwargs['random_ratio'] = 0.0
     elif env_name in PICK_ENTRY_POINT.keys():
         eval_env_kwargs = dict(random_box=True,
                                random_ratio=0.0,
@@ -185,7 +185,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         # policy_kwargs = {}
         # TODO: vectorize env
         n_steps = 2048
-        if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name:
+        if 'MasspointPushDoubleObstacle' in env_name or 'FetchStack' in env_name or 'MasspointPushMultiObstacle' in env_name:
             n_steps = 8192
         elif 'MasspointMaze' in env_name:
             n_steps = 1024
@@ -204,6 +204,11 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             # policy = AttentionPolicy
             if policy == "AttentionPolicy":
                 policy_kwargs["feature_extraction"] = "attention_mlp_particle"
+                policy_kwargs["n_object"] = 3
+        elif 'MasspointPushMultiObstacle' in env_name:
+            if policy == "AttentionPolicy":
+                policy_kwargs["feature_extraction"] = "attention_mlp_particle"
+                policy_kwargs["n_object"] = n_object
         print(policy_kwargs)
 
         model = PPO2(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=gamma, noptepochs=10,

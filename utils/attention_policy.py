@@ -257,7 +257,7 @@ class AttentionPolicy(ActorCriticPolicy):
                                                  n_units=128)
                 pi_latent, vf_latent = mlp_extractor(latent, net_arch, act_fun)
             elif feature_extraction == 'attention_mlp_particle':
-                latent = attention_mlp_extractor_particle(tf.layers.flatten(self.processed_obs), n_object=3, n_units=128)
+                latent = attention_mlp_extractor_particle(tf.layers.flatten(self.processed_obs), n_object=n_object, n_units=128)
                 pi_latent, vf_latent = mlp_extractor(latent, net_arch, act_fun)
             elif feature_extraction == 'self_attention_mlp':
                 pi_latent, vf_latent = self_attention_mlp_extractor(tf.layers.flatten(self.processed_obs), n_object=n_object)
