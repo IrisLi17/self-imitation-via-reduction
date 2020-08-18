@@ -35,7 +35,7 @@ MASS_ENTRY_POINT = {
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
     'MasspointMaze-v1': MasspointMazeEnv,
     'MasspointMaze-v2': MasspointSMazeEnv,
-    'MasspointpushMultiObstacle-v1': MasspointPushMultiObstacleEnv,
+    'MasspointPushMultiObstacle-v1': MasspointPushMultiObstacleEnv,
 }
 
 PICK_ENTRY_POINT = {
