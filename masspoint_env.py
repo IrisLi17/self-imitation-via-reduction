@@ -957,7 +957,7 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
         with tempfile.NamedTemporaryFile(mode='wt',
                                          dir=os.path.join(os.path.dirname(__file__), 'assets', 'fetch'),
                                          delete=False, suffix=".xml") as fp:
-            fp.write(generate_xml(self.n_object))
+            fp.write(generate_xml(self.n_object - 1))
             model_path = fp.name
         MasspointPushEnv.__init__(
             self, model_path, n_substeps=10,
@@ -1116,7 +1116,7 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
         lookat = [2.5, 2.5, 0.0]
         for idx, value in enumerate(lookat):
             self.viewer.cam.lookat[idx] = value
-        self.viewer.cam.distance = 10.0
+        self.viewer.cam.distance = 15.0
         self.viewer.cam.azimuth = 132.
         self.viewer.cam.elevation = -60.
 

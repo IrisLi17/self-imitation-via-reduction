@@ -4,6 +4,7 @@ template = '''<?xml version="1.0" encoding="utf-8"?>
     <option timestep="0.005">
         <flag warmstart="enable"></flag>
     </option>
+    <!--size nconmax="500" /!-->
 
     <asset>
         <material name="floor_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.2 0.2 0.2 1"></material>
@@ -69,9 +70,9 @@ def generate_xml(num_obstacles):
         walls.append(wall_template.format(**dict(id=2 * i + 1, pos=str(1.7 * (i + 1)) + ' 4.0 0.25')))
     scene = scene_template.format(**dict(bound0_pos=str(1.7 * (num_obstacles + 1) / 2) + ' -0.2 0.25',
                                          bound1_pos=str(1.7 * (num_obstacles + 1) / 2) + ' 5.2 0.25',
-                                         bound2_pos='2.5 -0.2 0.25',
-                                         bound3_pos='2.5 ' + str(1.7 * (num_obstacles + 1) + 0.2) + ' 0.25',
-                                         bound_v_size=str(1.7 * (num_obstacles + 1) / 2) + '0.2 0.25',
+                                         bound2_pos='-0.2 2.5 0.25',
+                                         bound3_pos=str(1.7 * (num_obstacles + 1) + 0.2) + ' 2.5 0.25',
+                                         bound_v_size=str(1.7 * (num_obstacles + 1) / 2) + ' 0.2 0.25',
                                          bound_h_size='0.2 2.9 0.25',
                                          walls="\n".join(walls)))
     obstacle_template = '''<body name="object{id}" pos="0 0 0">

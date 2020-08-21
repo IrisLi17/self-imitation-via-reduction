@@ -248,12 +248,12 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                 env.env_method('set_goal', np.array([1.2, 0.75, 0.425, 1, 0]))
                 obs = env.env_method('get_obs')
                 obs[0] = np.concatenate([obs[0][key] for key in ['observation', 'achieved_goal', 'desired_goal']])
-            if 'MasspointPush' in env_name:
-                obs = env.reset()
-                while not (obs[0][3] < 1.5 and obs[0][0] < 2.8 and np.argmax(obs[0][-goal_dim+3:] == 0)):
-                    obs = env.reset()
-                obs = env.env_method('get_obs')
-                obs[0] = np.concatenate([obs[0][key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+            # if 'MasspointPush' in env_name:
+            #     obs = env.reset()
+            #     while not (obs[0][3] < 1.5 and obs[0][0] < 2.8 and np.argmax(obs[0][-goal_dim+3:] == 0)):
+            #         obs = env.reset()
+            #     obs = env.env_method('get_obs')
+            #     obs[0] = np.concatenate([obs[0][key] for key in ['observation', 'achieved_goal', 'desired_goal']])
             while np.argmax(obs[0][-goal_dim+3:]) != 0:
                 obs = env.reset()
         print('goal', obs[0][-goal_dim:])
