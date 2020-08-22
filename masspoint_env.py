@@ -980,9 +980,9 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
         if self.random_pusher:
             masspoint_jointx_i = self.sim.model.get_joint_qpos_addr('masspoint:slidex')
             masspoint_jointy_i = self.sim.model.get_joint_qpos_addr('masspoint:slidey')
-            masspoint_pos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(size=2) * self.obj_range
+            masspoint_pos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-1, 1, size=2) * self.obj_range
             while self.inside_wall(masspoint_pos):
-                masspoint_pos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(size=2) * self.obj_range
+                masspoint_pos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-1, 1, size=2) * self.obj_range
             sim_state.qpos[masspoint_jointx_i] = masspoint_pos[0]
             sim_state.qpos[masspoint_jointy_i] = masspoint_pos[1]
         else:
@@ -1003,15 +1003,15 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
         # Randomize start position of object.
         if self.random_box and self.np_random.uniform() < self.random_ratio:
             self.sample_hard = False
-            object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(size=2) * self.obj_range
-            obstacles_xpos = [np.array([1.7*(i+1), 2.5]) + self.np_random.uniform(size=2) * self.obstacle_range for i in range(self.n_object-1)]
+            object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-1, 1, size=2) * self.obj_range
+            obstacles_xpos = [np.array([1.7*(i+1), 2.5]) + self.np_random.uniform(-1, 1, size=2) * self.obstacle_range for i in range(self.n_object-1)]
             while not config_valid(object_xpos, obstacles_xpos):
-                object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(size=2) * self.obj_range
-                obstacles_xpos = [np.array([1.7 * (i + 1), 2.5]) + self.np_random.uniform(size=2) * self.obstacle_range
+                object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-1, 1, size=2) * self.obj_range
+                obstacles_xpos = [np.array([1.7 * (i + 1), 2.5]) + self.np_random.uniform(-1, 1, size=2) * self.obstacle_range
                                   for i in range(self.n_object - 1)]
         else:
             self.sample_hard = True
-            object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(size=2) * self.obj_range
+            object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-1, 1, size=2) * self.obj_range
             obstacles_xpos = [np.array([1.7 * (i + 1) + self.np_random.choice([-1, 1]) * (self.size_wall[0] + self.size_obstacle[0]), 2.5])
                               for i in range(self.n_object - 1)]
         # Set the position of box. (two slide joints)
@@ -1044,7 +1044,7 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
         g_idx = np.random.randint(self.n_object)
         one_hot = np.zeros(self.n_object)
         one_hot[g_idx] = 1
-        goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(size=2) * self.obj_range
+        goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(-1, 1, size=2) * self.obj_range
 
         def same_side(pos0, pos1, sep):
             if (pos0 - sep) * (pos1 - sep) > 0:
@@ -1064,11 +1064,11 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
                 while np.all([same_side(goal[0], object_pos[0], pos_wall[0]) for pos_wall in
                               self.pos_walls]) or self.inside_wall(goal):
                     goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(
-                        size=2) * self.obj_range
+                        -1, 1, size=2) * self.obj_range
         else:
             while self.inside_wall(goal):
                 goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(
-                    size=2) * self.obj_range
+                    -1, 1, size=2) * self.obj_range
         goal = np.concatenate([goal, self.sim.data.get_site_xpos('object' + str(g_idx))[2:3], one_hot])
         if self.target_in_the_air and self.np_random.uniform() < 0.5:
             goal[2] += self.np_random.uniform(0, 0.45)

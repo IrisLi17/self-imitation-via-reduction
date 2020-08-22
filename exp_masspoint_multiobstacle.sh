@@ -1,1 +1,2 @@
 CUDA_VISIBLE_DEVICES=0 python run_ppo.py --env MasspointPushMultiObstacle-v1 --policy AttentionPolicy --n_object 4 --num_timesteps 3e8 --random_ratio 0.7 --log_path logs/MasspointPushMultiObstacle-v1_random0.7/ppo_attention/0
+CUDA_VISIBLE_DEVICES=0 python run_ppo_augment.py --env MasspointPushMultiObstacle-v1 --policy AttentionPolicy --n_object 4 --num_timesteps 3e8 --random_ratio 0.7 --n_subgoal 2 --parallel --aug_clip 0.0 --reuse_times 4 --start_augment 3e7 --log_path logs/MasspointPushMultiObstacle-v1_random0.7/ppo_attention_sir/0
