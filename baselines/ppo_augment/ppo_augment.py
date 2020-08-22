@@ -324,7 +324,7 @@ class PPO2_augment(ActorCriticRLModel):
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
         for i in range(advs.shape[0]):
             if is_demo[i]:
-                if not 'MasspointPushDoubleObstacle' in self.env.get_attr('spce')[0].id:
+                if not 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
                     advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
                 else:
                     advs[i] = np.clip(advs[i], 0., 1.) * self.aug_adv_weight
