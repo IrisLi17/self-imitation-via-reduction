@@ -216,7 +216,7 @@ class PPO2_augment(ActorCriticRLModel):
 
                     ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
                     if self.self_imitate:
-                        if not 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
+                        if not 'MasspointPush' in self.env.get_attr('spec')[0].id:
                             ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 100) - tf.minimum(neglogpac, 100))
                         else:
                             ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
@@ -324,7 +324,7 @@ class PPO2_augment(ActorCriticRLModel):
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
         for i in range(advs.shape[0]):
             if is_demo[i]:
-                if not 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
+                if not 'MasspointPush' in self.env.get_attr('spec')[0].id:
                     advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
                 else:
                     advs[i] = np.clip(advs[i], 0., 1.) * self.aug_adv_weight
