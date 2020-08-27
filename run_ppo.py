@@ -115,9 +115,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     set_global_seeds(seed)
 
     n_cpu = 32 if not play else 1
-    if 'MasspointPushDoubleObstacle' in env_name or 'MasspointPushMultiObstacle' in env_name:
+    if 'MasspointPushDoubleObstacle' in env_name:
         n_cpu = 64 if not play else 1
-    elif 'FetchStack' in env_name:
+    elif 'FetchStack' in env_name or 'MasspointPushMultiObstacle' in env_name:
         n_cpu = 128 if not play else 1
     elif 'MasspointMaze' in env_name:
         n_cpu = 8 if not play else 1
@@ -256,7 +256,13 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
             #     obs[0] = np.concatenate([obs[0][key] for key in ['observation', 'achieved_goal', 'desired_goal']])
             while np.argmax(obs[0][-goal_dim+3:]) != 0:
                 obs = env.reset()
-        print('goal', obs[0][-goal_dim:])
+        print('achieved_goal', obs[0][-2*goal_dim: -goal_dim], 'goal', obs[0][-goal_dim:])
+        # for _ in range(100):
+        #     obs = env.reset()
+        #     while np.argmax(obs[0][-goal_dim + 3:]) != 0:
+        #         obs = env.reset()
+        #     print('achieved_goal', obs[0][-2*goal_dim: -goal_dim], 'goal', obs[0][-goal_dim:])
+        # exit()
         # while (obs[0][3] - 1.25) * (obs[0][6] - 1.25) < 0:
         #     obs = env.reset()
         # img = env.render(mode='rgb_array')

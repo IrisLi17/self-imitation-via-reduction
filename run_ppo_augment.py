@@ -241,9 +241,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     set_global_seeds(seed)
 
     n_cpu = 32 if not play else 1
-    if 'MasspointPushDoubleObstacle' in env_name or 'MasspointPushMultiObstacle' in env_name:
+    if 'MasspointPushDoubleObstacle' in env_name:
         n_cpu = 64 if not play else 1
-    elif 'FetchStack' in env_name:
+    elif 'FetchStack' in env_name or 'MasspointPushMultiObstacle' in env_name:
         n_cpu = 128 if not play else 1
     elif 'MasspointMaze' in env_name:
         n_cpu = 8 if not play else 1
