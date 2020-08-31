@@ -1068,7 +1068,7 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
             return False
 
         if hasattr(self, 'sample_hard') and self.sample_hard:
-            g_idx = 0
+            # g_idx = 0
             # if self.np_random.uniform() < 0.6:
             #     g_idx = 0
             # else:
@@ -1081,6 +1081,10 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
                               self.pos_walls]) or self.inside_wall(goal):
                     goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(
                         -1, 1, size=2) * self.obj_range
+            else:
+                goal = np.array([1.7 * g_idx, 2.5]) + self.np_random.uniform(-1, 1, size=2) * self.obstacle_range
+                while self.inside_wall(goal):
+                    goal = np.array([1.7 * g_idx, 2.5]) + self.np_random.uniform(-1, 1, size=2) * self.obstacle_range
         else:
             if g_idx == 0:
                 while self.inside_wall(goal):
