@@ -1018,8 +1018,8 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
             # randomize number of doors blocked
             num_blocked_obstacles = np.random.randint(1, self.n_object)
             blocked_idx = np.random.choice(np.arange(1, self.n_object), num_blocked_obstacles, replace=False)
-            obstacles_xpos = []
             while True:
+                obstacles_xpos = []
                 object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-1, 1, size=2) * self.obj_range
                 for i in range(1, self.n_object):
                     if i in blocked_idx:
