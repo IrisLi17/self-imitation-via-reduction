@@ -1015,9 +1015,21 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
                                   for i in range(self.n_object - 1)]
         else:
             self.sample_hard = True
-            object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-1, 1, size=2) * self.obj_range
-            obstacles_xpos = [np.array([1.7 * (i + 1) + self.np_random.choice([-1, 1]) * (self.size_wall[0] + self.size_obstacle[0]), 2.5])
-                              for i in range(self.n_object - 1)]
+            # randomize number of doors blocked
+            num_blocked_obstacles = np.random.randint(1, self.n_object)
+            blocked_idx = np.random.choice(np.arange(1, self.n_object), num_blocked_obstacles, replace=False)
+            obstacles_xpos = []
+            while True:
+                object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-1, 1, size=2) * self.obj_range
+                for i in range(1, self.n_object):
+                    if i in blocked_idx:
+                        obstacles_xpos.append(np.array([1.7 * i + self.np_random.choice([-1, 1]) * (self.size_wall[0] + self.size_obstacle[0] + 1e-3), 2.5]))
+                    else:
+                        obstacles_xpos.append(np.array([1.7 * i, 2.5]) + self.np_random.uniform(-1, 1, size=2) * self.obstacle_range)
+                if config_valid(object_xpos, obstacles_xpos):
+                    break
+            # obstacles_xpos = [np.array([1.7 * (i + 1) + self.np_random.choice([-1, 1]) * (self.size_wall[0] + self.size_obstacle[0]), 2.5])
+            #                   for i in range(self.n_object - 1)]
         # Set the position of box. (two slide joints)
         box_jointx_i = self.sim.model.get_joint_qpos_addr("object0:slidex")
         box_jointy_i = self.sim.model.get_joint_qpos_addr("object0:slidey")
