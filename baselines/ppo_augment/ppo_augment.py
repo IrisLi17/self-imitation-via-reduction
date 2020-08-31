@@ -218,6 +218,8 @@ class PPO2_augment(ActorCriticRLModel):
                     if self.self_imitate:
                         if not 'MasspointPush' in self.env.get_attr('spec')[0].id:
                             ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 100) - tf.minimum(neglogpac, 100))
+                        elif 'MasspointPushMultiObstacle' in self.env.get_attr('spec')[0].id:
+                            ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 10) - tf.mininum(neglogpac, 10))
                         else:
                             ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
                     pg_losses = -self.advs_ph * ratio
@@ -322,12 +324,16 @@ class PPO2_augment(ActorCriticRLModel):
         """
         advs = returns - values
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
-        for i in range(advs.shape[0]):
-            if is_demo[i]:
-                if not 'MasspointPush' in self.env.get_attr('spec')[0].id:
-                    advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
-                else:
-                    advs[i] = np.clip(advs[i], 0., 1.) * self.aug_adv_weight
+        if not 'MasspointPush' in self.env.get_attr('spec')[0].id:
+            advs = is_demo * np.clip(advs, -np.inf, self.aug_clip) * self.aug_adv_weight + (1 - is_demo) * advs
+        else:
+            advs = is_demo * np.clip(advs, 0., 1.) * self.aug_adv_weight + (1 - is_demo) * advs
+        # for i in range(advs.shape[0]):
+        #     if is_demo[i]:
+        #         if not 'MasspointPush' in self.env.get_attr('spec')[0].id:
+        #             advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
+        #         else:
+        #             advs[i] = np.clip(advs[i], 0., 1.) * self.aug_adv_weight
         if aug_adv_slice is not None:
             aug_adv_slice = (aug_adv_slice - aug_adv_slice.mean()) / (aug_adv_slice.std() + 1e-8)
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
@@ -561,6 +567,7 @@ class PPO2_augment(ActorCriticRLModel):
                 total_episodes = np.sum(masks)
                 mb_loss_vals = []
                 if states is None:  # nonrecurrent version
+                    recompute_neglogp_time = 0
                     update_fac = self.n_batch // self.nminibatches // self.noptepochs + 1
                     inds = np.arange(self.n_batch + augment_steps)
                     # print('length self.aug_obs', len(self.aug_obs), batch_size)
@@ -572,12 +579,14 @@ class PPO2_augment(ActorCriticRLModel):
                             end = start + batch_size
                             mbinds = inds[start:end]
                             _recompute_inds = np.where(is_demo[mbinds] > 0.5)[0]
+                            recompute_neglogp_time0 = time.time()
                             if _recompute_inds.shape[0] > 0:
                                 neglogpacs[_recompute_inds] = self.sess.run(
                                     self.aug_neglogpac_op, {self.train_aug_model.obs_ph: obs[_recompute_inds],
                                                             self.aug_action_ph: actions[_recompute_inds]})
                                 if self.self_imitate:
                                     neglogpacs[_recompute_inds] = np.minimum(neglogpacs[_recompute_inds], 100)
+                            recompute_neglogp_time += time.time() - recompute_neglogp_time0
                             slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs, is_demo))
                             # if len(self.aug_obs) > batch_size:
                             #     aug_inds = np.random.choice(len(self.aug_obs), batch_size)
@@ -613,6 +622,7 @@ class PPO2_augment(ActorCriticRLModel):
                                                                  writer=writer, states=mb_states,
                                                                  cliprange_vf=cliprange_vf_now))
 
+                print('recompute neglogp time', recompute_neglogp_time)
                 loss_vals = np.mean(mb_loss_vals, axis=0)
                 t_now = time.time()
                 fps = int(self.n_batch / (t_now - t_start))
