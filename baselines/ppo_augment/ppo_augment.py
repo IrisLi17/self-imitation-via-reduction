@@ -325,7 +325,7 @@ class PPO2_augment(ActorCriticRLModel):
         advs = returns - values
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
         if not 'MasspointPush' in self.env.get_attr('spec')[0].id:
-            advs = is_demo * np.clip(advs, -np.inf, self.aug_clip) * self.aug_adv_weight + (1 - is_demo) * advs
+            advs = is_demo * np.clip(advs, self.aug_clip, np.inf) * self.aug_adv_weight + (1 - is_demo) * advs
         else:
             advs = is_demo * np.clip(advs, 0., 1.) * self.aug_adv_weight + (1 - is_demo) * advs
         # for i in range(advs.shape[0]):
