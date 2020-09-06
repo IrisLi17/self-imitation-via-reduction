@@ -266,7 +266,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         if 'MasspointPushDoubleObstacle' in env_name:
             env_kwargs['max_episode_steps']=150
         if 'MasspointPushMultiObstacle' in env_name:
-            env_kwargs['max_episode_steps'] = 50 * n_object
+            # env_kwargs['max_episode_steps'] = 50 * n_object
+            env_kwargs['max_episode_steps'] = 150
             env_kwargs['n_object'] = n_object
     elif env_name in PICK_ENTRY_POINT.keys():
         env_kwargs = dict(random_box=True,
