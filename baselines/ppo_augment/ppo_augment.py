@@ -224,7 +224,8 @@ class PPO2_augment(ActorCriticRLModel):
                             ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
                     else:
                         if 'MasspointPushMultiObstacle' in self.env.get_attr('spec')[0].id:
-                            ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
+                            ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - neglogpac)
+                            # ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph - neglogpac, 10))
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
                                                                   self.clip_range_ph)
