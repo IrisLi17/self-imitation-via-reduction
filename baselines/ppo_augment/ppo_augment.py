@@ -222,6 +222,9 @@ class PPO2_augment(ActorCriticRLModel):
                             ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 10) - tf.mininum(neglogpac, 10))
                         else:
                             ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
+                    else:
+                        if 'MasspointPushMultiObstacle' in self.env.get_attr('spec')[0].id:
+                            ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
                                                                   self.clip_range_ph)
@@ -233,6 +236,7 @@ class PPO2_augment(ActorCriticRLModel):
                     self.approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - self.old_neglog_pac_ph))
                     self.clipfrac = tf.reduce_mean(tf.cast(tf.greater(tf.abs(ratio - 1.0),
                                                                       self.clip_range_ph), tf.float32))
+                    self.ratio_max = tf.reduce_max(ratio)
                     aug_ratio = tf.exp(self.aug_old_neglog_pac_ph - aug_neglogpac)
                     aug_pg_losses = -self.aug_advs_ph * aug_ratio
                     aug_pg_losses2 = -self.aug_advs_ph * tf.clip_by_value(aug_ratio, 1.0 - self.clip_range_ph, 1.0 +
@@ -264,7 +268,7 @@ class PPO2_augment(ActorCriticRLModel):
                 trainer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph, epsilon=1e-5)
                 self._train = trainer.apply_gradients(grads)
 
-                self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
+                self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac', 'advs_min', 'advs_max', 'ratio_max']
 
                 with tf.variable_scope("input_info", reuse=False):
                     tf.summary.scalar('discounted_rewards', tf.reduce_mean(self.rewards_ph))
@@ -386,13 +390,13 @@ class PPO2_augment(ActorCriticRLModel):
                     td_map)
             writer.add_summary(summary, (update * update_fac))
         else:
-            policy_loss, value_loss, policy_entropy, approxkl, clipfrac, _ = self.sess.run(
-                [self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self._train], td_map)
+            policy_loss, value_loss, policy_entropy, approxkl, clipfrac, ratio_max, _ = self.sess.run(
+                [self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.ratio_max, self._train], td_map)
             # if aug_obs_slice is not None:
             #     print('demo loss', demo_loss)
                 # exit()
 
-        return policy_loss, value_loss, policy_entropy, approxkl, clipfrac
+        return policy_loss, value_loss, policy_entropy, approxkl, clipfrac, np.min(advs), np.max(advs), ratio_max
 
     def learn(self, total_timesteps, callback=None, seed=None, log_interval=1, tb_log_name="PPO2",
               reset_num_timesteps=True):
