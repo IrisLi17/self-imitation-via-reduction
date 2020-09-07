@@ -118,10 +118,10 @@ class ParallelRunner2(AbstractEnvRunner):
                     if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
                         return True
                     return False
-                elif 'MasspointPushMultiObstacle' in self.env.get_attr('spec')[0].id:
-                    if not infos[idx]['is_success']:
-                        return True
-                    return False
+                # elif 'MasspointPushMultiObstacle' in self.env.get_attr('spec')[0].id:
+                #     if not infos[idx]['is_success']:
+                #         return True
+                #     return False
                 else:
                     if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
                         return True
