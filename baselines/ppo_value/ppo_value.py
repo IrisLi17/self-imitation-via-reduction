@@ -185,6 +185,7 @@ class PPO2(ActorCriticRLModel):
                     self.vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
 
                     ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
+                    self.ratio_max = tf.reduce_max(ratio)
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
                                                                   self.clip_range_ph)
@@ -213,7 +214,7 @@ class PPO2(ActorCriticRLModel):
                 trainer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph, epsilon=1e-5)
                 self._train = trainer.apply_gradients(grads)
 
-                self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
+                self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac', 'max_neglogp', 'mean_neglogp', 'ratio_max']
 
                 with tf.variable_scope("input_info", reuse=False):
                     tf.summary.scalar('discounted_rewards', tf.reduce_mean(self.rewards_ph))
@@ -301,10 +302,10 @@ class PPO2(ActorCriticRLModel):
                     td_map)
             writer.add_summary(summary, (update * update_fac))
         else:
-            policy_loss, value_loss, policy_entropy, approxkl, clipfrac, _ = self.sess.run(
-                [self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self._train], td_map)
+            policy_loss, value_loss, policy_entropy, approxkl, clipfrac, ratio_max, _ = self.sess.run(
+                [self.pg_loss, self.vf_loss, self.entropy, self.approxkl, self.clipfrac, self.ratio_max, self._train], td_map)
 
-        return policy_loss, value_loss, policy_entropy, approxkl, clipfrac
+        return policy_loss, value_loss, policy_entropy, approxkl, clipfrac, np.max(neglogpacs), np.mean(neglogpacs), ratio_max
 
     def learn(self, total_timesteps, callback=None, seed=None, log_interval=1, tb_log_name="PPO2",
               reset_num_timesteps=True):
