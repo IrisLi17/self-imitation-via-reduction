@@ -68,6 +68,7 @@ def arg_parse():
     parser.add_argument('--curriculum', action="store_true", default=False)
     parser.add_argument('--play', action="store_true", default=False)
     parser.add_argument('--export_gif', action="store_true", default=False)
+    parser.add_argument('--log_trace', action="store_true", default=False)
     args = parser.parse_args()
     return args
 
@@ -234,7 +235,8 @@ def log_traj(aug_obs, aug_done, index, goal_dim=5, n_obstacle=1):
 
 
 def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, random_ratio, aug_clip, n_subgoal,
-         parallel, start_augment, reuse_times, aug_adv_weight, reward_type, n_object, curriculum, self_imitate, sil_clip, policy):
+         parallel, start_augment, reuse_times, aug_adv_weight, reward_type, n_object, curriculum, self_imitate, sil_clip, policy,
+         log_trace):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     configure_logger(log_dir)
 
@@ -345,7 +347,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                                  cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
                                  policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
                                  reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
-                                 curriculum=curriculum, self_imitate=self_imitate, sil_clip=sil_clip,
+                                 curriculum=curriculum, self_imitate=self_imitate, sil_clip=sil_clip, log_trace=log_trace,
                                  )
         # else:
         #     model = PPO2_augment_sil(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
@@ -442,4 +444,5 @@ if __name__ == '__main__':
          random_ratio=args.random_ratio, aug_clip=args.aug_clip, n_subgoal=args.n_subgoal,
          parallel=args.parallel, start_augment=int(args.start_augment), reuse_times=args.reuse_times,
          aug_adv_weight=args.aug_adv_weight, reward_type=args.reward_type, n_object=args.n_object,
-         curriculum=args.curriculum, self_imitate=args.self_imitate, policy=args.policy, sil_clip=args.sil_clip)
+         curriculum=args.curriculum, self_imitate=args.self_imitate, policy=args.policy, sil_clip=args.sil_clip,
+         log_trace=args.log_trace,)

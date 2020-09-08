@@ -6,6 +6,7 @@ from collections import deque
 import gym
 import numpy as np
 import tensorflow as tf
+import pickle
 
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_util, SetVerbosity, TensorboardWriter
@@ -15,7 +16,7 @@ from stable_baselines.a2c.utils import total_episode_reward_logger
 
 
 class ParallelRunner2(AbstractEnvRunner):
-    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon, dim_candidate=2):
+    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon, dim_candidate=2, log_trace=False):
         """
         A runner to learn the policy of an environment for a model
 
@@ -41,6 +42,7 @@ class ParallelRunner2(AbstractEnvRunner):
         self.n_object = self.env.get_attr('n_object')[0]
         self.dim_candidate = dim_candidate
         self.horizon = horizon
+        self.log_trace = log_trace
         # self.reuse_times = reuse_times
         print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
               'n_object', self.n_object, 'horizon', self.horizon)
@@ -260,6 +262,10 @@ class ParallelRunner2(AbstractEnvRunner):
                             augment_neglogp_buf = np.concatenate([np.array(neglogp_buf), augment_neglogp_buf], axis=0)
                             augment_done_buf = done_buf + augment_done_buf
                             augment_reward_buf = reward_buf + augment_reward_buf
+                        # TODO: analyse initial observation to check curriculum trace
+                        if self.log_trace:
+                            with open(os.path.join(logger.get_dir(), 'trace.pkl'), 'ab') as f:
+                                pickle.dump(augment_obs_buf[0], f)  # initial observation of successful augmented traj
                         if self.aug_env.get_attr('reward_type')[0] == "sparse":
                             assert abs(sum(augment_reward_buf) - 1) < 1e-4
                         if augment_done_buf[0] == 0:
