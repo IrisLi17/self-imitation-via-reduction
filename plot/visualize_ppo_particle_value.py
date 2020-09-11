@@ -76,20 +76,29 @@ if __name__ == '__main__':
     plt.rcParams.update({'font.size': 20, 'xtick.labelsize': 20, 'ytick.labelsize': 20,
                          'axes.labelsize': 20})
     obs = env.reset()
-    # while np.argmax(obs[-2:]) != 0 \
+    while np.argmax(obs[-n_object:]) != 0:
     #         or (obs[0] - obs[6]) * (obs[6] - env.pos_wall0[0]) < 0 \
     #         or (obs[3] - env.pos_wall0[0]) * (obs[6] - env.pos_wall0[0]) < 0:
-    #     obs = env.reset()
+        obs = env.reset()
     # obs = env.get_obs()
     # obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+    print(obs)
     for step in range(1):
         img = env.render(mode='rgb_array')
+        total_xs = []
+        total_ys = []
+        total_value2 = []
+        total_value1 = []
         for obj_idx in range(n_object):
             xs, ys, zs, value1s, value_prods = gen_value_with_obstacle(obs, model, obj_idx)
-            best_idx = np.unravel_index(np.argmax(value_prods, axis=None), value_prods.shape)
-            print('best idx', best_idx)
-            print(xs[best_idx], ys[best_idx])
-            print('best value', value_prods[best_idx], 'value1', value1s[best_idx], 'value2', zs[best_idx])
+            total_xs.append(xs)
+            total_ys.append(ys)
+            total_value2.append(zs)
+            total_value1.append(value1s)
+            # best_idx = np.unravel_index(np.argmax(value_prods, axis=None), value_prods.shape)
+            # print('best idx', best_idx)
+            # print(xs[best_idx], ys[best_idx])
+            # print('best value', value_prods[best_idx], 'value1', value1s[best_idx], 'value2', zs[best_idx])
             print(step, 'gripper', obs[:3], 'box', obs[3:6], 'obstacle', obs[6:9], )
             # np.save('xs.npy', xs)
             # np.save('ys.npy', ys)
@@ -109,7 +118,16 @@ if __name__ == '__main__':
             ax[1][0].contourf(xs, ys, value1s, 15, cmap=cm.coolwarm)
             ax[1][1].contourf(xs, ys, zs, 15, cmap=cm.coolwarm)
             plt.show()
-
+        total_xs = np.asarray(total_xs)
+        total_ys = np.asarray(total_ys)
+        total_value2 = np.asarray(total_value2)
+        total_value1 = np.asarray(total_value1)
+        normalize_value2 = (total_value2 - np.min(total_value2)) / (np.max(total_value2) - np.min(total_value2))
+        normalize_value1 = (total_value1 - np.min(total_value1)) / (np.max(total_value1) - np.min(total_value1))
+        total_value_prod = normalize_value2 * normalize_value1
+        best_idx = np.unravel_index(np.argmax(total_value_prod, axis=None), total_value_prod.shape)
+        print(best_idx)
+        print(total_xs[best_idx], total_ys[best_idx], total_value2[best_idx], total_value1[best_idx], total_value_prod[best_idx])
     exit()
     model_idx = int(os.path.basename(load_path).strip('.zip').split('_')[1])
     os.system(('ffmpeg -r 2 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +

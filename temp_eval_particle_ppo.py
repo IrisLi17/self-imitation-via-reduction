@@ -20,7 +20,7 @@ def eval_model(goal_idx, random_ratio):
         agent_pos = obs[:3]
         box_pos = obs[-2 * goal_dim: -2 * goal_dim + 3]
         goal_pos = obs[-goal_dim: -goal_dim + 3]
-        n_doors = doors_to_move(agent_pos[0], box_pos[0], goal_pos[0])
+        n_doors = doors_to_move(agent_pos, box_pos, goal_pos, [obs[6 + 3 * i: 9 + 3 * i] for i in range(n_object - 1)])
         done = False
         while not done:
             action, _ = model.predict(obs)
@@ -28,15 +28,20 @@ def eval_model(goal_idx, random_ratio):
             success_count += info['is_success']
             success_stats[n_doors] += info['is_success']
         total_stats[n_doors] += 1
-    return success_count / 50, [success_stats[i] / max(total_stats[i], 1e-4) for i in range(n_object)]
+    return success_count / 50, ([success_stats[i] / max(total_stats[i], 1e-4) for i in range(n_object)],
+                                total_stats)
 
 
-def doors_to_move(x_agent, x_box, x_goal):
+def doors_to_move(pos_agent, pos_box, pos_goal, pos_obstacles):
     # TODO:
-    max_x, min_x = max(x_agent, x_box, x_goal), min(x_agent, x_box, x_goal)
+    max_x, min_x = max(pos_agent[0], pos_box[0], pos_goal[0]), min(pos_agent[0], pos_box[0], pos_goal[0])
     max_n = int(max_x / 1.7)
     min_n = int(min_x / 1.7)
-    return max_n - min_n
+    count = 0
+    for pos_obstacle in pos_obstacles:
+        if abs(pos_obstacle[1] - 2.5) < 1e-3 and min_n < round(pos_obstacle[0] / 1.7) < max_n + 1:
+            count += 1
+    return count
 
 
 if __name__ == '__main__':
