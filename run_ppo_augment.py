@@ -343,7 +343,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         # if not self_imitate:
         if True:
             model = PPO2_augment(policy, env, aug_env=aug_env, eval_env=eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
-                                 gamma=0.99, noptepochs=10, ent_coef=0.01, aug_clip=aug_clip, learning_rate=3e-4,
+                                 gamma=0.99, noptepochs=10, ent_coef=0.02, aug_clip=aug_clip, learning_rate=3e-4,
                                  cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
                                  policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
                                  reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,

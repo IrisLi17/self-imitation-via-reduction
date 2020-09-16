@@ -213,7 +213,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         print(policy_kwargs)
 
         model = PPO2(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95, gamma=gamma, noptepochs=10,
-                     ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
+                     ent_coef=0.02, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
                      curriculum=curriculum,
                      )
         print(model.get_parameter_list())

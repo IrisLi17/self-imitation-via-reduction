@@ -1071,10 +1071,10 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
 
         if hasattr(self, 'sample_hard') and self.sample_hard:
             # g_idx = 0
-            # if self.np_random.uniform() < 0.6:
-            #     g_idx = 0
-            # else:
-            #     g_idx = np.random.randint(1, self.n_object)
+            if self.np_random.uniform() < 0.6:
+                g_idx = 0
+            else:
+                g_idx = np.random.randint(1, self.n_object)
             one_hot = np.zeros(self.n_object)
             one_hot[g_idx] = 1
             object_pos = self.sim.data.get_site_xpos('object0')
