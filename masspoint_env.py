@@ -15,6 +15,7 @@ MODEL_XML_PATH2 = os.path.join(os.path.dirname(__file__), 'assets', 'masspoint',
 MODEL_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'masspoint', 'double_obstacle.xml')
 MAZE_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'masspoint', 'maze.xml')
 SMAZE_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'masspoint', 'smaze.xml')
+EMAZE_XML_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'masspoint', 'emaze_easy.xml')
 
 
 class MasspointPushSingleObstacleEnv(MasspointPushEnv, utils.EzPickle):
@@ -1160,3 +1161,149 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
         return False
         # return np.any([abs(pos[0] - pos_wall[0]) < self.size_wall[0]
         #                and abs(pos[1] - 2.5) > 0.5] for pos_wall in self.pos_walls)
+
+
+class MasspointEMazeEasyEnv(MasspointPushEnv, utils.EzPickle):
+    def __init__(self, reward_type='sparse', random_box=True,
+                 random_ratio=1.0, random_pusher=False, fix_goal=True):
+        XML_PATH = EMAZE_XML_PATH
+        initial_qpos = {
+            'masspoint:slidex': 0.0,
+            'masspoint:slidey': 0.0,
+        }
+        self.random_ratio = random_ratio
+        self.random_pusher = random_pusher
+        self.fix_goal = fix_goal
+        MasspointPushEnv.__init__(
+            self, XML_PATH, n_substeps=5,
+            target_in_the_air=False, target_offset=0.0,
+            obj_range=6.0, target_range=6.0, distance_threshold=0.60,
+            initial_qpos=initial_qpos, reward_type=reward_type, n_object=0)
+        utils.EzPickle.__init__(self)
+        self.pos_wall = np.array([2., 4., 1.])
+        self.size_wall = np.array([4., 2., 1.])
+        self.size_obstacle = np.array([4., 4., 4.])  # Used to determine noise_mag only.
+
+    def _get_obs(self):
+        # positions
+        masspoint_pos = self.sim.data.qpos.flat[:3]
+        # velocity
+        masspoint_velp = self.sim.data.qvel.flat[:3]
+        achieved_goal = masspoint_pos.copy()
+        obs = np.concatenate([
+            masspoint_pos, masspoint_velp,
+        ])
+
+        return {
+            'observation': obs.copy(),
+            'achieved_goal': achieved_goal.copy(),
+            'desired_goal': self.goal.copy(),
+        }
+
+    def _reset_sim(self):
+        sim_state = copy.deepcopy(self.initial_state)
+        # Randomize masspoint pos
+        if self.random_pusher:
+            masspoint_pos = np.array([4., 4.]) + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+            while self.inside_wall(masspoint_pos):
+                masspoint_pos = np.array([4., 4.]) + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
+        else:
+            masspoint_pos = self.initial_masspoint_xpos[:2]
+        sim_state.qpos[2] = self.np_random.uniform(size=1, low=-.1, high=.1)
+        sim_state.qpos[0:2] = masspoint_pos
+        sim_state.qvel[:3] = self.np_random.randn(3) * 0.1
+
+        self.sim.set_state(sim_state)
+        self.sim.forward()
+        return True
+
+    def _sample_goal(self):
+        if not hasattr(self, 'size_wall'):
+            self.size_wall = np.array([4., 2., 1.])
+        if not hasattr(self, 'pos_wall'):
+            self.pos_wall = np.array([2., 4., 1.])
+
+        if self.fix_goal:
+            goal = np.array([0., 8.])
+        else:
+            goal = np.array([4., 4.]) + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+            while self.inside_wall(goal):
+                goal = np.array([4., 4.]) + self.target_offset + self.np_random.uniform(-self.target_range, self.target_offset, size=2)
+
+        goal = np.concatenate([goal, self.initial_masspoint_xpos[2:3]])
+        return goal.copy()
+
+    def switch_obs_goal(self, obs, goal):
+        obs = obs.copy()
+        if isinstance(obs, dict):
+            obs['achieved_goal'] = obs['observation'][:3]
+            obs['desired_goal'] = goal[:]
+        elif isinstance(obs, np.ndarray):
+            obs_dim = self.observation_space['observation'].shape[0]
+            goal_dim = self.observation_space['achieved_goal'].shape[0]
+            obs[obs_dim:obs_dim+goal_dim] = obs[:3]
+            obs[obs_dim+goal_dim:obs_dim+goal_dim*2] = goal[:]
+        else:
+            raise TypeError
+        return obs
+
+    def compute_reward(self, observation, goal, info):
+        achieved_goal = observation[:2]
+        r = MasspointPushEnv.compute_reward(self, achieved_goal, goal[0:2], info)
+        return r
+
+    def step(self, action):
+        action = np.clip(action, self.action_space.low, self.action_space.high)
+        # TODO: use manual transition function
+        qpos = np.copy(self.sim.data.qpos)
+        qpos[2] += action[1]
+        ori = qpos[2]
+        # compute increment in each direction
+        dx = np.cos(ori) * action[0]
+        dy = np.sin(ori) * action[0]
+        # ensure that the robot is within reasonable range
+        qpos[0] = np.clip(qpos[0] + dx, -100, 100)
+        qpos[1] = np.clip(qpos[1] + dy, -100, 100)
+        qvel = self.sim.data.qvel
+        old_state = self.sim.get_state()
+        # print('old_state', old_state)
+        new_state = copy.deepcopy(old_state)
+        new_state.qpos[:3] = qpos[:3]
+        new_state.qvel[:3] = qvel[:3]
+        self.sim.set_state(new_state)
+        # new_state = self.sim.get_state()
+        # print('new_state', new_state)
+        self.sim.step()
+        # print('after step', self.sim.get_state())
+
+        self._step_callback()
+        obs = self._get_obs()
+        # If new postion is inside wall, revert to old state
+        if self.inside_wall(obs['achieved_goal']):
+            self.sim.set_state(old_state)
+            self.sim.step()
+            self._step_callback()
+            obs = self._get_obs()
+
+        done = False
+        info = {
+            'is_success': self._is_success(obs['achieved_goal'][0:2], self.goal[0:2]),
+        }
+        reward = self.compute_reward(obs['observation'][0:3], self.goal, info)
+        return obs, reward, done, info
+
+    def _viewer_setup(self):
+        # body_id = self.sim.model.body_name2id('robot0:gripper_link')
+        # lookat = self.sim.data.body_xpos[body_id]
+        lookat = [4.0, 4.0, 0.0]
+        for idx, value in enumerate(lookat):
+            self.viewer.cam.lookat[idx] = value
+        self.viewer.cam.distance = 20.0
+        self.viewer.cam.azimuth = 132.
+        self.viewer.cam.elevation = -60.
+
+    def inside_wall(self, pos):
+        if pos[0] < -2 or pos[0] > 10 or pos[1] < -2 or pos[1] > 10 or \
+                (abs(pos[0] - self.pos_wall[0]) < self.size_wall[0] and abs(pos[1] - self.pos_wall[1]) < self.size_wall[1]):
+            return True
+        return False

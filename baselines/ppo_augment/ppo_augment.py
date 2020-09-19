@@ -395,8 +395,12 @@ class PPO2_augment(ActorCriticRLModel):
             # if aug_obs_slice is not None:
             #     print('demo loss', demo_loss)
                 # exit()
+        if len(np.where(is_demo < 0.5)[0]):
+            original_maxneglogp = np.max(neglogpacs[np.where(is_demo < 0.5)[0]])
+        else:
+            original_maxneglogp = 0.
 
-        return policy_loss, value_loss, policy_entropy, approxkl, clipfrac, np.min(advs), np.max(advs), ratio_max, np.max(neglogpacs), np.max(neglogpacs[np.where(is_demo < 0.5)[0]]), np.mean(neglogpacs)
+        return policy_loss, value_loss, policy_entropy, approxkl, clipfrac, np.min(advs), np.max(advs), ratio_max, np.max(neglogpacs), original_maxneglogp, np.mean(neglogpacs)
 
     def learn(self, total_timesteps, callback=None, seed=None, log_interval=1, tb_log_name="PPO2",
               reset_num_timesteps=True):

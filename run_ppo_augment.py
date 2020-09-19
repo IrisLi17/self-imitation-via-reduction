@@ -9,7 +9,7 @@ from stable_baselines.common.policies import register_policy
 
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from masspoint_env import MasspointPushSingleObstacleEnv_v2, MasspointPushDoubleObstacleEnv
-from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv
+from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv, MasspointEMazeEasyEnv
 from masspoint_env import MasspointPushMultiObstacleEnv
 from fetch_stack import FetchStackEnv
 # from push_wall import FetchPushWallEnv
@@ -37,6 +37,8 @@ MASS_ENTRY_POINT = {
     'MasspointMazeUnlimit-v1': MasspointMazeEnv,
     'MasspointMaze-v2': MasspointSMazeEnv,
     'MasspointMazeUnlimit-v2': MasspointSMazeEnv,
+    'MasspointMaze-v3': MasspointEMazeEasyEnv,
+    'MasspointMazeUnlimit-v3': MasspointEMazeEasyEnv,
     'MasspointPushMultiObstacle-v1': MasspointPushMultiObstacleEnv,
     'MasspointPushMultiObstacleUnlimit-v1': MasspointPushMultiObstacleEnv,
 }
@@ -247,8 +249,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         n_cpu = 64 if not play else 1
     elif 'FetchStack' in env_name:
         n_cpu = 128 if not play else 1
-    elif 'MasspointMaze' in env_name:
+    elif 'MasspointMaze' in env_name and (env_name is not 'MasspointMaze-v3'):
         n_cpu = 8 if not play else 1
+    elif env_name is 'MasspointMaze-v3':
+        n_cpu = 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1']:
         env_kwargs = dict(reward_type='dense')
         # pass
@@ -299,6 +303,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         # aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_subgoal)])
         if 'FetchStack' in env_name:
             aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(32)])
+        elif 'MasspointMaze-v3' in env_name:
+            aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_cpu)])
         else:
             aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(min(32, n_cpu))])
     print(aug_env)

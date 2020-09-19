@@ -10,7 +10,7 @@ from run_ppo_augment import eval_model, log_eval, stack_eval_model
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 # from push_wall_double_obstacle import FetchPushWallDoubleObstacleEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointPushSingleObstacleEnv, MasspointPushSingleObstacleEnv_v2
-from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv
+from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv, MasspointEMazeEasyEnv
 from masspoint_env import MasspointPushMultiObstacleEnv
 from fetch_stack import FetchStackEnv
 # from push_wall import FetchPushWallEnv
@@ -35,6 +35,7 @@ MASS_ENTRY_POINT = {
     'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
     'MasspointMaze-v1': MasspointMazeEnv,
     'MasspointMaze-v2': MasspointSMazeEnv,
+    'MasspointMaze-v3': MasspointEMazeEasyEnv,
     'MasspointPushMultiObstacle-v1': MasspointPushMultiObstacleEnv,
 }
 
@@ -119,8 +120,10 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         n_cpu = 64 if not play else 1
     elif 'FetchStack' in env_name:
         n_cpu = 128 if not play else 1
-    elif 'MasspointMaze' in env_name:
+    elif 'MasspointMaze' in env_name and (env_name is not 'MasspointMaze-v3'):
         n_cpu = 8 if not play else 1
+    elif env_name == 'MasspointMaze-v3':
+        n_cpu = 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1', 'FetchPickAndPlace-v1']:
         env_kwargs = {}
         # pass
