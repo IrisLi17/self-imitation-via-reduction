@@ -249,9 +249,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
         n_cpu = 64 if not play else 1
     elif 'FetchStack' in env_name:
         n_cpu = 128 if not play else 1
-    elif 'MasspointMaze' in env_name and (env_name is not 'MasspointMaze-v3'):
+    elif 'MasspointMaze' in env_name and (env_name != 'MasspointMaze-v3'):
         n_cpu = 8 if not play else 1
-    elif env_name is 'MasspointMaze-v3':
+    elif env_name == 'MasspointMaze-v3':
         n_cpu = 1
     if env_name in ['FetchReach-v1', 'FetchPush-v1', 'CartPole-v1']:
         env_kwargs = dict(reward_type='dense')
