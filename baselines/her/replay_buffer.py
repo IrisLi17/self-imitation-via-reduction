@@ -281,8 +281,12 @@ class HindsightExperienceReplayWrapper(object):
                 obs_dict, next_obs_dict = map(self.env.convert_obs_to_dict, (obs, next_obs))
 
                 # Update the desired goal in the transition
-                obs_dict['desired_goal'] = goal
-                next_obs_dict['desired_goal'] = goal
+                if self.env.env.get_attr('spec')[0].id == 'MasspointMaze-v3':
+                    obs_dict['desired_goal'][:2] = goal[:2]
+                    next_obs_dict['desired_goal'][:2] = goal[:2]
+                else:
+                    obs_dict['desired_goal'] = goal
+                    next_obs_dict['desired_goal'] = goal
 
                 # assert len(goal) in [3, 5, 6]
                 if len(goal) > 3:

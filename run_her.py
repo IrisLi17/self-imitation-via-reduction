@@ -7,7 +7,7 @@ from baselines import HER_HACK, SAC_parallel
 from utils.wrapper import DoneOnSuccessWrapper
 from gym.wrappers import FlattenDictWrapper
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
-from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointSMazeEnv
+from masspoint_env import MasspointPushDoubleObstacleEnv, MasspointSMazeEnv, MasspointEMazeEasyEnv
 from masspoint_env import MasspointPushDoubleObstacleEnv_v2
 from fetch_stack import FetchStackEnv, FetchStackEnv_v2
 import gym
@@ -35,6 +35,8 @@ ENTRY_POINT = {
     'MasspointPushDoubleObstacleUnlimit-v2': MasspointPushDoubleObstacleEnv_v2,
     'MasspointMaze-v2': MasspointSMazeEnv,
     'MasspointMazeUnlimit-v2': MasspointSMazeEnv,
+    'MasspointMaze-v3': MasspointEMazeEasyEnv,
+    'MasspointMazeUnlimit-v3': MasspointEMazeEasyEnv,
     'FetchStack-v1': FetchStackEnv,
     'FetchStackUnlimit-v1': FetchStackEnv,
     'FetchStack-v2': FetchStackEnv_v2,
@@ -138,7 +140,7 @@ def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None,
                     random_pusher=True,
                     reward_type=reward_type,
                     max_episode_steps=150, )
-    elif env_id == 'MasspointMaze-v2':
+    elif env_id == 'MasspointMaze-v2' or env_id == 'MasspointMaze-v3':
         return dict(random_box=True,
                     random_ratio=random_ratio,
                     random_pusher=True,
@@ -256,6 +258,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 train_kwargs['gamma'] = 0.99
                 train_kwargs['batch_size'] = 256
                 train_kwargs['random_exploration'] = 0.2
+            elif 'MasspointMaze-v3' in env_name:
+                train_kwargs['buffer_size'] = int(1e4)
             policy_kwargs = {}
 
             def callback(_locals, _globals):
@@ -317,7 +321,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         print(model.get_parameter_list())
 
         # Train the model
-        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=100)
+        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=100 if not ('MasspointMaze-v3' in env_name) else 10)
 
         if rank == 0:
             model.save(os.path.join(log_dir, 'final'))

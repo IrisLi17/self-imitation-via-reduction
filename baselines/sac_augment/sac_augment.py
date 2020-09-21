@@ -1095,7 +1095,8 @@ class SAC_augment(OffPolicyRLModel):
             subgoal_obs = obs_buf[sample_t]
             subgoal_obs[:, self.obs_dim:self.obs_dim + 3] = subgoal_obs[:, 0:3]
             subgoal_obs[:, self.obs_dim + self.goal_dim:self.obs_dim + self.goal_dim + 2] = ego_xy
-            subgoal_obs[:, self.obs_dim + self.goal_dim + 2:self.obs_dim + self.goal_dim + 3] = subgoal_obs[:, 2:3]
+            if self.env_id != 'MasspointMaze-v3':
+                subgoal_obs[:, self.obs_dim + self.goal_dim + 2:self.obs_dim + self.goal_dim + 3] = subgoal_obs[:, 2:3]
             subgoal_obs_buf.append(subgoal_obs)
         else:
             ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])

@@ -61,7 +61,7 @@ def configure_logger(log_path, **kwargs):
 def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
          export_gif, gamma, random_ratio, action_noise, reward_type, n_object, start_augment,
          policy, learning_rate, n_workers, priority, curriculum, imitation_coef, sequential):
-    assert n_workers > 1
+    # assert n_workers > 1
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
     if MPI is None or MPI.COMM_WORLD.Get_rank() == 0:
         rank = 0
@@ -166,6 +166,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 train_kwargs['random_exploration'] = 0.2
             elif 'MasspointMaze' in env_name:
                 train_kwargs['n_subgoal'] = 1
+                if 'MasspointMaze-v3' in env_name:
+                    train_kwargs['buffer_size'] = int(1e4)
             policy_kwargs = {}
 
             def callback(_locals, _globals):
@@ -224,7 +226,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         print(model.get_parameter_list())
 
         # Train the model
-        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=100)
+        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=100 if not ('MasspointMaze-v3' in env_name) else 10)
 
         if rank == 0:
             model.save(os.path.join(log_dir, 'final'))
