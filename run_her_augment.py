@@ -176,9 +176,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                         mean_eval_reward = stack_eval_model(eval_env, _locals["self"],
                                                             init_on_table=(env_name=='FetchStack-v2'))
                     elif 'MasspointPushDoubleObstacle-v2' in env_name:
-                        mean_eval_reward = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"])
+                        mean_eval_reward = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"], fixed_goal=np.array([4., 4., 0.15, 0., 0., 0., 1.]))
                         mean_eval_reward2 = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"],
-                                                              goal_idx=0)
+                                                              goal_idx=0, fixed_goal=np.array([4., 4., 0.15, 1., 0., 0., 0.]))
                         log_eval(_locals['self'].num_timesteps, mean_eval_reward2, file_name="eval_box.csv")
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
