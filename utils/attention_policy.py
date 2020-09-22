@@ -84,7 +84,7 @@ def attention_mlp_extractor_particle(flat_observations, n_object=2, n_units=128,
                                       np.arange(9 + 15 * n_object + i, 9 + 15 * n_object + i + 1), # indicator
                                       ])  # size 16
         object_in = tf.gather(flat_observations, _object_idx, axis=1)
-        shape_onehot = tf.tile(tf.expand_dims(np.array([(i == 0) + 2 * (i == 3)], dtype=np.float32), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
+        shape_onehot = tf.tile(tf.expand_dims(np.array([(i == 0)], dtype=np.float32), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
         # object_onehot = tf.tile(tf.expand_dims(tf.one_hot(i, n_object), dim=0), tf.stack([tf.shape(object_in)[0], 1]))
         object_in = tf.concat([object_in, shape_onehot], axis=1)
         with tf.variable_scope("object", reuse=tf.AUTO_REUSE):
