@@ -80,10 +80,9 @@ class ParallelRunner2(AbstractEnvRunner):
         duration = 0.0
         # step_env_duration = 0.0
         for _ in range(self.n_steps):
-            if self.model.num_timesteps >= self.model.start_augment:
-                internal_states = self.env.env_method('get_state')
-                for i in range(self.model.n_envs):
-                    self.ep_state_buf[i].append(internal_states[i]) 
+            internal_states = self.env.env_method('get_state')
+            for i in range(self.model.n_envs):
+                self.ep_state_buf[i].append(internal_states[i])
             if self.dim_candidate == 3:
                 current_nobjects = self.env.get_attr('current_nobject')
                 task_modes = self.env.get_attr('task_mode')
