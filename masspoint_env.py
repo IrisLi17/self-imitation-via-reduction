@@ -1016,11 +1016,9 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
                                   for i in range(self.n_object - 1)]
         else:
             self.sample_hard = True
-            # # randomize number of doors blocked
-            # num_blocked_obstacles = np.random.randint(1, self.n_object)
-            # blocked_idx = np.random.choice(np.arange(1, self.n_object), num_blocked_obstacles, replace=False)
-            # Block every door
-            blocked_idx = np.arange(1, self.n_object)
+            # randomize number of doors blocked
+            num_blocked_obstacles = np.random.randint(1, self.n_object)
+            blocked_idx = np.random.choice(np.arange(1, self.n_object), num_blocked_obstacles, replace=False)
             while True:
                 obstacles_xpos = []
                 object_xpos = self.initial_masspoint_xpos[:2] + self.np_random.uniform(-1, 1, size=2) * self.obj_range
@@ -1090,12 +1088,7 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
                     goal = np.array([1.7 * g_idx, 2.5]) + self.np_random.uniform(-1, 1, size=2) * self.obstacle_range
         else:
             if g_idx == 0:
-                # TODO: easy case, only need to pass at most one door, and that door is open
-                object_pos = self.sim.data.get_site_xpos('object0')
-                # masspoint_pos = self.sim.get_state().qpos
-                # masspoint_pos = [masspoint_pos[self.sim.model.get_joint_qpos_addr('masspoint:slidex')],
-                #                  masspoint_pos[self.sim.model.get_joint_qpos_addr('masspoint:slidey')]]
-                while self.inside_wall(goal) or abs(int(object_pos[0] / 1.7) - int(goal[0] / 1.7)) > 1:
+                while self.inside_wall(goal):
                     goal = self.initial_masspoint_xpos[:2] + self.target_offset + self.np_random.uniform(
                         -1, 1, size=2) * self.obj_range
             else:
