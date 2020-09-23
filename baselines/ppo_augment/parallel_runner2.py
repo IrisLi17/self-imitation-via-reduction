@@ -506,7 +506,7 @@ class ParallelRunner2(AbstractEnvRunner):
         # self.ep_transition_buf, self.model.value
         obs_buf, *_ = zip(*transition_buf)
         obs_buf = np.asarray(obs_buf)
-        sample_t = np.random.randint(0, len(transition_buf), 4096 + 2048)
+        sample_t = np.random.randint(0, len(transition_buf), 4096)
         sample_obs = obs_buf[sample_t]
         noise = np.random.uniform(low=-self.noise_mag, high=self.noise_mag, size=(len(sample_t), 2))
         # TODO: if there are more than one obstacle
