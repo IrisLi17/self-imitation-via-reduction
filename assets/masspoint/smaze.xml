@@ -13,6 +13,7 @@
 	</asset>
 
 	<worldbody>
+		<camera name="fixed" pos="2.5 2.5 8" quat="1 0 0 0"/>
 		<geom name="floor0" pos="2.5 2.5 0" size="30 30 1" type="plane" condim="3" material="floor_mat"></geom>
 		<body name="floor0" pos="2.5 2.5 0">
 			<site name="target0" pos="0.7 0.0 0.4" size="0.10 0.10 0.10" rgba="1 0 0 1" type="sphere"></site>

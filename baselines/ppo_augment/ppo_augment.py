@@ -2,7 +2,7 @@ import time
 import sys
 import multiprocessing
 from collections import deque
-
+import os.path as osp
 import gym
 import numpy as np
 import tensorflow as tf
@@ -48,7 +48,7 @@ class PPO2_augment(ActorCriticRLModel):
         WARNING: this logging can take a lot of space quickly
     """
 
-    def __init__(self, policy, env, aug_env=None, eval_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
+    def __init__(self, policy, env, env_id=None,aug_env=None, eval_env=None, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4,
                  vf_coef=0.5, aug_clip=0.1, max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2,
                  cliprange_vf=None, n_candidate=4, dim_candidate=2, parallel=False, reuse_times=1, start_augment=0,
                  horizon=100, aug_adv_weight=1.0, curriculum=False, self_imitate=False, sil_clip=0.2,
@@ -58,6 +58,8 @@ class PPO2_augment(ActorCriticRLModel):
         super(PPO2_augment, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
                                            _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs)
 
+       # add env_id for pygame environment
+        self.env_id = env_id
         self.aug_env = aug_env
         self.eval_env = eval_env
         self.learning_rate = learning_rate
@@ -121,6 +123,8 @@ class PPO2_augment(ActorCriticRLModel):
         self.num_aug_steps = 0  # every interaction with simulator should be counted
         self.horizon = horizon
         self.aug_adv_weight = aug_adv_weight
+        # adding latent mode option
+        self.latent_mode = True
 
         if _init_setup_model:
             self.setup_model()
@@ -142,7 +146,8 @@ class PPO2_augment(ActorCriticRLModel):
             n_cpu = multiprocessing.cpu_count()
             if sys.platform == 'darwin':
                 n_cpu //= 2
-
+            # physical_devices = tf.config.list_physical_devices('GPU')
+            # tf.config.set_visible_devices(physical_devices[1:], 'GPU')
             self.graph = tf.Graph()
             with self.graph.as_default():
                 self.sess = tf_util.make_session(num_cpu=n_cpu, graph=self.graph)
@@ -324,7 +329,9 @@ class PPO2_augment(ActorCriticRLModel):
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
         for i in range(advs.shape[0]):
             if is_demo[i]:
-                if not 'MasspointPushDoubleObstacle' in self.env.get_attr('spce')[0].id:
+                # if not 'MasspointPushDoubleObstacle' in self.env.get_attr('spce')[0].id:
+                if not 'MasspointPushDoubleObstacle' in self.env_id:
+
                     advs[i] = np.max([advs[i], self.aug_clip]) * self.aug_adv_weight
                 else:
                     advs[i] = np.clip(advs[i], 0., 1.) * self.aug_adv_weight
@@ -410,7 +417,14 @@ class PPO2_augment(ActorCriticRLModel):
                                                  gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
                                                  dim_candidate=self.dim_candidate, horizon=self.horizon)
             else:
-                if self.env.get_attr('n_object')[0] > 0:
+                if self.latent_mode:
+                    from baselines.ppo_augment.parallel_runner2 import ParallelRunner2
+                    print('running parallel_runner2')
+                    runner = ParallelRunner2(env_id=self.env_id,env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                             gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                             dim_candidate=self.dim_candidate,
+                                             horizon=self.horizon)
+                elif self.env.get_attr('n_object')[0] > 0:
                     if self.dim_candidate != 3:
                         from baselines.ppo_augment.parallel_runner2 import ParallelRunner2
                         # runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
@@ -640,7 +654,7 @@ class PPO2_augment(ActorCriticRLModel):
                     logger.logkv("augment_steps", augment_steps)
                     # logger.logkv("original_success", original_success)
                     # logger.logkv("total_success", total_success)
-                    logger.logkv("self_aug_ratio", np.mean(runner.self_aug_ratio))
+                    # logger.logkv("self_aug_ratio", np.mean(runner.self_aug_ratio))
                     logger.dumpkvs()
 
                 if callback is not None:
@@ -698,6 +712,30 @@ class Runner(AbstractEnvRunner):
         self.obs_dim = 40
         self.goal_dim = 5
         self.n_object = env.unwrapped.n_object
+        # latent_size
+        self.latent_dim = 16
+        self.latent_mode = True
+        self.set_range=True
+        if 'Image84SawyerPushAndReachArenaTrainEnvBig-v0' in self.env_id:
+            base_dir = '/home/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192'
+            path = osp.join(base_dir,'latent_info.npy')
+            latent_range = np.load(path)
+            self.range_min = latent_range[:self.latent_dim]
+            self.range_max = latent_range[-self.latent_dim:]
+        elif 'Image48PointmassUWallTrainEnvBig-v0' in self.env_id:
+            base_dir = '/home/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047'
+            path = osp.join(base_dir,'latent_info.npy')
+            latent_range = np.load(path)
+            self.range_min=latent_range[:self.latent_dim]
+            self.range_max=latent_range[-self.latent_dim:]
+        # num of the cross-entropy iteration
+        self.num_iters = 15
+        # frac_top_chosen_mode
+        self.frac_top_chosen_fixed = True
+        # self.frac_top_chosen = [0.25,0.01]
+        self.frac_total = 1000
+        self.frac_top_chosen= 0.05
+        # self.frac_top_chosen = 0.01
         # For restart
         self.ep_state_buf = [[] for _ in range(self.model.n_envs)]
         self.ep_transition_buf = [[] for _ in range(self.model.n_envs)]
@@ -754,11 +792,25 @@ class Runner(AbstractEnvRunner):
             for idx, done in enumerate(self.dones):
                 if self.model.num_timesteps > self.model.start_augment and done:
                     # Check if this is failture
-                    goal = self.ep_transition_buf[idx][0][0][-5:]
-                    if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
+                    if self.latent_mode:
+                        goal = self.ep_transition_buf[idx][0][0][-self.latent_dim:]
+                        ## to do how to define the success
+                        if 'Image48PointmassUWallTrainEnvBig-v0' in self.env_id:
+                            success_flag = not((not info[idx]['is_success']))
+                        if 'Image84SawyerPushAndReachArenaTrainEnvBig-v0' in self.env_id:
+                            success_flag = not((not info[idx]['hand_and_puck_success']))
+                    else :
+                        goal = self.ep_transition_buf[idx][0][0][-5:]
+                        success_flag = not (np.argmax(goal[3:])==0 and (not info[idx]['is_success']) )
+                    # if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
+                    if not success_flag:
                         # Do augmentation
                         # Sample start step and perturbation
-                        restart_steps, subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate)
+                        if self.latent_mode:
+                            restart_steps, subgoals = self.select_subgoal_cem(self.ep_transition_buf[idx],
+                                                                          k=self.n_candidate)
+                        else:
+                            restart_steps, subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate)
                         # print('restart steps', restart_steps, 'subgoals', subgoals, 'ultimate goal', goal)
                         # augment_transition_buf = self.ep_transition_buf[idx][:restart_step]
                         for k in range(restart_steps.shape[0]):
@@ -777,8 +829,14 @@ class Runner(AbstractEnvRunner):
                             else:
                                 augment_obs_buf, augment_act_buf, augment_value_buf, \
                                 augment_neglogp_buf, augment_done_buf, augment_reward_buf = [], [], [], [], [], []
-                            augment_obs1, augment_act1, augment_value1, augment_neglogp1, augment_done1, augment_reward1, next_state = \
-                                self.rollout_subtask(self.ep_state_buf[idx][restart_step], subgoal, len(augment_obs_buf), goal)
+                            if self.latent_mode:
+
+                                augment_obs1, augment_act1, augment_value1, augment_neglogp1, augment_done1, augment_reward1, next_state = \
+                                self.rollout_subtask_latent(self.ep_state_buf[idx][restart_step], subgoal, len(augment_obs_buf), goal)
+                            else:
+                                augment_obs1, augment_act1, augment_value1, augment_neglogp1, augment_done1, augment_reward1, next_state = \
+                                    self.rollout_subtask(self.ep_state_buf[idx][restart_step], subgoal,
+                                                         len(augment_obs_buf), goal)
                             if augment_obs1 is not None:
                                 # augment_transition_buf += augment_transition1
                                 augment_obs_buf += augment_obs1
@@ -787,8 +845,13 @@ class Runner(AbstractEnvRunner):
                                 augment_neglogp_buf += augment_neglogp1
                                 augment_done_buf += augment_done1
                                 augment_reward_buf += augment_reward1
-                                augment_obs2, augment_act2, augment_value2, augment_neglogp2, augment_done2, augment_reward2, _ = \
-                                    self.rollout_subtask(next_state, goal, len(augment_obs_buf), goal)
+                                if self.latent_mode:
+                                    augment_obs2, augment_act2, augment_value2, augment_neglogp2, augment_done2, augment_reward2, _ = \
+                                        self.rollout_subtask_latent(next_state, goal, len(augment_obs_buf), goal)
+                                else:
+                                    augment_obs1, augment_act1, augment_value1, augment_neglogp1, augment_done1, augment_reward1, next_state = \
+                                        self.rollout_subtask(self.ep_state_buf[idx][restart_step], subgoal,
+                                                             len(augment_obs_buf), goal)
                                 if augment_obs2 is not None:
                                     print('Success')
                                     # augment_transition_buf += augment_transition2
@@ -813,9 +876,11 @@ class Runner(AbstractEnvRunner):
                                     # The augment data is directly passed to model
                                     # self.model.aug_obs += list(aug_obs)
                                     # self.model.aug_act += list(aug_act)
-                                    for i in range(len(augment_obs_buf)):
-                                        assert np.argmax(augment_obs_buf[i][-2:]) == 0
-                                        assert np.argmax(augment_obs_buf[i][-7:-5]) == 0
+                                    ## use latent_mode doesn't need some specific restrictions on obs
+                                    if not self.latent_mode:
+                                        for i in range(len(augment_obs_buf)):
+                                            assert np.argmax(augment_obs_buf[i][-2:]) == 0
+                                            assert np.argmax(augment_obs_buf[i][-7:-5]) == 0
                                     # self.model.aug_obs += augment_obs_buf
                                     # self.model.aug_act += augment_act_buf
                                     # self.model.aug_neglogp += augment_neglogp_buf
@@ -905,6 +970,73 @@ class Runner(AbstractEnvRunner):
         # print('restart step', restart_step)
         return restart_step, subgoal
 
+    def select_subgoal_cem(self, transition_buf, k):
+        # self.ep_transition_buf, self.model.value
+        assert len(transition_buf) == 100, len(transition_buf)
+        obs_buf, *_ = zip(*transition_buf)
+        obs_buf = np.asarray(obs_buf)
+        opt_samples=[]
+        opt_values = []
+        # sample_t = np.random.randint(0, len(transition_buf), 1)
+        for i in range(len(transition_buf)):
+            sample_obs = obs_buf[i]
+            if self.use_true_prior:
+                mu = np.ones(self.latent_dim)
+                std = np.zeros(self.latent_dim)
+            else :
+                mu = self.aug_env.vae.dist_mu
+                std = self.aug_env.vae.dist_std
+
+            batch_sizes =[self.frac_total] *(self.num_iters // 2) + [self.frac_total]*(self.num_iters - (self.num_iters // 2))
+            if not self.frac_top_chosen_fixed:
+                frac_top_chosens = np.array([self.frac_top_chosen[0]]*(self.num_iters//2)+[self.frac_top_chosen[1]]*(self.num_iters-(self.num_iters//2)))
+            else:
+                frac_top_chosens = np.ones(self.num_iters)* self.frac_top_chosen
+            for i in range(self.num_iters):
+                # samples = torch.distributions.Normal(mu_var,std_var).sample_n(batch_sizes[i]*4096)
+                samples = np.random.normal(mu,std,(batch_sizes[i],self.latent_dim))
+                if self.set_range:
+                    assert self.range_min.shape==(self.latent_dim,), self.range_min
+                    assert self.range_max.shape==(self.latent_dim,), self.range_min
+                    samples = np.clip(samples,self.range_min,self.range_max)
+                sample_obs_batches  = np.tile(sample_obs,(batch_sizes[i],1)).reshape(-1,self.latent_dim*3)
+                sample_obs_batches[:, self.latent_dim*2:] = samples
+                value2 = self.model.value(sample_obs)
+                subgoal_obs =  np.tile(sample_obs,(batch_sizes[i],1)).reshape(-1,self.latent_dim*3)
+                subgoal_obs[:, :self.latent_dim] = samples
+                subgoal_obs[:, self.latent_dim:] = samples
+                value1 = self.model.value(subgoal_obs)
+
+                normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
+                normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
+                loss = (normalize_value1*normalize_value2)
+                sorted_losses, sorted_indices = np.sort(loss)
+                num_top_chosen = int(frac_top_chosens[i]*batch_sizes[i])
+                elite_indices = sorted_indices[-num_top_chosen:]
+                elites = samples[elite_indices]
+                mu = np.mean(elites)
+                std = np.std(elites)
+            opt_sample = elites[-k:]
+            opt_value = sorted_losses[-k:]
+            opt_subgoal = self.reproject_encoding(opt_sample)
+            opt_samples.append(opt_subgoal)
+            opt_values.append(opt_value)
+        good_indices = np.argsort(np.asarray(opt_values))
+        top_k = good_indices[-k:]
+        opt_subgoal = opt_samples[top_k]
+        sample_t = top_k
+        return sample_t, opt_subgoal
+
+    def reproject_encoding(self,encoding):
+        import utils.torch.pytorch_util as ptu
+        encoding = ptu.np_to_var(encoding).view(-1,self.latent_dim)
+        imgs = self.aug_env.vae.decode(encoding)
+        reconstr_encoding = self.aug_env.vae.encode(imgs)
+        reconstr_encoding_np = ptu.get_numpy(reconstr_encoding)
+        return reconstr_encoding_np
+
+
+
     def rollout_subtask(self, restart_state, goal, restart_step, ultimate_goal):
         aug_transition = []
         self.aug_env.unwrapped.sim.set_state(restart_state)
@@ -959,6 +1091,68 @@ class Runner(AbstractEnvRunner):
             return aug_obs, aug_act, aug_value, aug_neglogpac, aug_done, aug_reward, next_state
         return None, None, None, None, None, None, None
 
+    def rollout_subtask_latent(self, restart_state, goal, restart_step, ultimate_goal):
+        aug_transition = []
+        self.aug_env.unwrapped.sim.set_state(restart_state)
+        self.aug_env.unwrapped.sim.forward()
+        self.aug_env.unwrapped.goal[:] = goal
+        dict_obs = self.aug_env.unwrapped.get_obs()
+        obs = np.concatenate([dict_obs[key] for key in ['latent_observation', 'latent_achieved_goal', 'latent_desired_goal']])
+        # print('subgoal', goal, 'obs', obs[-10:])
+        # def switch_goal(obs, goal):
+        #     obs = obs.copy()
+        #     assert len(goal) == self.latent_dim
+        #     obs[-5:] = goal
+        #     goal_idx = np.argmax(goal[3:])
+        #     obs[-10:-5] = np.concatenate([obs[3 + goal_idx * 3 : 6 + goal_idx * 3], goal[3:5]])
+        #     return obs
+        def switch_goal(obs, goal):
+            obs = obs.copy()
+            assert len(goal) == self.latent_dim
+            obs[-self.latent_dim:] = goal
+            return obs
+            # obs[-5:] = goal
+            # goal_idx = np.argmax(goal[3:])
+            # obs[-10:-5] = np.concatenate([obs[3 + goal_idx * 3 : 6 + goal_idx * 3], goal[3:5]])
+            # return obs
+        info = {'is_success': False}
+        for step_idx in range(restart_step, 100):
+            # If I use subgoal obs, value has problem
+            # If I use ultimate goal obs, action should be rerunned
+            # action, value, _, neglogpac = self.model.step(obs)
+            action, _, _, _ = self.model.step(np.expand_dims(obs, axis=0))
+            action = np.squeeze(action, axis=0)
+            clipped_actions = action
+            # Clip the actions to avoid out of bound error
+            if isinstance(self.aug_env.action_space, gym.spaces.Box):
+                clipped_actions = np.clip(action, self.aug_env.action_space.low, self.aug_env.action_space.high)
+            next_obs, _, _, info = self.aug_env.step(clipped_actions)
+            self.model.num_aug_steps += 1
+            reward = self.aug_env.compute_reward(switch_goal(next_obs, ultimate_goal), ultimate_goal, None)
+            next_state = self.aug_env.unwrapped.sim.get_state()
+            # aug_transition.append((obs, action, value, neglogpac, done, reward))
+            aug_transition.append((switch_goal(obs, ultimate_goal), action, False, reward)) # Note that done refers to the output of previous action
+            # print(step_idx, obs[-10:], next_obs[-10:])
+            if info['is_success']:
+                break
+            obs = next_obs
+        # print('length of augment transition', len(aug_transition))
+        if info['is_success']:
+            aug_obs, aug_act, aug_done, aug_reward = zip(*aug_transition)
+            aug_obs = list(aug_obs)
+            aug_act = list(aug_act)
+            aug_done = list(aug_done)
+            aug_reward = list(aug_reward)
+            aug_neglogpac = self.model.sess.run(self.model.aug_neglogpac_op,
+                                                {self.model.train_aug_model.obs_ph: np.array(aug_obs),
+                                                 self.model.aug_action_ph: np.array(aug_act)})
+            aug_value = self.model.value(np.array(aug_obs))
+            # print(aug_neglogpac.shape)
+            aug_neglogpac = aug_neglogpac.tolist()
+            aug_value = aug_value.tolist()
+            # print(np.mean(aug_neglogpac))
+            return aug_obs, aug_act, aug_value, aug_neglogpac, aug_done, aug_reward, next_state
+        return None, None, None, None, None, None, None
     def compute_adv(self, values, dones, rewards):
         if not isinstance(values, np.ndarray):
             values = np.asarray(values)

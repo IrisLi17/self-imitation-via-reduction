@@ -6,7 +6,7 @@ from collections import deque
 import gym
 import numpy as np
 import tensorflow as tf
-
+import os.path as osp
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_util, SetVerbosity, TensorboardWriter
 from stable_baselines.common.runners import AbstractEnvRunner
@@ -15,7 +15,7 @@ from stable_baselines.a2c.utils import total_episode_reward_logger
 
 
 class ParallelRunner2(AbstractEnvRunner):
-    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon, dim_candidate=2):
+    def __init__(self, *, env_id, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon, dim_candidate=2):
         """
         A runner to learn the policy of an environment for a model
 
@@ -26,31 +26,73 @@ class ParallelRunner2(AbstractEnvRunner):
         :param lam: (float) Factor for trade-off of bias vs variance for Generalized Advantage Estimator
         """
         super().__init__(env=env, model=model, n_steps=n_steps)
+        self.env_id = env_id
         self.aug_env = aug_env
         self.lam = lam
         self.gamma = gamma
         self.n_candidate = n_candidate
+
+        ## the below part is added for the latent observation
+        # latent_size
+        self.latent_dim = 16
+        self.latent_mode = True
+        self.use_true_prior=True
+        self.set_range = True
+
+        if 'Image84SawyerPushAndReachArenaTrainEnvBig-v0' in self.env_id:
+            base_dir = '/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192'
+            path = osp.join(base_dir, 'latent_info.npy')
+            latent_range = np.load(path)
+            self.range_min = latent_range[:self.latent_dim]
+            self.range_max = latent_range[-self.latent_dim:]
+        elif 'Image48PointmassUWallTrainEnvBig-v0' in self.env_id:
+            base_dir = '/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047'
+            path = osp.join(base_dir, 'latent_info.npy')
+            latent_range = np.load(path)
+            self.range_min = latent_range[:self.latent_dim]
+            self.range_max = latent_range[-self.latent_dim:]
+        # num of the cross-entropy iteration
+        self.num_iters = 15
+        # frac_top_chosen_mode
+        self.frac_top_chosen_fixed = True
+        # self.frac_top_chosen = [0.25,0.01]
+        self.frac_total = 1000
+        self.frac_top_chosen = 0.05
+        # self.frac_top_chosen = 0.01
+
         # For restart
         self.ep_state_buf = [[] for _ in range(self.model.n_envs)]
         self.ep_transition_buf = [[] for _ in range(self.model.n_envs)]
         self.ep_current_nobject = [[] for _ in range(self.model.n_envs)]
         self.ep_task_mode = [[] for _ in range(self.model.n_envs)]
-        self.goal_dim = self.env.get_attr('goal')[0].shape[0]
+
+        # self.goal_dim = self.env.get_attr('goal')[0].shape[0]
+        if self.latent_mode:
+            # self.goal_dim = self.env.env_method('get_goal')[0]['latent_desired_goal'].shape[0]
+            self.goal_dim = self.env.get_attr('goal_dim')[0]
+        else :
+            self.goal_dim = self.env.get_attr('goal')[0].shape[0]
+            self.noise_mag = self.env.get_attr('size_obstacle')[0][1]
+            self.n_object = self.env.get_attr('n_object')[0]
+
         self.obs_dim = self.env.observation_space.shape[0] - 2 * self.goal_dim
-        self.noise_mag = self.env.get_attr('size_obstacle')[0][1]
-        self.n_object = self.env.get_attr('n_object')[0]
+
         self.dim_candidate = dim_candidate
         self.horizon = horizon
         # self.reuse_times = reuse_times
-        print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
+        if self.latent_mode:
+            print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim,'horizon', self.horizon)
+        else:
+            print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
               'n_object', self.n_object, 'horizon', self.horizon)
+            self.current_nobject = []
+            self.task_mode = []
         # TODO: add buffers
         self.restart_steps = [] # Every element should be scalar
         self.subgoals = [] # Every element should be [*subgoals, ultimate goal]
         self.restart_states = [] # list of (n_candidate) states
         self.transition_storage = [] # every element is list of tuples. length of every element should match restart steps
-        self.current_nobject = []
-        self.task_mode = []
+
         # For filter subgoals
         self.mean_value_buf = deque(maxlen=500)
         self.self_aug_ratio = deque(maxlen=500)
@@ -73,7 +115,8 @@ class ParallelRunner2(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [], [], [], [], [], []
         mb_states = self.states
         ep_infos = []
-        mb_goals = self.env.get_attr('goal')
+        mb_goals = self.env.env_method('get_goal')
+        # mb_goals = self.env.get_attr('goal')
 
         duration = 0.0
         # step_env_duration = 0.0
@@ -81,12 +124,13 @@ class ParallelRunner2(AbstractEnvRunner):
             internal_states = self.env.env_method('get_state')
             for i in range(self.model.n_envs):
                 self.ep_state_buf[i].append(internal_states[i])
-            if self.dim_candidate == 3:
-                current_nobjects = self.env.get_attr('current_nobject')
-                task_modes = self.env.get_attr('task_mode')
-                for i in range(self.model.n_envs):
-                    self.ep_current_nobject[i].append(current_nobjects[i])
-                    self.ep_task_mode[i].append(task_modes[i])
+            if not self.latent_mode:
+                if self.dim_candidate == 3:
+                    current_nobjects = self.env.get_attr('current_nobject')
+                    task_modes = self.env.get_attr('task_mode')
+                    for i in range(self.model.n_envs):
+                        self.ep_current_nobject[i].append(current_nobjects[i])
+                        self.ep_task_mode[i].append(task_modes[i])
             actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones)
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
@@ -103,7 +147,8 @@ class ParallelRunner2(AbstractEnvRunner):
                 if maybe_ep_info is not None:
                     # if self.goal_dim > 3 and np.argmax(mb_goals[idx][3:]) == 0:
                     ep_infos.append(maybe_ep_info)
-                    mb_goals[idx] = self.env.get_attr('goal', indices=idx)[0]
+                    # mb_goals[idx] = self.env.get_attr('goal', indices=idx)[0]
+                    mb_goals[idx] = self.env.env_method('get_goal',indices=idx)[0]
                 if self.dones[idx] and (not info['is_success']):
                     rewards[idx] = self.model.value(np.expand_dims(info['terminal_observation'], axis=0))
             mb_rewards.append(rewards)
@@ -114,6 +159,21 @@ class ParallelRunner2(AbstractEnvRunner):
             # restart_steps = [[] for _ in range(self.model.n_envs)]
             # subgoals = [[] for _ in range(self.model.n_envs)]
             def augment_cond():
+                if self.latent_mode:
+
+                    ## to do how to define the success
+                    # TODO redefine the is_success with either latent distance or latent threshold
+                    if not infos[idx]['is_success']:
+                        return True
+                    return False
+                    # if 'Image48PointmassUWallTrainEnvBig-v0' in self.env_id:
+                    #     if not info[idx]['is_success']:
+                    #         return True
+                    #     return False
+                    # if 'Image84SawyerPushAndReachArenaTrainEnvBig-v0' in self.env_id:
+                    #     if not info[idx]['hand_and_puck_success']:
+                    #         return True
+                    #     return False
                 if 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
                     if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
                         return True
@@ -130,19 +190,27 @@ class ParallelRunner2(AbstractEnvRunner):
                     # if (self.dim_candidate == 2 and np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success'])) or (self.dim_candidate == 3 and (not infos[idx]['is_success'])):
                         # Do augmentation
                         # Sample start step and perturbation
-                        _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate,
+                        if self.latent_mode:
+                            print('idx:',idx)
+                            _restart_steps, _subgoals = self.select_subgoal_cem(self.ep_transition_buf[idx], k=self.n_candidate,
+                                                                                    )
+
+                        else:
+                            _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx], k=self.n_candidate,
                                                                         dim=self.dim_candidate, env_idx=idx)
                         assert isinstance(_restart_steps, np.ndarray)
                         assert isinstance(_subgoals, np.ndarray)
                         for j in range(_restart_steps.shape[0]):
+                            # print('restart_step:',_restart_steps[j])
                             self.restart_steps.append(_restart_steps[j])
                             self.subgoals.append([np.array(_subgoals[j]), goal.copy()])
                             assert len(self.subgoals[-1]) == 2
                             self.restart_states.append(self.ep_state_buf[idx][_restart_steps[j]])
                             self.transition_storage.append(self.ep_transition_buf[idx][:_restart_steps[j]])
-                            if self.dim_candidate == 3:
-                                self.current_nobject.append(self.ep_current_nobject[idx][0])
-                                self.task_mode.append(self.ep_task_mode[idx][0])
+                            if not self.latent_mode:
+                                if self.dim_candidate == 3:
+                                    self.current_nobject.append(self.ep_current_nobject[idx][0])
+                                    self.task_mode.append(self.ep_task_mode[idx][0])
                 if done:
                     self.ep_state_buf[idx] = []
                     self.ep_transition_buf[idx] = []
@@ -152,7 +220,10 @@ class ParallelRunner2(AbstractEnvRunner):
 
             def convert_dict_to_obs(dict_obs):
                 assert isinstance(dict_obs, dict)
-                return np.concatenate([dict_obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+                if self.latent_mode:
+                    return np.concatenate([dict_obs[key] for key in ['latent_observation','latent_achieved_goal','latent_desired_goal']])
+                else :
+                    return np.concatenate([dict_obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
 
             def switch_subgoal(switch_goal_flag, current_obs):
                 for idx, flag in enumerate(switch_goal_flag):
@@ -179,9 +250,10 @@ class ParallelRunner2(AbstractEnvRunner):
                 env_end_step = [np.inf for _ in range(self.aug_env.num_envs)]
                 env_restart_state = self.restart_states[:self.aug_env.num_envs]
                 self.aug_env.env_method('set_state', env_restart_state)
-                if self.dim_candidate == 3:
-                    self.aug_env.env_method('set_current_nobject', self.current_nobject[:self.aug_env.num_envs])
-                    self.aug_env.env_method('set_task_mode', self.task_mode[:self.aug_env.num_envs])
+                if not self.latent_mode:
+                    if self.dim_candidate == 3:
+                        self.aug_env.env_method('set_current_nobject', self.current_nobject[:self.aug_env.num_envs])
+                        self.aug_env.env_method('set_task_mode', self.task_mode[:self.aug_env.num_envs])
                 env_obs = self.aug_env.env_method('get_obs')
                 env_obs = [convert_dict_to_obs(d) for d in env_obs]
                 increment_step = 0
@@ -189,6 +261,7 @@ class ParallelRunner2(AbstractEnvRunner):
                     # Switch subgoal according to switch_goal_flag, and update observation
                     switch_subgoal(switch_goal_flag, env_obs)
                     env_action, _, _, _ = self.model.step(np.array(env_obs))
+                    # TODO env write the switch_obs_goal api
                     relabel_env_obs = self.aug_env.env_method('switch_obs_goal', env_obs, ultimate_goals)
                     clipped_actions = env_action
                     # Clip the actions to avoid out of bound error
@@ -196,11 +269,21 @@ class ParallelRunner2(AbstractEnvRunner):
                         clipped_actions = np.clip(env_action, self.aug_env.action_space.low, self.aug_env.action_space.high)
                     env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
                     self.model.num_aug_steps += (self.aug_env.num_envs - sum(env_end_flag))
-                    if self.aug_env.get_attr('reward_type')[0] == 'sparse':
+                    if self.aug_env.get_attr('reward_type')[0] in ('sparse','latent_sparse','latent_distance','state_distance'):
                         temp_info = [None for _ in range(self.aug_env.num_envs)]
                     else:
                         temp_info = [{'previous_obs': env_obs[i]} for i in range(self.aug_env.num_envs)]
-                    env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals, temp_info)
+                    # TODO HOW to get compute_reward from the wrapper
+                    if self.latent_mode:
+                        # print('env_next_obs_shape',env_next_obs.shape)
+                        env_reward = self.aug_env.env_method('compute_reward', env_next_obs[:,self.latent_dim:self.latent_dim*2], ultimate_goals, temp_info)
+                    else:
+                        env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals, temp_info)
+                    if self.latent_mode:
+                        if self.aug_env.get_attr('reward_type')[0] == 'state_distance':
+                            env_reward_and_success = self.aug_env.env_method('compute_reward_and_success', env_next_obs[:,self.latent_dim:self.latent_dim*2],
+                                                                             ultimate_goals, temp_info)
+
                     if self.aug_env.get_attr('reward_type')[0] == 'dense':
                         env_reward_and_success = self.aug_env.env_method('compute_reward_and_success', env_next_obs, ultimate_goals, temp_info)
                     for idx in range(self.aug_env.num_envs):
@@ -213,10 +296,10 @@ class ParallelRunner2(AbstractEnvRunner):
 
                     for idx, info in enumerate(env_info):
                         # Special case, the agent succeeds the final goal half way
-                        if self.aug_env.get_attr('reward_type')[0] == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] == False:
+                        if self.aug_env.get_attr('reward_type')[0] in ('sparse','latent_sparse','latent_distance',) and env_reward[idx] > 0 and env_end_flag[idx] == False:
                             env_end_flag[idx] = True
                             env_end_step[idx] = env_restart_steps[idx] + increment_step
-                        elif self.aug_env.get_attr('reward_type')[0] == 'dense' and env_reward_and_success[idx][1] and env_end_flag[idx] == False:
+                        elif self.aug_env.get_attr('reward_type')[0] in ('dense','state_distance') and env_reward_and_success[idx][1] and env_end_flag[idx] == False:
                             env_end_flag[idx] = True
                             env_end_step[idx] = env_restart_steps[idx] + increment_step
                         # Exceed time limit
@@ -240,8 +323,8 @@ class ParallelRunner2(AbstractEnvRunner):
                 # print('end step', env_end_step)
                 for idx, end_step in enumerate(env_end_step):
                     if end_step <= self.horizon:
-                        # print(temp_subgoals[idx])
-                        is_self_aug = temp_subgoals[idx][3]
+
+                        # is_self_aug = temp_subgoals[idx][3]
                         transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
                         augment_obs_buf, augment_act_buf, augment_done_buf, augment_reward_buf = zip(*transitions)
                         augment_value_buf = self.model.value(np.array(augment_obs_buf))
@@ -256,11 +339,11 @@ class ParallelRunner2(AbstractEnvRunner):
                             augment_neglogp_buf = np.concatenate([np.array(neglogp_buf), augment_neglogp_buf], axis=0)
                             augment_done_buf = done_buf + augment_done_buf
                             augment_reward_buf = reward_buf + augment_reward_buf
-                        if self.aug_env.get_attr('reward_type')[0] == "sparse":
+                        if self.aug_env.get_attr('reward_type')[0] in ("sparse",'latent_sparse','latent_distance'):
                             assert abs(sum(augment_reward_buf) - 1) < 1e-4
                         if augment_done_buf[0] == 0:
                             augment_done_buf = (True,) + (False,) * (len(augment_done_buf) - 1)
-                        augment_isselfaug_buf = (is_self_aug, ) * len(augment_done_buf)
+                        # augment_isselfaug_buf = (is_self_aug, ) * len(augment_done_buf)
                         augment_returns = self.compute_adv(augment_value_buf, augment_done_buf, augment_reward_buf)
                         assert augment_returns.shape[0] == end_step
                         # if idx == 0:
@@ -276,7 +359,7 @@ class ParallelRunner2(AbstractEnvRunner):
                             self.model.aug_return[-1] = augment_returns
                             self.model.aug_done[-1] = np.array(augment_done_buf)
                             self.model.aug_reward[-1] = np.array(augment_reward_buf)
-                            self.model.is_selfaug[-1] = np.array(augment_isselfaug_buf)
+                            # self.model.is_selfaug[-1] = np.array(augment_isselfaug_buf)
                             for reuse_idx in range(len(self.model.aug_obs) - 1):
                                 # Update previous data with new value and policy parameters
                                 if self.model.aug_obs[reuse_idx] is not None:
@@ -302,16 +385,17 @@ class ParallelRunner2(AbstractEnvRunner):
                                 [self.model.aug_done[-1], np.array(augment_done_buf)], axis=0)
                             self.model.aug_reward[-1] = np.concatenate(
                                 [self.model.aug_reward[-1], np.array(augment_reward_buf)], axis=0)
-                            self.model.is_selfaug[-1] = np.concatenate(
-                                [self.model.is_selfaug[-1], np.array(augment_isselfaug_buf)], axis=0)
+                            # self.model.is_selfaug[-1] = np.concatenate(
+                            #     [self.model.is_selfaug[-1], np.array(augment_isselfaug_buf)], axis=0)
 
 
                 self.restart_steps = self.restart_steps[self.aug_env.num_envs:]
                 self.subgoals = self.subgoals[self.aug_env.num_envs:]
                 self.restart_states = self.restart_states[self.aug_env.num_envs:]
                 self.transition_storage = self.transition_storage[self.aug_env.num_envs:]
-                self.current_nobject = self.current_nobject[self.aug_env.num_envs:]
-                self.task_mode = self.task_mode[self.aug_env.num_envs:]
+                if not self.latent_mode:
+                    self.current_nobject = self.current_nobject[self.aug_env.num_envs:]
+                    self.task_mode = self.task_mode[self.aug_env.num_envs:]
 
             temp_time1 = time.time()
             duration += (temp_time1 - temp_time0)
@@ -587,6 +671,169 @@ class ParallelRunner2(AbstractEnvRunner):
         # print('subgoal', subgoal, 'with value1', normalize_value1[best_idx], 'value2', normalize_value2[best_idx])
         # print('restart step', restart_step)
         return restart_step, subgoal
+
+    def select_subgoal_cem(self, transition_buf, k):
+        # self.ep_transition_buf, self.model.value
+        assert len(transition_buf) == 100, len(transition_buf)
+        obs_buf, *_ = zip(*transition_buf)
+        obs_buf = np.asarray(obs_buf)
+        opt_samples=[]
+        opt_values = []
+        opt_mean_values=[]
+
+        batch_sizes = [self.frac_total] * (self.num_iters // 2) + [self.frac_total] * (
+                    self.num_iters - (self.num_iters // 2))
+        if not self.frac_top_chosen_fixed:
+            frac_top_chosens = np.array(
+                [self.frac_top_chosen[0]] * (self.num_iters // 2) + [self.frac_top_chosen[1]] * (
+                            self.num_iters - (self.num_iters // 2)))
+        else:
+            frac_top_chosens = np.ones(self.num_iters) * self.frac_top_chosen
+
+        # sample_t = np.random.randint(0, len(transition_buf), 1)
+
+        # for j in range(len(transition_buf)):
+        #     print('round',j)
+        j=0
+        sample_obs = obs_buf[j]
+        if self.use_true_prior:
+            mu = np.zeros(self.latent_dim)
+            std = np.ones(self.latent_dim)
+        else :
+            mu = self.aug_env.vae.dist_mu
+            std = self.aug_env.vae.dist_std
+
+        elites=[]
+        mean_value_chosen = []
+        sorted_losses= []
+        mean_values = []
+        sorted_indices=[]
+        for i in range(self.num_iters):
+            # samples = torch.distributions.Normal(mu_var,std_var).sample_n(batch_sizes[i]*4096)
+            # print('times',i)
+            samples = np.random.normal(mu,std,(batch_sizes[i],self.latent_dim))
+            if self.set_range:
+                assert self.range_min.shape==(self.latent_dim,), self.range_min
+                assert self.range_max.shape==(self.latent_dim,), self.range_min
+                samples = np.clip(samples,self.range_min,self.range_max)
+
+            sample_obs_batches  = np.tile(sample_obs,(batch_sizes[i],1)).reshape(-1,self.latent_dim*3)
+            # print('sample_obs_orign debug', np.min(sample_obs_batches),np.max(sample_obs_batches),np.mean(sample_obs_batches),sample_obs_batches.shape)
+            # print('samples debug', np.min(samples),np.max(samples),np.mean(samples),samples.shape)
+
+            sample_obs_batches[:, self.latent_dim*2:] = samples
+            # print('samples',sample_obs_batches)
+            # print('message')
+            # print('value2 debug', np.min(sample_obs_batches),np.max(sample_obs_batches),np.mean(sample_obs_batches),sample_obs_batches.shape)
+            value2 = self.model.value(sample_obs_batches)
+            # print('value2',value2)
+            # print('values2', np.min(value2))
+            subgoal_obs =  np.tile(sample_obs,(batch_sizes[i],1)).reshape(-1,self.latent_dim*3)
+            subgoal_obs[:, :self.latent_dim] = samples
+            subgoal_obs[:, self.latent_dim:self.latent_dim*2] = samples
+            # print('subgoal_obs',subgoal_obs)
+            # print('value1 debug', np.min(subgoal_obs),np.max(subgoal_obs),np.mean(subgoal_obs),subgoal_obs.shape)
+            value1 = self.model.value(subgoal_obs)
+            # print('value1',value1)
+
+            if (np.max(value1)-np.min(value1))==0 or (np.max(value2)-np.min(value2))==0:
+                print('value1-division',np.max(value1),np.min(value1))
+                print('value1',value1)
+                print('value2-division',np.max(value2),np.min(value2))
+                print('value2',value2)
+            # trying another type of loss
+            # normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
+            # normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
+            # loss = (normalize_value1*normalize_value2)
+            # mean loss
+            loss = (value1+value2)/2
+            sorted_losses = np.sort(loss)
+            sorted_indices = np.argsort(loss)
+            mean_values = (value1 + value2 )/2
+            num_top_chosen = int(frac_top_chosens[i]*batch_sizes[i])
+            elite_indices = sorted_indices[-num_top_chosen:]
+            mean_value_chosen = mean_values[elite_indices]
+            # print('top_chosen_indices',elite_indices)
+            elites = samples[elite_indices]
+            mu = np.mean(elites)
+            std = np.std(elites)
+
+         #outer loop
+        # opt_sample = elites[-k:]
+        # opt_value = sorted_losses[-k:]
+        # calculate the mean
+        # good_ind = elite_indices[-k:]
+        mean_values = mean_value_chosen[-k:]
+        elites_top_k = elites[-k:]
+        # mean_values = (value1[good_ind] + value2[good_ind]) / 2
+        assert mean_values.shape[0] == k
+        for i in range(k):
+            self.mean_value_buf.append(mean_values[i])
+        filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
+        print('filtered_idx',filtered_idx)
+        print('mean_value',mean_values)
+        print('global_mean_value',np.mean(self.mean_value_buf))
+
+        opt_sample = elites_top_k[filtered_idx]
+        # good_ind = good_ind[filtered_idx]
+        # opt_sample = samples[good_ind]
+        # opt_mean_value = mean_values[sorted_indices[-k:]]
+        # print('opt_sample',opt_sample)
+        # print('opt_value',opt_value)
+        # print('opt_mean_value',opt_mean_value)
+        if opt_sample.size != 0:
+            opt_subgoal = self.reproject_encoding(opt_sample)
+        else:
+            opt_subgoal = opt_sample
+        # print('opt_subgoal',opt_subgoal)
+        #top_k = np.zeros(k).astype('int')
+        # print('k',k)
+        restart_steps = np.array([0]*filtered_idx.shape[0])
+        # restart_steps =np.floor(top_k/k)
+        # for index in range(k):
+        #     opt_mean_values.append(opt_mean_value[index])
+        #     opt_samples.append(opt_subgoal[index])
+        #     opt_values.append(opt_value[index])
+        # # the most outer loop
+        # good_indices = np.argsort(np.asarray(opt_values))
+        # print(good_indices)
+        # top_k = good_indices[-k:]
+        # print('top_k',top_k)
+        # calculating the mean value of the value and
+        # mean_values = opt_mean_values[top_k]
+        # assert mean_values.shape[0] == k
+        # for i in range(k):
+        #     self.mean_value_buf.append(mean_values[i])
+        # filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
+        # # good_ind = good_ind[filtered_idx]
+        # top_k = top_k[filtered_idx]
+        # print('top_k_filtered_idx',top_k)
+        # self.self_aug_ratio.append(np.sum(good_ind < len(sample_t)) / (len(filtered_idx) + 1e-8))
+
+        # restart_step = sample_t[good_ind % len(sample_t)]
+        # subgoal = subgoal_obs_buf[good_ind, self.obs_dim + self.goal_dim:self.obs_dim + self.goal_dim * 2]
+        # self.self_aug_ratio.append(np.sum(subgoal[:, 3]) / (len(filtered_idx) + 1e-8))
+
+        # opt_subgoal = opt_samples[top_k]
+
+        # print(top_k)
+
+        # restart_steps = np.floor(top_k/k)
+        return restart_steps, opt_subgoal
+
+    def reproject_encoding(self,encoding):
+        import utils.torch.pytorch_util as ptu
+        import torch
+        # print('encoding debug',encoding,encoding.shape,np.mean(encoding),np.min(encoding),np.max(encoding))
+        # ptu.set_device(0)
+        # encoding = ptu.np_to_var(encoding).view(-1,self.latent_dim)
+
+        ## TODO HOW TO enable cuda rendering because if rendering is enabled, the cuda illegal access memory would return
+        encoding=torch.tensor(encoding, requires_grad=False).float()
+        imgs = self.aug_env.get_attr('vae')[0].decode(encoding)
+        reconstr_encoding = self.aug_env.get_attr('vae')[0].encode(imgs)[0]
+        reconstr_encoding_np = ptu.get_numpy(reconstr_encoding)
+        return reconstr_encoding_np
 
     def compute_adv(self, values, dones, rewards):
         if not isinstance(values, np.ndarray):
