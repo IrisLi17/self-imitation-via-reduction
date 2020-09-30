@@ -260,7 +260,13 @@ class PPO2_augment(ActorCriticRLModel):
                         if self.full_tensorboard_log:
                             for var in self.params:
                                 tf.summary.histogram(var.name, var)
+                    ## adding some assertion for debuging
+                    loss = tf.debugging.assert_all_finite(loss,msg='rip loss')
+
                     grads = tf.gradients(loss, self.params)
+                    grads = [tf.debugging.assert_all_finite(grad,msg=f'rip grad{i}') if grad is not None else None
+                             for i, grad in enumerate(grads) ]
+
                     if self.max_grad_norm is not None:
                         grads, _grad_norm = tf.clip_by_global_norm(grads, self.max_grad_norm)
                     grads = list(zip(grads, self.params))
@@ -522,6 +528,8 @@ class PPO2_augment(ActorCriticRLModel):
                 # true_reward is the reward without discount
                 temp_time0 = time.time()
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
+                # print('original_masks_shape',masks.shape)
+                masks_log = masks.copy()
                 is_demo = np.zeros(obs.shape[0])
                 temp_time1 = time.time()
                 print('runner.run() takes', temp_time1 - temp_time0)
@@ -563,6 +571,7 @@ class PPO2_augment(ActorCriticRLModel):
                         obs = np.concatenate([obs, *(list(filter(lambda v:v is not None, self.aug_obs)))], axis=0)
                         returns = np.concatenate([returns, *(list(filter(lambda v:v is not None, self.aug_return)))], axis=0)
                         masks = np.concatenate([masks, *(list(filter(lambda v:v is not None, self.aug_done)))], axis=0)
+                        # print('masks_shape', masks.shape)
                         actions = np.concatenate([actions, *(list(filter(lambda v:v is not None, self.aug_act)))], axis=0)
                         values = np.concatenate([values, *(list(filter(lambda v:v is not None, self.aug_value)))], axis=0)
                         neglogpacs = np.concatenate([neglogpacs, *(list(filter(lambda v:v is not None, self.aug_neglogp)))], axis=0)
@@ -571,6 +580,7 @@ class PPO2_augment(ActorCriticRLModel):
                         total_success += np.sum(_aug_reward)
                     print('augmented data length', obs.shape[0])
                 self.num_timesteps += self.n_batch
+                print('ep_infos:',ep_infos)
                 ep_info_buf.extend(ep_infos)
                 total_episodes = np.sum(masks)
                 mb_loss_vals = []
@@ -634,7 +644,8 @@ class PPO2_augment(ActorCriticRLModel):
                 if writer is not None:
                     self.episode_reward = total_episode_reward_logger(self.episode_reward,
                                                                       true_reward.reshape((self.n_envs, self.n_steps)),
-                                                                      masks.reshape((self.n_envs, self.n_steps)),
+                                                                      # masks.reshape((self.n_envs,-1)),
+                                                                      masks_log.reshape((self.n_envs, self.n_steps)),
                                                                       writer, self.num_timesteps)
 
                 if self.verbose >= 1 and (update % log_interval == 0 or update == 1):
@@ -648,6 +659,7 @@ class PPO2_augment(ActorCriticRLModel):
                     if len(ep_info_buf) > 0 and len(ep_info_buf[0]) > 0:
                         logger.logkv('ep_reward_mean', safe_mean([ep_info['r'] for ep_info in ep_info_buf]))
                         logger.logkv('ep_len_mean', safe_mean([ep_info['l'] for ep_info in ep_info_buf]))
+                        logger.logkv('ep_success_rate',np.sum([ep_info['is_success'] for ep_info in ep_info_buf])/len(ep_info_buf))
                     logger.logkv('time_elapsed', t_start - t_first_start)
                     for (loss_val, loss_name) in zip(loss_vals, self.loss_names):
                         logger.logkv(loss_name, loss_val)

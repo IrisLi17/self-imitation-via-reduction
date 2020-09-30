@@ -174,14 +174,15 @@ class ParallelRunner2(AbstractEnvRunner):
                     #     if not info[idx]['hand_and_puck_success']:
                     #         return True
                     #     return False
-                if 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
-                    if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
-                        return True
-                    return False
                 else:
-                    if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
-                        return True
-                    return False
+                    if 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
+                        if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
+                            return True
+                        return False
+                    else:
+                        if np.argmax(goal[3:]) == 0 and (not infos[idx]['is_success']):
+                            return True
+                        return False
 
             for idx, done in enumerate(self.dones):
                 if self.model.num_timesteps >= self.model.start_augment and done:
@@ -736,18 +737,18 @@ class ParallelRunner2(AbstractEnvRunner):
             value1 = self.model.value(subgoal_obs)
             # print('value1',value1)
 
-            if (np.max(value1)-np.min(value1))==0 or (np.max(value2)-np.min(value2))==0:
-                print('value1-division',np.max(value1),np.min(value1))
-                print('value1',value1)
-                print('value2-division',np.max(value2),np.min(value2))
-                print('value2',value2)
+            # if (np.max(value1)-np.min(value1))==0 or (np.max(value2)-np.min(value2))==0:
+            #     print('value1-division',np.max(value1),np.min(value1))
+            #     print('value1',value1)
+            #     print('value2-division',np.max(value2),np.min(value2))
+            #     print('value2',value2)
             # trying another type of loss
             # normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
             # normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
             # loss = (normalize_value1*normalize_value2)
             # mean loss
             loss = (value1+value2)/2
-            sorted_losses = np.sort(loss)
+            # sorted_losses = np.sort(loss)
             sorted_indices = np.argsort(loss)
             mean_values = (value1 + value2 )/2
             num_top_chosen = int(frac_top_chosens[i]*batch_sizes[i])

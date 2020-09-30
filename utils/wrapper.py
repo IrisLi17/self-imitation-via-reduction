@@ -119,58 +119,58 @@ class FlexibleTimeLimitWrapper(gym.Wrapper):
         self._elapsed_steps = 0
         return self.env.reset(**kwargs)
 
-class LatentWrappedEnv(ProxyEnv,Env):
-    """
-    This is the class wraps an image-based environment with
-     some api that is used for the task-reduction
-    """
-    def __init__(
-        self,
-        wrapped_env,
-        sample_from_true_prior=False,
-        representation_size=16,
-        reward_params=None,
-        imsize = 84,
-        obs_size=None,
-        norm_order = 2,
-        noisy_encoding = False,
-        epsilon = 0.8,
-    ):
-        self.quick_init(locals())
-        if reward_params is None:
-            reward_params = dict()
-        super().__init__(wrapped_env)
-        self.representation_size = representation_size
-        self.imsize = imsize
-        self.obs_size = obs_size
-        self.reward_params = reward_params
-        self.reward_type = self.reward_params.get("type", 'latent_distance')
-        self.norm_order = self.reward_params.get("norm_order", norm_order)
-        self.epsilon = self.reward_params.get("epsilon", epsilon)  # for sparse reward
-        latent_space = Box(
-            -10 * np.ones(obs_size or self.representation_size),
-            10 * np.ones(obs_size or self.representation_size),
-            dtype=np.float32,
-        )
-
-        spaces = self.wrapped_env.observation_space.spaces
-        spaces['observation'] = latent_space
-        spaces['desired_goal'] = latent_space
-        spaces['achieved_goal'] = latent_space
-
-        spaces['latent_observation'] = latent_space
-        spaces['latent_observation_mean'] = latent_space
-        spaces['latent_observation_std'] = latent_space
-
-        spaces['latent_desired_goal'] = latent_space
-        spaces['latent_desired_goal_mean'] = latent_space
-        spaces['latent_desired_goal_std'] = latent_space
-
-        spaces['latent_achieved_goal'] = latent_space
-        spaces['latent_achieved_goal_mean'] = latent_space
-        spaces['latent_achieved_goal_std'] = latent_space
-        self.obs = dict()
-        self.observation_space = Dict(spaces)
+# class LatentWrappedEnv(ProxyEnv,Env):
+#     """
+#     This is the class wraps an image-based environment with
+#      some api that is used for the task-reduction
+#     """
+#     def __init__(
+#         self,
+#         wrapped_env,
+#         sample_from_true_prior=False,
+#         representation_size=16,
+#         reward_params=None,
+#         imsize = 84,
+#         obs_size=None,
+#         norm_order = 2,
+#         noisy_encoding = False,
+#         epsilon = 0.8,
+#     ):
+#         self.quick_init(locals())
+#         if reward_params is None:
+#             reward_params = dict()
+#         super().__init__(wrapped_env)
+#         self.representation_size = representation_size
+#         self.imsize = imsize
+#         self.obs_size = obs_size
+#         self.reward_params = reward_params
+#         self.reward_type = self.reward_params.get("type", 'latent_distance')
+#         self.norm_order = self.reward_params.get("norm_order", norm_order)
+#         self.epsilon = self.reward_params.get("epsilon", epsilon)  # for sparse reward
+#         latent_space = Box(
+#             -10 * np.ones(obs_size or self.representation_size),
+#             10 * np.ones(obs_size or self.representation_size),
+#             dtype=np.float32,
+#         )
+#
+#         spaces = self.wrapped_env.observation_space.spaces
+#         spaces['observation'] = latent_space
+#         spaces['desired_goal'] = latent_space
+#         spaces['achieved_goal'] = latent_space
+#
+#         spaces['latent_observation'] = latent_space
+#         spaces['latent_observation_mean'] = latent_space
+#         spaces['latent_observation_std'] = latent_space
+#
+#         spaces['latent_desired_goal'] = latent_space
+#         spaces['latent_desired_goal_mean'] = latent_space
+#         spaces['latent_desired_goal_std'] = latent_space
+#
+#         spaces['latent_achieved_goal'] = latent_space
+#         spaces['latent_achieved_goal_mean'] = latent_space
+#         spaces['latent_achieved_goal_std'] = latent_space
+#         self.obs = dict()
+#         self.observation_space = Dict(spaces)
 
 class VAEWrappedEnv(ProxyEnv, Env):
     """This class wraps an image-based environment with a VAE.
@@ -239,6 +239,7 @@ class VAEWrappedEnv(ProxyEnv, Env):
             self.input_channels = self.vae.input_channels
         else:
             self.input_channels = None
+        self.set_goal_times = 0
         self._reconstr_image_observation = False
         self._use_vae_goals = use_vae_goals
         self.sample_from_true_prior = sample_from_true_prior
@@ -413,9 +414,12 @@ class VAEWrappedEnv(ProxyEnv, Env):
         #     prev_obs=None,
         # )
         # print('new_obs',new_obs['latent_achieved_goal'])
-        reward = self.compute_reward(
+        reward,success = self.compute_reward_and_success(
             action=action,achieved_goal=new_obs['latent_achieved_goal'],desired_goal=new_obs['latent_desired_goal']
         )
+        info['is_success'] = success
+        if success:
+            print('episode succeed!')
         self.try_render(new_obs)
         return new_obs, reward, done, info
 
@@ -596,9 +600,18 @@ class VAEWrappedEnv(ProxyEnv, Env):
         info["vae_dist_l1"] = np.linalg.norm(dist, ord=1)
         info["vae_dist_l2"] = np.linalg.norm(dist, ord=2)
         ## updating info is_success for latent_environment
+        # recalculate the success flag\
+        # latents_all = np.concatenate((latent_obs, latent_goal), axis=0)
+        # # print('latents_all_shape',latents_all.shape)
+        # image_all = self._decode(latents_all)
+        # # print('image_all',image_all.shape)
+        # achieved_state = self.image_goal_to_state(image_all[0])
+        # desired_state = self.image_goal_to_state(image_all[1])
+        #
+        # info['is_success'] = np.linalg.norm(achieved_state-desired_state) < 1.0
         # info['is_success'] =  np.linalg.norm(latent_goal - latent_obs, ord=self.norm_order)< self.epsilon
-        if info['is_success']:
-            print('episode succeed!')
+        # if info['is_success']:
+        #     print('episode succeed!')
 
 
     def set_presampled_goals(self, goals):
@@ -728,6 +741,8 @@ class VAEWrappedEnv(ProxyEnv, Env):
         # obs['latent_desired_goal'] = desired_goal
         reward = self.compute_rewards(actions=[], obs=obs)
         success = np.linalg.norm(achieved_state-desired_state)<1.0
+        # if success:
+        #     print('reward_and_sucess')
         return reward,success
 
     def switch_obs_goal(self,obs,goal):
@@ -782,7 +797,9 @@ class VAEWrappedEnv(ProxyEnv, Env):
             desired_goals = obs['state_desired_goal']
             diff = achieved_goals-desired_goals
             success = np.linalg.norm(diff) < 1.0
-            return -0.1*np.linalg.norm(diff, ord=self.norm_order)+success*1
+            # if success:
+            #     print('reward_success')
+            return -0.01*np.linalg.norm(diff)+success*1
         elif self.reward_type == 'vectorized_state_distance':
             achieved_goals = obs['state_achieved_goal']
             desired_goals = obs['state_desired_goal']
@@ -814,12 +831,14 @@ class VAEWrappedEnv(ProxyEnv, Env):
     #     self.desired_goal = goal
     #     self.wrapped_env.set_goal(goal)
     def set_goal(self,goal):
+        self.set_goal_times+=1
         self.desired_goal['desired_goal'] = goal
         self.desired_goal['latent_desired_goal'] = goal
         self.desired_goal['latent_desired_goal_mean'] = goal
         # print('goal_shape',goal)
         image_goal = self._decode(goal)[0]
         self.desired_goal['image_desired_goal'] = image_goal
+        # self.save_image_goal(image_goal)
         state_goal = self.image_goal_to_state(image_goal)
         self.desired_goal['state_desired_goal'] = state_goal
         goal_dict = dict(image_desired_goal=image_goal,state_desired_goal=state_goal)
@@ -828,8 +847,19 @@ class VAEWrappedEnv(ProxyEnv, Env):
         # goal_img = ptu.get_numpy(self.vae.decode(goal_var))
         # self.wrapped_env.set_goal(goal_img)
 
-    def image_goal_to_state(self,img_goal):
+    def save_image_goal(self,image_goal):
+        dir = '/home/yilin/sir_img/logs'
+        image_np = image_goal.reshape(self.input_channels,self.imsize,self.imsize).transpose(1,2,0)
+        image_unormalize = np.uint8((image_np * 255))
+        image_copy = image_unormalize[:, :, 0].copy()
+        image_unormalize[:, :, 0] = image_unormalize[:, :, 2]
+        image_unormalize[:, :, 2] = image_copy
+        image_filename = osp.join(dir,'image_set_goal%d.png'%self.set_goal_times)
+        cv2.imwrite(image_filename,image_unormalize)
+        return 0
 
+    def image_goal_to_state(self,img_goal):
+        dir = '/home/yilin/sir_image/logs'
         image_np = img_goal.reshape(self.input_channels,self.imsize,self.imsize).transpose(1,2,0)
         image_unormalize = np.uint8((image_np * 255))
         image_copy = image_unormalize[:, :, 0].copy()
@@ -845,8 +875,17 @@ class VAEWrappedEnv(ProxyEnv, Env):
         max_contours = cnts[np.argmax(areas)]
         # compute the center of the contour
         M = cv2.moments(max_contours)
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
+        if M['m00'] != 0:
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+        else:
+            print(max_contours)
+            mask_file = osp.join(dir,'mask_fail.png')
+            cv2.imwrite(mask_file,mask)
+            image_file = osp.join(dir,'image_fail.png')
+            cv2.imwrite(image_file,image_unormalize)
+            cX = 0
+            cY = 0
         # print('position x,y', cX, cY)
         # cv2.circle(image, (cX, cY), 2, (255, 255, 255), -1)
         # filename = osp.join(dir, 'mark_image.png')

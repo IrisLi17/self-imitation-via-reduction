@@ -406,7 +406,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
 
     n_cpu = 32 if not play else 1
     if env_name in IMAGE_ENTRY_POINT.keys():
-        n_cpu = 1 if not play else 1
+        n_cpu = 4 if not play else 1
     if 'MasspointPushDoubleObstacle' in env_name:
         n_cpu = 64 if not play else 1
     elif 'FetchStack' in env_name:
@@ -486,7 +486,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
         elif 'MasspointMaze' in env_name:
             n_steps = 1024
         elif 'PointmassUWall' in env_name:
-            n_steps = 1024
+            n_steps = 8192 # 1024
         else:
             n_steps = 2048
         policy = 'MlpPolicy'
@@ -510,7 +510,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
                                  cliprange=0.2, n_candidate=n_subgoal, parallel=parallel, start_augment=start_augment,
                                  policy_kwargs=policy_kwargs, horizon=env_kwargs['max_episode_steps'],
                                  reuse_times=reuse_times, aug_adv_weight=aug_adv_weight, dim_candidate=dim_candidate,
-                                 curriculum=curriculum, self_imitate=self_imitate, sil_clip=sil_clip,
+                                 curriculum=curriculum, self_imitate=self_imitate, sil_clip=sil_clip,tensorboard_log=log_path
                                  )
         # else:
         #     model = PPO2_augment_sil(policy, env, eval_env, verbose=1, n_steps=n_steps, nminibatches=32, lam=0.95,
@@ -553,14 +553,15 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
         assert load_path is not None
         model = PPO2_augment.load(load_path)
         # fig, ax = plt.subplots(1, 2, 1,figsize=(8, 8))
-        fig, (ax1,ax2) = plt.subplots(1,2,figsize=(8,8))
+        # fig, (ax1,ax2) = plt.subplots(1,2,figsize=(8,8))
         # ax1 = plt.subplot(121,figsize=(8,8))
         # ax2 = plt.subplot(122,figsize=(8,8))
+        fig, ax = plt.subplots(1,1,figsize=(8,8))
         obs = env.reset()
-        print(obs)
-        goal = obs[0,:16]
-        print('set_goal',goal)
-        env.env_method('set_goal',goal)
+        # print(obs)
+        # goal = obs[0,:16]
+        # print('set_goal',goal)
+        # env.env_method('set_goal',goal)
         # while (np.argmax(obs[0][-2:]) != 0):
         #     obs = env.reset()
         # img = env.render(mode='rgb_array')
@@ -570,7 +571,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
         images = []
         for i in range(500):
             # img = env.render(mode='rgb_array')
-            # img = env.env_method('get_image')[0]
+            img = env.env_method('get_image_with_goal')[0]
             # # latent_goal = env.env_method('get_goal')[0]
             # # latent_set_goal = env.env_method('get_obs')[0]['latent_observation']
             # print('env_desired_goal',env.get_attr('desired_goal')[0]['latent_desired_goal'])
@@ -580,30 +581,40 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
             # img_goal = env.env_method('get_image',render_goal=True)[0]
             # # print('img',img,img.shape)
             # images.append(img_goal)
+            images.append(img)
+            ax.cla()
+            ax.imshow(img)
+
             # ax1.cla()
             # ax1.imshow(img_goal)
             # ax2.cla()
             # ax2.imshow(image_latent_goal)
             # # ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx) +
             # #              ', goal idx ' + str(np.argmax(obs[0][-2:])))
-            # # ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)
-            # #              )
+            # ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)
+            #              )
             # # assert np.argmax(obs[0][-2:]) == 0
-            # # action, _ = model.predict(obs)
-            action = env.get_attr('action_space')[0].sample()*0.1
+            action, _ = model.predict(obs)
+            # action = env.get_attr('action_space')[0].sample()*0.1
             print('action', action)
-            obs, reward, done, _ = env.step(action)
+            obs, reward, done, info = env.step(action)
+            obs_state = env.env_method('get_env_state')[0]
+            state = obs_state['state_observation']
+            goal = obs_state['state_desired_goal']
+            state_dist = np.linalg.norm(state-goal)
+            print(info)
+            # state_dist = -10*(reward-done[0])
             # print('obs',obs[0].shape,obs[0])
-            print('observation_goal',obs[0,-16:])
-            assert obs[:,-16:] == goal, [obs[0,-16:],goal]
-            latent_distance = np.linalg.norm(obs[:,:16]-obs[:,-16:],ord=2)
+            # print('observation_goal',obs[0,-16:])
+            # assert obs[:,-16:] == goal, [obs[0,-16:],goal]
+            # latent_distance = np.linalg.norm(obs[:,:16]-obs[:,-16:],ord=2)
 
-            ax1.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)+',reward'+str(reward)+',dist'+str(latent_distance)
+            ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)+',reward'+str(reward)+',dist'+str(state_dist)+'vae_dist,'+str(info[0]['vae_dist'])
                          )
-            ax2.set_title(
-                'episode ' + str(num_episode) + ', frame ' + str(frame_idx) + ',reward' + str(reward) + ',dist' + str(
-                    latent_distance)
-                )
+            # ax2.set_title(
+            #     'episode ' + str(num_episode) + ', frame ' + str(frame_idx) + ',reward' + str(reward) + ',dist' + str(
+            #         latent_distance)
+            #     )
             episode_reward += reward
             frame_idx += 1
             if not export_gif:
@@ -613,9 +624,9 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
             if done:
                 obs = env.reset()
                 # set the goal
-                goal = obs[:, :16]
-                print('set_goal', goal)
-                env.env_method('set_goal', goal)
+                # goal = obs[:, :16]
+                # print('set_goal', goal)
+                # env.env_method('set_goal', goal)
 
                 # while (np.argmax(obs[0][-2:]) != 0):
                 #     obs = env.reset()
