@@ -807,8 +807,8 @@ class VAEWrappedEnv(ProxyEnv, Env):
         elif self.reward_type == 'state_sparse':
             achieved_goals = obs['state_achieved_goal']
             desired_goals = obs['state_desired_goal']
-            dist = np.linalg.norm(desired_goals - achieved_goals, ord=self.norm_order, axis=1)
-            return (dist >= self.epsilon) * -1.0
+            dist = np.linalg.norm(desired_goals - achieved_goals)
+            return (dist >= 1.0) * -1.0
         elif self.reward_type == 'wrapped_env':
             return self.wrapped_env.compute_rewards(actions, obs)
         else:
@@ -872,20 +872,29 @@ class VAEWrappedEnv(ProxyEnv, Env):
         # loop over the contours
         # image = np.zeros((48, 48, 3))
         areas = np.asarray([cv2.contourArea(c) for c in cnts])
-        max_contours = cnts[np.argmax(areas)]
-        # compute the center of the contour
-        M = cv2.moments(max_contours)
-        if M['m00'] != 0:
-            cX = int(M["m10"] / M["m00"])
-            cY = int(M["m01"] / M["m00"])
-        else:
-            print(max_contours)
-            mask_file = osp.join(dir,'mask_fail.png')
-            cv2.imwrite(mask_file,mask)
-            image_file = osp.join(dir,'image_fail.png')
-            cv2.imwrite(image_file,image_unormalize)
+        if cnts is None or areas.size==0:
+            print(cnts)
+            mask_file = osp.join(dir, 'mask_fail.png')
+            cv2.imwrite(mask_file, mask)
+            image_file = osp.join(dir, 'image_fail.png')
+            cv2.imwrite(image_file, image_unormalize)
             cX = 0
             cY = 0
+        else:
+            max_contours = cnts[np.argmax(areas)]
+            # compute the center of the contour
+            M = cv2.moments(max_contours)
+            if M['m00'] != 0:
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+            else:
+                print(max_contours)
+                mask_file = osp.join(dir,'mask_fail.png')
+                cv2.imwrite(mask_file,mask)
+                image_file = osp.join(dir,'image_fail.png')
+                cv2.imwrite(image_file,image_unormalize)
+                cX = 0
+                cY = 0
         # print('position x,y', cX, cY)
         # cv2.circle(image, (cX, cY), 2, (255, 255, 255), -1)
         # filename = osp.join(dir, 'mark_image.png')

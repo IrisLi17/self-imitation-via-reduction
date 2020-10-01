@@ -270,7 +270,7 @@ class ParallelRunner2(AbstractEnvRunner):
                         clipped_actions = np.clip(env_action, self.aug_env.action_space.low, self.aug_env.action_space.high)
                     env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
                     self.model.num_aug_steps += (self.aug_env.num_envs - sum(env_end_flag))
-                    if self.aug_env.get_attr('reward_type')[0] in ('sparse','latent_sparse','latent_distance','state_distance'):
+                    if self.aug_env.get_attr('reward_type')[0] in ('sparse','state_sparse','latent_sparse','latent_distance','state_distance'):
                         temp_info = [None for _ in range(self.aug_env.num_envs)]
                     else:
                         temp_info = [{'previous_obs': env_obs[i]} for i in range(self.aug_env.num_envs)]
@@ -297,7 +297,7 @@ class ParallelRunner2(AbstractEnvRunner):
 
                     for idx, info in enumerate(env_info):
                         # Special case, the agent succeeds the final goal half way
-                        if self.aug_env.get_attr('reward_type')[0] in ('sparse','latent_sparse','latent_distance',) and env_reward[idx] > 0 and env_end_flag[idx] == False:
+                        if self.aug_env.get_attr('reward_type')[0] in ('sparse','latent_sparse','state_sparse',) and env_reward[idx] > 0 and env_end_flag[idx] == False:
                             env_end_flag[idx] = True
                             env_end_step[idx] = env_restart_steps[idx] + increment_step
                         elif self.aug_env.get_attr('reward_type')[0] in ('dense','state_distance') and env_reward_and_success[idx][1] and env_end_flag[idx] == False:
@@ -340,7 +340,7 @@ class ParallelRunner2(AbstractEnvRunner):
                             augment_neglogp_buf = np.concatenate([np.array(neglogp_buf), augment_neglogp_buf], axis=0)
                             augment_done_buf = done_buf + augment_done_buf
                             augment_reward_buf = reward_buf + augment_reward_buf
-                        if self.aug_env.get_attr('reward_type')[0] in ("sparse",'latent_sparse','latent_distance'):
+                        if self.aug_env.get_attr('reward_type')[0] in ("sparse",'state_sparse','latent_sparse'):
                             assert abs(sum(augment_reward_buf) - 1) < 1e-4
                         if augment_done_buf[0] == 0:
                             augment_done_buf = (True,) + (False,) * (len(augment_done_buf) - 1)
@@ -746,8 +746,14 @@ class ParallelRunner2(AbstractEnvRunner):
             # normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
             # normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
             # loss = (normalize_value1*normalize_value2)
-            # mean loss
-            loss = (value1+value2)/2
+            if self.aug_env.get_attr('reward_type')[0] in ('sparse','state_sparse','latent_sparse'):
+                #product loss
+                normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
+                normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
+                loss = (normalize_value1*normalize_value2)
+            else:
+                # mean loss
+                loss = (value1+value2)/2
             # sorted_losses = np.sort(loss)
             sorted_indices = np.argsort(loss)
             mean_values = (value1 + value2 )/2

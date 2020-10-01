@@ -63,7 +63,7 @@ def arg_parse():
     parser.add_argument('--policy', type=str, default='MlpPolicy')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--num_timesteps', type=float, default=1e8)
-    parser.add_argument('--reward_type', type=str, default='sparse')
+    parser.add_argument('--reward_type', type=str, default='state_distance')
     parser.add_argument('--n_object', type=int, default=2) # Only used for stacking
     parser.add_argument('--log_path', default=None, type=str)
     parser.add_argument('--load_path', default=None, type=str)
@@ -157,7 +157,8 @@ def make_env(env_id,seed, rank, epsilon=1.0,log_dir=None, allow_early_resets=Tru
             # else:
             ptu.set_device(0)
             ptu.set_gpu_mode(True)
-            env = VAEWrappedEnv(env,vae_model,epsilon=epsilon,use_vae_goals=False,imsize=48,reward_params=dict(type='state_distance'))
+            env = VAEWrappedEnv(env,vae_model,epsilon=epsilon,use_vae_goals=False,imsize=48,)
+            env.reward_type = kwargs['reward_type']
             print(env.reward_type)
             # env.wrapped_env.reward_type='wrapped_env'
             # env.reward_type=kwargs['reward_type']
@@ -180,8 +181,10 @@ def make_env(env_id,seed, rank, epsilon=1.0,log_dir=None, allow_early_resets=Tru
         # env = TimeLimit(env, max_episode_steps=50)
     else:
         env = gym.make(env_id, reward_type='sparse')
-    # env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
-    env = FlattenDictWrapper(env,['latent_observation','latent_achieved_goal','latent_desired_goal'])
+    if env_id not in IMAGE_ENTRY_POINT.keys():
+        env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
+    else:
+        env = FlattenDictWrapper(env,['latent_observation','latent_achieved_goal','latent_desired_goal'])
     if env_id in PICK_ENTRY_POINT.keys() and kwargs['reward_type'] == 'dense':
         env = DoneOnSuccessWrapper(env, reward_offset=0.0)
     elif kwargs['reward_type'] in ('latent_distance','state_distance'):
@@ -189,6 +192,7 @@ def make_env(env_id,seed, rank, epsilon=1.0,log_dir=None, allow_early_resets=Tru
         env = DoneOnSuccessWrapper(env, reward_offset=0.0)
 
     else:
+        print('reward_offset 1.0')
         env = DoneOnSuccessWrapper(env)
     if log_dir is not None:
         env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets,
@@ -282,7 +286,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                           n_object=n_object, )
     elif env_name in IMAGE_ENTRY_POINT.keys():
         env_kwargs = dict(max_episode_steps=100,
-                          reward_type='state_distance')
+                          reward_type=reward_type)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
     def make_thunk(rank):
@@ -312,7 +316,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                                n_object=n_object, )
     elif env_name in IMAGE_ENTRY_POINT.keys():
         eval_env_kwargs = dict(max_episode_steps=100,
-                          reward_type='state_distance')
+                          reward_type=reward_type)
     elif env_name in ['FetchPickAndPlace-v1']:
         eval_env_kwargs = {}
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
