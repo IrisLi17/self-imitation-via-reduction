@@ -92,7 +92,7 @@ def create_image_48_pointmass_uwall_train_env_big_v0():
         non_presampled_goal_img_is_garbage=False,
     )
 
-def make_env(env_id, epsilon,seed, rank, log_dir=None, allow_early_resets=True, kwargs=None):
+def make_env(env_id, seed, rank,epsilon=1.0, log_dir=None, allow_early_resets=True, kwargs=None):
     """
     Create a wrapped, monitored gym.Env for MuJoCo.
 
@@ -294,6 +294,7 @@ def eval_img_model(eval_env, model):
         ep_reward = 0.0
         ep_success = 0.0
         obs = env.reset()
+        # print('obs',obs.shape)
         # goal_dim = env.goal.shape[0]
         # if goal_dim > 3:
         #     while (np.argmax(obs[-goal_dim + 3:]) != 0):
@@ -351,6 +352,7 @@ def stack_eval_model(eval_env, model, init_on_table=False):
         ep_reward = 0.0
         ep_success = 0.0
         obs = env.reset()
+        # print('obs',obs.shape)
         while env.current_nobject != env.n_object or (hasattr(env, 'task_mode') and env.task_mode != 1):
             obs = env.reset()
         goal_dim = env.goal.shape[0]
@@ -489,6 +491,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
             n_steps = 8192 # 1024
         else:
             n_steps = 2048
+        print('n_steps',n_steps)
         policy = 'MlpPolicy'
         from utils.attention_policy import AttentionPolicy
         register_policy('AttentionPolicy', AttentionPolicy)

@@ -457,7 +457,7 @@ class SAC_parallel(OffPolicyRLModel):
                 print('Set task_array to ', self.env.env.get_attr('task_array')[0])
                 self.env.env.env_method('set_random_ratio', [0.7] * self.env.env.num_envs)
             obs = self.env.reset()
-            print(obs.shape)
+            # print(obs.shape)
             for step in range(total_timesteps):
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards

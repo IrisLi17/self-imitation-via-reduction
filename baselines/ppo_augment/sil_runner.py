@@ -6,7 +6,7 @@ from collections import deque
 import gym
 import numpy as np
 import tensorflow as tf
-
+import os.path as osp
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_util, SetVerbosity, TensorboardWriter
 from stable_baselines.common.runners import AbstractEnvRunner
@@ -15,7 +15,7 @@ from stable_baselines.a2c.utils import total_episode_reward_logger
 
 
 class SILRunner(AbstractEnvRunner):
-    def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon, dim_candidate=2):
+    def __init__(self, *,env_id, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon, dim_candidate=2):
         """
         A runner to learn the policy of an environment for a model
 
@@ -26,10 +26,12 @@ class SILRunner(AbstractEnvRunner):
         :param lam: (float) Factor for trade-off of bias vs variance for Generalized Advantage Estimator
         """
         super().__init__(env=env, model=model, n_steps=n_steps)
+        self.env_id = env_id
         self.aug_env = aug_env
         self.lam = lam
         self.gamma = gamma
         self.n_candidate = n_candidate
+        self.latent_mode = True
         # For restart
         # self.ep_transition_buf = [[] for _ in range(self.model.n_envs)]
         self.ep_obs_buf = [[] for _ in range(self.model.n_envs)]
@@ -38,22 +40,38 @@ class SILRunner(AbstractEnvRunner):
         self.ep_neglogpac_buf = [[] for _ in range(self.model.n_envs)]
         self.ep_done_buf = [[] for _ in range(self.model.n_envs)]
         self.ep_reward_buf = [[] for _ in range(self.model.n_envs)]
-        self.goal_dim = self.env.get_attr('goal')[0].shape[0]
+
+
+        # self.goal_dim = self.env.get_attr('goal')[0].shape[0]
+        if self.latent_mode:
+            self.goal_dim = self.env.get_attr('goal_dim')[0]
+        else:
+            self.goal_dim = self.env.get_attr('goal')[0].shape[0]
+            self.noise_mag = self.env.get_attr('size_obstacle')[0][1]
+            self.n_object = self.env.get_attr('n_object')[0]
+
         self.obs_dim = self.env.observation_space.shape[0] - 2 * self.goal_dim
-        self.noise_mag = self.env.get_attr('size_obstacle')[0][1]
-        self.n_object = self.env.get_attr('n_object')[0]
+        # self.noise_mag = self.env.get_attr('size_obstacle')[0][1]
+        # self.n_object = self.env.get_attr('n_object')[0]
         self.dim_candidate = dim_candidate
         self.horizon = horizon
         # self.reuse_times = reuse_times
-        print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
-              'n_object', self.n_object, 'horizon', self.horizon)
+        if self.latent_mode:
+            print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'horizon', self.horizon)
+        else:
+            print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
+                  'n_object', self.n_object, 'horizon', self.horizon)
+            self.current_nobject = []
+            self.task_mode = []
+        # print('obs_dim', self.obs_dim, 'goal_dim', self.goal_dim, 'noise_mag', self.noise_mag,
+        #       'n_object', self.n_object, 'horizon', self.horizon)
         # TODO: add buffers
         self.restart_steps = [] # Every element should be scalar
         self.subgoals = [] # Every element should be [*subgoals, ultimate goal]
         self.restart_states = [] # list of (n_candidate) states
         self.transition_storage = [] # every element is list of tuples. length of every element should match restart steps
-        self.current_nobject = []
-        self.task_mode = []
+        # self.current_nobject = []
+        # self.task_mode = []
         # For filter subgoals
         self.mean_value_buf = deque(maxlen=500)
         self.self_aug_ratio = deque(maxlen=500)
@@ -76,7 +94,10 @@ class SILRunner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [], [], [], [], [], []
         mb_states = self.states
         ep_infos = []
-        mb_goals = self.env.get_attr('goal')
+        if self.latent_mode:
+            mb_goals = self.env.env_method('get_goal')
+        else:
+            mb_goals = self.env.get_attr('goal')
 
         duration = 0.0
         # step_env_duration = 0.0
@@ -97,7 +118,10 @@ class SILRunner(AbstractEnvRunner):
                 if maybe_ep_info is not None:
                     # if self.goal_dim > 3 and np.argmax(mb_goals[idx][3:]) == 0:
                     ep_infos.append(maybe_ep_info)
-                    mb_goals[idx] = self.env.get_attr('goal', indices=idx)[0]
+                    if self.latent_mode:
+                        mb_goals[idx] = self.env.env_method('get_goal', indices=idx)[0]
+                    else:
+                        mb_goals[idx] = self.env.get_attr('goal', indices=idx)[0]
                 if self.dones[idx] and (not info['is_success']):
                     rewards[idx] = self.model.value(np.expand_dims(info['terminal_observation'], axis=0))
             mb_rewards.append(rewards)

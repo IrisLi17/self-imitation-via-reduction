@@ -52,7 +52,7 @@ class HindsightExperienceReplayWrapper(object):
         that enables to convert observation to dict, and vice versa
     """
 
-    def __init__(self, replay_buffer, n_sampled_goal, goal_selection_strategy, wrapped_env):
+    def __init__(self, replay_buffer, env_id,n_sampled_goal, goal_selection_strategy, wrapped_env):
         super(HindsightExperienceReplayWrapper, self).__init__()
 
         assert isinstance(goal_selection_strategy, GoalSelectionStrategy), "Invalid goal selection strategy," \
@@ -60,7 +60,7 @@ class HindsightExperienceReplayWrapper(object):
             list(GoalSelectionStrategy))
 
         assert isinstance(replay_buffer, MultiWorkerReplayBuffer) or isinstance(replay_buffer, PrioritizedMultiWorkerReplayBuffer)
-
+        self.env_id = env_id
         self.n_sampled_goal = n_sampled_goal
         self.goal_selection_strategy = goal_selection_strategy
         self.env = wrapped_env
@@ -103,7 +103,9 @@ class HindsightExperienceReplayWrapper(object):
                     success = (np.array(reward) > 0.5).tolist()
                 else:
                     if self.env.reward_type != 'sparse':
-                        reward_and_success = self.env.compute_reward_and_success(next_obs, next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                        # print('env_type',self.env)
+                        # print('compute_reward_and_success',next_obs)
+                        reward_and_success = self.env.compute_reward_and_success(np.asarray(next_obs)[:,:16], next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
                         reward, success = zip(*reward_and_success)
                         reward = list(reward)
                         success = list(success)
@@ -123,7 +125,7 @@ class HindsightExperienceReplayWrapper(object):
                     success = (np.array(reward) > 0.5).tolist()
                 else:
                     if self.env.reward_type != 'sparse':
-                        reward_and_success = self.env.compute_reward_and_success(next_obs, next_obs_dict['desired_goal'],
+                        reward_and_success = self.env.compute_reward_and_success(np.asarray(next_obs)[:,:16], next_obs_dict['desired_goal'],
                                                                                  [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
                         reward, success = zip(*reward_and_success)
                         reward = list(reward)
@@ -285,14 +287,16 @@ class HindsightExperienceReplayWrapper(object):
                 next_obs_dict['desired_goal'] = goal
 
                 # assert len(goal) in [3, 5, 6]
-                if len(goal) > 3:
-                    # modify dict, note that desired_goal is already modified, only need to modify achieved goal
-                    one_hot = goal[3:]
-                    idx = np.argmax(one_hot)
-                    obs_dict['achieved_goal'][3:] = one_hot
-                    obs_dict['achieved_goal'][0:3] = obs_dict['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
-                    next_obs_dict['achieved_goal'][3:] = one_hot
-                    next_obs_dict['achieved_goal'][0:3] = next_obs_dict['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
+                if self.env_id not in ( 'Image84SawyerPushAndReachArenaTrainEnvBig-v0', 'Image48PointmassUWallTrainEnvBig-v0'):
+
+                    if len(goal) > 3:
+                        # modify dict, note that desired_goal is already modified, only need to modify achieved goal
+                        one_hot = goal[3:]
+                        idx = np.argmax(one_hot)
+                        obs_dict['achieved_goal'][3:] = one_hot
+                        obs_dict['achieved_goal'][0:3] = obs_dict['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
+                        next_obs_dict['achieved_goal'][3:] = one_hot
+                        next_obs_dict['achieved_goal'][0:3] = next_obs_dict['observation'][3 + 3 * idx: 3 + 3 * (idx + 1)]
 
                 '''
                 info = None
