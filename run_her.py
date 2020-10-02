@@ -140,6 +140,13 @@ def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None,
                     random_pusher=True,
                     reward_type=reward_type,
                     max_episode_steps=150, )
+    elif env_id == 'MasspointPushMultiObstacle-v1':
+        return dict(random_box=True,
+                    random_ratio=random_ratio,
+                    random_pusher=True,
+                    reward_type=reward_type,
+                    max_episode_steps=150,
+                    n_object=4,)
     elif env_id == 'MasspointMaze-v2' or env_id == 'MasspointMaze-v3':
         return dict(random_box=True,
                     random_ratio=random_ratio,

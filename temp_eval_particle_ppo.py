@@ -4,15 +4,16 @@ from run_ppo import make_env
 from baselines import PPO2
 import numpy as np
 from gym.wrappers import FlattenDictWrapper
+import matplotlib.pyplot as plt
 
 
-def eval_model(goal_idx, random_ratio):
+def eval_model(goal_idx, random_ratio, n=50, save_image=False):
     env.unwrapped.random_ratio = random_ratio
     print('Random ratio set to', env.random_ratio)
     success_count = 0
     success_stats = [0] * n_object
     total_stats = [0] * n_object
-    for _ in range(50):
+    for _ in range(n):
         obs = env.reset()
         while not (np.argmax(obs[-goal_dim + 3:]) == goal_idx):
             obs = env.reset()
@@ -22,13 +23,23 @@ def eval_model(goal_idx, random_ratio):
         goal_pos = obs[-goal_dim: -goal_dim + 3]
         n_doors = doors_to_move(agent_pos, box_pos, goal_pos, [obs[6 + 3 * i: 9 + 3 * i] for i in range(n_object - 1)])
         done = False
+        frame_idx = 0
         while not done:
+            if save_image and n_doors == 3:
+                img = env.render(mode='rgb_array')
+                plt.imsave("tempimg%d.png" % frame_idx, img)
             action, _ = model.predict(obs)
             obs, _, done, info = env.step(action)
+            frame_idx += 1
             success_count += info['is_success']
             success_stats[n_doors] += info['is_success']
         total_stats[n_doors] += 1
-    return success_count / 50, ([success_stats[i] / max(total_stats[i], 1e-4) for i in range(n_object)],
+        if save_image and n_doors == 3 and info['is_success']:
+            exit()
+        elif save_image and n_doors == 3:
+            print('3 doors fail')
+            os.system("rm tempimg*.png")
+    return success_count / n, ([success_stats[i] / max(total_stats[i], 1e-4) for i in range(n_object)],
                                 total_stats)
 
 
@@ -56,6 +67,7 @@ if __name__ == '__main__':
                       max_episode_steps=150,
                       reward_type="sparse",)
     env_kwargs['n_object'] = n_object
+    # Manual longer horizon
     env_kwargs['max_episode_steps'] = 50 * n_object
     env = make_env(env_name, seed=None, rank=0, kwargs=env_kwargs)
     # env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
@@ -64,10 +76,9 @@ if __name__ == '__main__':
     obs_dim = env.observation_space.shape[0] - 2 * goal_dim
 
     for i in range(env.n_object):
-        sr, _ = eval_model(i, 1.0)
+        sr, _ = eval_model(i, 1.0, n=200)
         print('goal idx %d easy' % i, sr)
+        sr, stats = eval_model(i, 0.0, n=200)
+        print('goal idx %d hard' % i, sr)
         if i == 0:
-            sr, stats = eval_model(i, 0.0)
-            print('goal idx %d hard' % i, sr)
-            # TODO: different number of doors to push
             print(stats)

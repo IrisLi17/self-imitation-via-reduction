@@ -1140,10 +1140,10 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
     def _viewer_setup(self):
         # body_id = self.sim.model.body_name2id('robot0:gripper_link')
         # lookat = self.sim.data.body_xpos[body_id]
-        lookat = [2.5, 2.5, 0.0]
+        lookat = [3.4, 2.5, 0.1]
         for idx, value in enumerate(lookat):
             self.viewer.cam.lookat[idx] = value
-        self.viewer.cam.distance = 15.0
+        self.viewer.cam.distance = 11.0
         self.viewer.cam.azimuth = 132.
         self.viewer.cam.elevation = -60.
 

@@ -23,21 +23,15 @@ if __name__ == '__main__':
     env_name = sys.argv[2]
     assert env_name in ['push', 'particle', 'maze', 'stacking']
     # assert mode in ['train', 'hard', 'iteration']
-    max_timesteps = {'push': 4.99e7,
-                     'particle': 2.5e8,
+    max_timesteps = {'push': 3e7,
+                     'particle': 3.0e8,
                      'maze': 1.5e6,
                      'stacking': 2e8,}
     max_iterationss = {'push': 750,
                        'particle': 550,
                        'maze': 245,}
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_eval_iteration, df_legend_iteration = [], [], [], [], [], [], []
-    subfolders = ['ppo', 'sir']
-    if 'particle_random0.7' in folder_name:
-        subfolders = ['ppo', 'sir', 'sil', 'ds']
-    elif 'particle_random1.0' in folder_name:
-        subfolders = ['ppo', 'sir', 'sil', 'ds']
-    elif 'push_random' in folder_name:
-        subfolders = ['ppo', 'sir', 'sil', 'ds']
+    subfolders = ['ppo', 'sir', 'sil', 'ds']
     for subfolder in subfolders:
         last_sr = []
         last_eval = []
@@ -46,7 +40,7 @@ if __name__ == '__main__':
                 continue
             progress_file = os.path.join(folder_name, subfolder, str(i), 'progress.csv')
             eval_file = os.path.join(folder_name, subfolder, str(i), 'eval.csv')
-            if subfolder == 'ds':
+            if 'ds' in subfolder:
                 raw_success_rate = get_item(progress_file, 'ep_success_rate')
             else:
                 raw_success_rate = get_item(progress_file, 'ep_reward_mean')
@@ -129,7 +123,9 @@ if __name__ == '__main__':
     # axes.set_ylabel('success rate')
     # axes.get_legend().remove()
     # handles, labels = axes.get_legend_handles_labels()
-    f.legend(handles[1:], ['PPO', 'SIR', 'SIL', 'DS'], loc="lower right", ncol=1, bbox_to_anchor=(0.49, 0.18), title='')
+    # f.legend(handles[:], ['PPO', 'SIR', 'SIL', 'DS'], loc="lower right", ncol=1, bbox_to_anchor=(0.49, 0.18), title='')
+    f.legend(handles[:], ['PPO', 'SIR', 'SIL'], loc="lower right", ncol=1, bbox_to_anchor=(0.49, 0.18), title='')
     f.subplots_adjust(top=1. - margin / height, bottom=0.21, wspace=wspace, left=left, right=1. - margin / width)
     plt.savefig(os.path.join(folder_name, '../', os.path.basename(folder_name) + '.pdf'))
+    print(os.path.join(folder_name, '../', os.path.basename(folder_name) + '.pdf'))
     plt.show()
