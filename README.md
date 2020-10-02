@@ -1,11 +1,13 @@
 # Self-Imitation via Reduction
-Paper: Self-Imitative Autocurricula via Task Reduction
+Paper: Solving Compositional Reinforcement Learning Problems via Task Reduction
 
 ### Get Started
 Prerequisite: 
 
+* Ubuntu 16.04
+* CUDA 10.0
 * [MuJoCo](http://www.mujoco.org/) version 2.0. You can obtain a license and download the binaries from its website.
-* [conda](https://docs.conda.io/en/latest/miniconda.html).
+* [Conda](https://docs.conda.io/en/latest/miniconda.html)
 
 Install:
 
