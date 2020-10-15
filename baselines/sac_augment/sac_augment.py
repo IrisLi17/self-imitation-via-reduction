@@ -17,7 +17,7 @@ from stable_baselines.ppo2.ppo2 import safe_mean, get_schedule_fn
 from stable_baselines.sac.policies import SACPolicy
 from stable_baselines import logger
 from utils.eval_stack import pp_eval_model, eval_model
-
+import os.path as osp
 
 def get_vars(scope):
     """
@@ -67,7 +67,7 @@ class SAC_augment(OffPolicyRLModel):
         Note: this has no effect on SAC logging for now
     """
 
-    def __init__(self, policy, env, trained_sac_model=None, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
+    def __init__(self, policy, env_id,env, trained_sac_model=None, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
                  priority_buffer=False, alpha=0.6,
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
@@ -80,8 +80,39 @@ class SAC_augment(OffPolicyRLModel):
 
         super(SAC_augment, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
                                           policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs)
-
+        # print('env_observation_spaces',env.observation_space)
         self.aug_env = aug_env
+        # add init attr for latent case
+        self.mean_value_buf = deque(maxlen=500)
+
+        self.env_id = env_id
+        self.latent_dim = 16
+        self.latent_mode = True
+        self.use_true_prior=True
+        self.set_range = True
+
+        if 'Image84SawyerPushAndReachArenaTrainEnvBig-v0' in self.env_id:
+            base_dir = '/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192'
+            path = osp.join(base_dir, 'latent_info.npy')
+            latent_range = np.load(path)
+            self.range_min = latent_range[:self.latent_dim]
+            self.range_max = latent_range[-self.latent_dim:]
+        elif 'Image48PointmassUWallTrainEnvBig-v0' in self.env_id:
+            base_dir = '/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047'
+            path = osp.join(base_dir, 'latent_info.npy')
+            latent_range = np.load(path)
+            self.range_min = latent_range[:self.latent_dim]
+            self.range_max = latent_range[-self.latent_dim:]
+        # num of the cross-entropy iteration
+        self.num_iters = 15
+        # frac_top_chosen_mode
+        self.frac_top_chosen_fixed = True
+        # self.frac_top_chosen = [0.25,0.01]
+        self.frac_total = 1000
+        self.frac_top_chosen = 0.05
+        # self.frac_top_chosen = 0.01
+
+
         self.eval_env = eval_env
         self.trained_sac_model = trained_sac_model
         self.buffer_size = buffer_size
@@ -181,6 +212,7 @@ class SAC_augment(OffPolicyRLModel):
 
                 with tf.variable_scope("input", reuse=False):
                     # Create policy and target TF objects
+                    print('observation_space',self.observation_space)
                     self.policy_tf = self.policy(self.sess, self.observation_space, self.action_space,
                                                  **self.policy_kwargs)
                     self.target_policy = self.policy(self.sess, self.observation_space, self.action_space,
@@ -520,11 +552,18 @@ class SAC_augment(OffPolicyRLModel):
                 as writer:
 
             self._setup_learn(seed)
-            self.env_id = self.env.env.get_attr('spec')[0].id
-            self.goal_dim = self.aug_env.get_attr('goal')[0].shape[0]
+            # self.env_id = self.env.env.get_attr('spec')[0].id
+            if self.latent_mode:
+                # self.goal_dim = self.env.env_method('get_goal')[0]['latent_desired_goal'].shape[0]
+                self.goal_dim = self.aug_env.get_attr('goal_dim')[0]
+            else:
+                self.goal_dim = self.aug_env.get_attr('goal')[0].shape[0]
+                self.noise_mag = self.aug_env.get_attr('size_obstacle')[0][1]
+                self.n_object = self.aug_env.get_attr('n_object')[0]
+            # self.goal_dim = self.aug_env.get_attr('goal')[0].shape[0]
             self.obs_dim = self.aug_env.observation_space.shape[0] - 2 * self.goal_dim
-            self.noise_mag = self.aug_env.get_attr('size_obstacle')[0][1]
-            self.n_object = self.aug_env.get_attr('n_object')[0]
+            # self.noise_mag = self.aug_env.get_attr('size_obstacle')[0][1]
+            # self.n_object = self.aug_env.get_attr('n_object')[0]
             self.reward_type = self.aug_env.get_attr('reward_type')[0]
             # Get horizon on the fly
             # self.horizon = self.env.env.get_attr('spec')[0].max_episode_steps
@@ -587,10 +626,20 @@ class SAC_augment(OffPolicyRLModel):
 
             def convert_dict_to_obs(dict_obs):
                 assert isinstance(dict_obs, dict)
-                return np.concatenate([dict_obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+                if self.latent_mode:
+                    return np.concatenate([dict_obs[key] for key in ['latent_observation', 'latent_achieved_goal', 'latent_desired_goal']])
+                else:
+                    return np.concatenate([dict_obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
 
             def augment_cond():
-                if 'FetchStack' in self.env_id:
+                if self.latent_mode:
+
+                    ## to do how to define the success
+                    # TODO redefine the is_success with either latent distance or latent threshold
+                    if not infos[idx]['is_success']:
+                        return True
+                    return False
+                elif 'FetchStack' in self.env_id:
                     if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] >= 2:
                         return True
                     return False
@@ -756,7 +805,11 @@ class SAC_augment(OffPolicyRLModel):
                             # Do augmentation
                             # Sample start step and perturbation
                             select_subgoal_time0 = time.time()
-                            _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx],
+                            if self.latent_mode :
+                                _restart_steps, _subgoals = self.select_subgoal_cem(self.ep_transition_buf[idx],
+                                                                                k=self.n_subgoal,)
+                            else:
+                                _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx],
                                                                             k=self.n_subgoal,
                                                                             tower_height=self.ep_tower_height[idx] if 'FetchStack' in self.env_id else None)
                             assert isinstance(_restart_steps, np.ndarray)
@@ -831,7 +884,7 @@ class SAC_augment(OffPolicyRLModel):
                                                       self.aug_env.action_space.high)
                         env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
                         self.num_aug_steps += (self.aug_env.num_envs - sum(env_end_flag))
-                        if self.reward_type == 'sparse':
+                        if self.reward_type in ('sparse','state_distance'):
                             temp_info = [None for _ in range(self.aug_env.num_envs)]
                         else:
                             temp_info = [{'previous_obs': env_obs[i]} for i in range(self.aug_env.num_envs)]
@@ -849,10 +902,19 @@ class SAC_augment(OffPolicyRLModel):
                         else:
                             relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs,
                                                                            ultimate_goals)
-                            env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals,
+                            if self.latent_mode:
+                                env_reward = self.aug_env.env_method('compute_reward', env_next_obs[:,self.latent_dim:self.latent_dim*2], ultimate_goals,
+                                                                     temp_info)
+                            else:
+                                env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals,
                                                                  temp_info)
                             if self.reward_type != "sparse":
-                                env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
+                                if self.latent_mode:
+                                    env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
+                                                                                     env_next_obs[:,self.latent_dim:self.latent_dim*2], ultimate_goals,
+                                                                                     temp_info)
+                                else:
+                                    env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
                                                                                  env_next_obs, ultimate_goals,
                                                                                  temp_info)
                         # if self.reward_type != 'sparse':
@@ -1008,15 +1070,18 @@ class SAC_augment(OffPolicyRLModel):
                     logger.logkv('augmented steps', len(self.augment_replay_buffer))
                     logger.logkv("original_timesteps", self.num_timesteps)
                     logger.logkv("total timesteps", self.num_timesteps + self.num_aug_steps)
-                    logger.logkv("random_ratio", self.env.env.get_attr('random_ratio')[0])
+                    # logger.logkv("random_ratio", self.env.env.get_attr('random_ratio')[0])
                     logger.dumpkvs()
                     # Reset infos:
                     infos_values = []
             return self
 
     def get_horizon(self, current_nobject):
+        # TODO not hardcode the max episode length
         if 'FetchStack' in self.env_id and self.sequential:
             return max(current_nobject * 50, 100)
+        if self.latent_mode:
+            return 100
         return self.env.env.get_attr('spec')[0].max_episode_steps
 
     def select_subgoal(self, transition_buf, k, tower_height=None):
@@ -1173,6 +1238,187 @@ class SAC_augment(OffPolicyRLModel):
         # print('subgoal', subgoal, 'with value1', normalize_value1[best_idx], 'value2', normalize_value2[best_idx])
         # print('restart step', restart_step)
         return restart_step, subgoal
+
+    def select_subgoal_cem(self, transition_buf, k):
+        # self.ep_transition_buf, self.model.value
+        assert len(transition_buf) == 100, len(transition_buf)
+        obs_buf, *_ = zip(*transition_buf)
+        obs_buf = np.asarray(obs_buf)
+        opt_samples=[]
+        opt_values = []
+        opt_mean_values=[]
+        print('test_gpu_availability',tf.test.is_gpu_available())
+
+        batch_sizes = [self.frac_total] * (self.num_iters // 2) + [self.frac_total] * (
+                    self.num_iters - (self.num_iters // 2))
+        if not self.frac_top_chosen_fixed:
+            frac_top_chosens = np.array(
+                [self.frac_top_chosen[0]] * (self.num_iters // 2) + [self.frac_top_chosen[1]] * (
+                            self.num_iters - (self.num_iters // 2)))
+        else:
+            frac_top_chosens = np.ones(self.num_iters) * self.frac_top_chosen
+
+        # sample_t = np.random.randint(0, len(transition_buf), 1)
+
+        # for j in range(len(transition_buf)):
+        #     print('round',j)
+        j=0
+        sample_obs = obs_buf[j]
+        if self.use_true_prior:
+            mu = np.zeros(self.latent_dim)
+            std = np.ones(self.latent_dim)
+        else :
+            mu = self.aug_env.vae.dist_mu
+            std = self.aug_env.vae.dist_std
+
+        elites=[]
+        mean_value_chosen = []
+        sorted_losses= []
+        mean_values = []
+        sorted_indices=[]
+        for i in range(self.num_iters):
+            # samples = torch.distributions.Normal(mu_var,std_var).sample_n(batch_sizes[i]*4096)
+            # print('times',i)
+            samples = np.random.normal(mu,std,(batch_sizes[i],self.latent_dim))
+            if self.set_range:
+                assert self.range_min.shape==(self.latent_dim,), self.range_min
+                assert self.range_max.shape==(self.latent_dim,), self.range_min
+                samples = np.clip(samples,self.range_min,self.range_max)
+
+            sample_obs_batches  = np.tile(sample_obs,(batch_sizes[i],1)).reshape(-1,self.latent_dim*3)
+            # print('sample_obs_orign debug', np.min(sample_obs_batches),np.max(sample_obs_batches),np.mean(sample_obs_batches),sample_obs_batches.shape)
+            # print('samples debug', np.min(samples),np.max(samples),np.mean(samples),samples.shape)
+
+            sample_obs_batches[:, self.latent_dim*2:] = samples
+            # print('samples',sample_obs_batches)
+            # print('message')
+            # print('value2 debug', np.min(sample_obs_batches),np.max(sample_obs_batches),np.mean(sample_obs_batches),sample_obs_batches.shape)
+            # if len(sample_obs_buf) == 0:
+            #     return np.array([]), np.array([])
+
+
+
+            # value2 = self.model.value(sample_obs_batches)
+            # print('value2',value2)
+            # print('values2', np.min(value2))
+            subgoal_obs =  np.tile(sample_obs,(batch_sizes[i],1)).reshape(-1,self.latent_dim*3)
+            subgoal_obs[:, :self.latent_dim] = samples
+            subgoal_obs[:, self.latent_dim:self.latent_dim*2] = samples
+            # print('subgoal_obs',subgoal_obs)
+            # print('value1 debug', np.min(subgoal_obs),np.max(subgoal_obs),np.mean(subgoal_obs),subgoal_obs.shape)
+            # value1 = self.model.value(subgoal_obs)
+            # print('value1',value1)
+            # sample_obs_buf = np.concatenate(sample_obs_batches, axis=0)
+            # value2 = self.model.value(sample_obs_buf)
+            # subgoal_obs_buf = np.concatenate(subgoal_obs)
+            # value1 = self.model.value(subgoal_obs_buf)
+
+            # _values = self.model.value(np.concatenate([sample_obs_buf, subgoal_obs_buf], axis=0))
+            feed_dict = {self.observations_ph: np.concatenate([sample_obs_batches, subgoal_obs], axis=0)}
+            _values = np.squeeze(self.sess.run(self.step_ops[6], feed_dict), axis=-1)
+            value2 = _values[:sample_obs_batches.shape[0]]
+            value1 = _values[sample_obs_batches.shape[0]:]
+
+            # if (np.max(value1)-np.min(value1))==0 or (np.max(value2)-np.min(value2))==0:
+            #     print('value1-division',np.max(value1),np.min(value1))
+            #     print('value1',value1)
+            #     print('value2-division',np.max(value2),np.min(value2))
+            #     print('value2',value2)
+            # trying another type of loss
+            # normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
+            # normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
+            # loss = (normalize_value1*normalize_value2)
+            # mean loss
+            loss = (value1+value2)/2
+            # sorted_losses = np.sort(loss)
+            sorted_indices = np.argsort(loss)
+            mean_values = (value1 + value2 )/2
+            num_top_chosen = int(frac_top_chosens[i]*batch_sizes[i])
+            elite_indices = sorted_indices[-num_top_chosen:]
+            mean_value_chosen = mean_values[elite_indices]
+            # print('top_chosen_indices',elite_indices)
+            elites = samples[elite_indices]
+            mu = np.mean(elites)
+            std = np.std(elites)
+
+         #outer loop
+        # opt_sample = elites[-k:]
+        # opt_value = sorted_losses[-k:]
+        # calculate the mean
+        # good_ind = elite_indices[-k:]
+        mean_values = mean_value_chosen[-k:]
+        elites_top_k = elites[-k:]
+        # mean_values = (value1[good_ind] + value2[good_ind]) / 2
+        assert mean_values.shape[0] == k
+        for i in range(k):
+            self.mean_value_buf.append(mean_values[i])
+        # filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
+        # print('filtered_idx',filtered_idx)
+        print('mean_value',mean_values)
+        print('global_mean_value',np.mean(self.mean_value_buf))
+
+        # opt_sample = elites_top_k[filtered_idx]
+        opt_sample = elites_top_k
+        filtered_idx = k
+        # good_ind = good_ind[filtered_idx]
+        # opt_sample = samples[good_ind]
+        # opt_mean_value = mean_values[sorted_indices[-k:]]
+        # print('opt_sample',opt_sample)
+        # print('opt_value',opt_value)
+        # print('opt_mean_value',opt_mean_value)
+        if opt_sample.size != 0:
+            opt_subgoal = self.reproject_encoding(opt_sample)
+        else:
+            opt_subgoal = opt_sample
+        # print('opt_subgoal',opt_subgoal)
+        #top_k = np.zeros(k).astype('int')
+        # print('k',k)
+        restart_steps = np.array([0]*k)
+        # restart_steps =np.floor(top_k/k)
+        # for index in range(k):
+        #     opt_mean_values.append(opt_mean_value[index])
+        #     opt_samples.append(opt_subgoal[index])
+        #     opt_values.append(opt_value[index])
+        # # the most outer loop
+        # good_indices = np.argsort(np.asarray(opt_values))
+        # print(good_indices)
+        # top_k = good_indices[-k:]
+        # print('top_k',top_k)
+        # calculating the mean value of the value and
+        # mean_values = opt_mean_values[top_k]
+        # assert mean_values.shape[0] == k
+        # for i in range(k):
+        #     self.mean_value_buf.append(mean_values[i])
+        # filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
+        # # good_ind = good_ind[filtered_idx]
+        # top_k = top_k[filtered_idx]
+        # print('top_k_filtered_idx',top_k)
+        # self.self_aug_ratio.append(np.sum(good_ind < len(sample_t)) / (len(filtered_idx) + 1e-8))
+
+        # restart_step = sample_t[good_ind % len(sample_t)]
+        # subgoal = subgoal_obs_buf[good_ind, self.obs_dim + self.goal_dim:self.obs_dim + self.goal_dim * 2]
+        # self.self_aug_ratio.append(np.sum(subgoal[:, 3]) / (len(filtered_idx) + 1e-8))
+
+        # opt_subgoal = opt_samples[top_k]
+
+        # print(top_k)
+
+        # restart_steps = np.floor(top_k/k)
+        return restart_steps, opt_subgoal
+
+    def reproject_encoding(self,encoding):
+        import utils.torch.pytorch_util as ptu
+        import torch
+        # print('encoding debug',encoding,encoding.shape,np.mean(encoding),np.min(encoding),np.max(encoding))
+        # ptu.set_device(0)
+        # encoding = ptu.np_to_var(encoding).view(-1,self.latent_dim)
+
+        ## TODO HOW TO enable cuda rendering because if rendering is enabled, the cuda illegal access memory would return
+        encoding=torch.tensor(encoding, requires_grad=False).float()
+        imgs = self.aug_env.get_attr('vae')[0].decode(encoding)
+        reconstr_encoding = self.aug_env.get_attr('vae')[0].encode(imgs)[0]
+        reconstr_encoding_np = ptu.get_numpy(reconstr_encoding)
+        return reconstr_encoding_np
 
     def logpac(self, action):
         from stable_baselines.sac.policies import gaussian_likelihood, EPS

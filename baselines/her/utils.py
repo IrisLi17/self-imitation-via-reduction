@@ -18,9 +18,10 @@ class HERGoalEnvWrapper(object):
     :param env: (gym.GoalEnv)
     """
 
-    def __init__(self, env):
+    def __init__(self, env, env_id=None):
         super(HERGoalEnvWrapper, self).__init__()
         self.env = env
+        self.env_id =env_id
         self.metadata = self.env.metadata
         self.action_space = env.action_space
         self.spaces = list(env.observation_space.spaces.values())
@@ -49,9 +50,16 @@ class HERGoalEnvWrapper(object):
             self.observation_space = spaces.MultiBinary(total_dim)
 
         elif isinstance(self.spaces[0], spaces.Box):
-            lows = np.concatenate([space.low for space in self.spaces])
-            highs = np.concatenate([space.high for space in self.spaces])
+            if env_id is not None:
+                # print('goal',self.goal_dim,'obs',self.obs_dim)
+                keys = ('latent_observation','latent_achieved_goal','latent_desired_goal')
+                lows = np.concatenate([self.env.observation_space.spaces[key].low for key in keys])
+                highs = np.concatenate([self.env.observation_space.spaces[key].high for key in keys])
+            else:
+                lows = np.concatenate([space.low for space in self.spaces])
+                highs = np.concatenate([space.high for space in self.spaces])
             self.observation_space = spaces.Box(lows, highs, dtype=np.float32)
+            # print('self.observation_spaces',self.observation_space)
 
         elif isinstance(self.spaces[0], spaces.Discrete):
             dimensions = [env.observation_space.spaces[key].n for key in KEY_ORDER]

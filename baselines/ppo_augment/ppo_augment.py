@@ -221,7 +221,9 @@ class PPO2_augment(ActorCriticRLModel):
 
                     ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
                     if self.self_imitate:
-                        if not 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
+                        # if not 'MasspointPushDoubleObstacle' in self.env.get_attr('spec')[0].id:
+                        if not 'MasspointPushDoubleObstacle' in self.env_id:
+
                             ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 100) - tf.minimum(neglogpac, 100))
                         else:
                             ratio = tf.exp(tf.minimum(self.old_neglog_pac_ph, 20) - tf.minimum(neglogpac, 20))
@@ -262,13 +264,22 @@ class PPO2_augment(ActorCriticRLModel):
                                 tf.summary.histogram(var.name, var)
                     ## adding some assertion for debuging
                     loss = tf.debugging.assert_all_finite(loss,msg='rip loss')
-
+                    # self.params = tf.Print(self.params,['params_info',self.params])
+                    for i in range(len(self.params)):
+                        print(i,'params',self.params[i])
                     grads = tf.gradients(loss, self.params)
+
+                    # grads = tf.Print(grads,['gradient debug',grads])
+
                     grads = [tf.debugging.assert_all_finite(grad,msg=f'rip grad{i}') if grad is not None else None
                              for i, grad in enumerate(grads) ]
 
                     if self.max_grad_norm is not None:
                         grads, _grad_norm = tf.clip_by_global_norm(grads, self.max_grad_norm)
+                        tf.summary.scalar('grad_norm',_grad_norm)
+                        tf.summary.scalar('grad_12_dim_1', grads[12][0,0])
+                        tf.summary.scalar('grad_12_dim_2', grads[12][0,1])
+                        # _grad_norm = tf.print(_grad_norm,['grad_norm',_grad_norm])
                     grads = list(zip(grads, self.params))
                 trainer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph, epsilon=1e-5)
                 self._train = trainer.apply_gradients(grads)
@@ -419,7 +430,8 @@ class PPO2_augment(ActorCriticRLModel):
                                 aug_env=self.aug_env, n_candidate=self.n_candidate)
             elif self.self_imitate:
                 from baselines.ppo_augment.sil_runner import SILRunner
-                runner = SILRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                print('running sil_runner for ppo_sil')
+                runner = SILRunner(env=self.env,env_id=self.env_id, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
                                                  gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
                                                  dim_candidate=self.dim_candidate, horizon=self.horizon)
             else:
@@ -580,7 +592,7 @@ class PPO2_augment(ActorCriticRLModel):
                         total_success += np.sum(_aug_reward)
                     print('augmented data length', obs.shape[0])
                 self.num_timesteps += self.n_batch
-                print('ep_infos:',ep_infos)
+                # print('ep_infos:',ep_infos)
                 ep_info_buf.extend(ep_infos)
                 total_episodes = np.sum(masks)
                 mb_loss_vals = []

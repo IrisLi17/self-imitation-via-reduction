@@ -8,12 +8,22 @@ import gym
 import matplotlib.pyplot as plt
 from stable_baselines.common import set_global_seeds
 from stable_baselines import logger
-from run_her import make_env, get_env_kwargs
+from stable_baselines.bench import Monitor
+
+# from run_her import make_env, get_env_kwargs
+from run_her import get_env_kwargs
+# from run_ppo_augment import make_env
+from push_wall_obstacle import FetchPushWallObstacleEnv_v4
+from masspoint_env import MasspointPushSingleObstacleEnv_v2, MasspointPushDoubleObstacleEnv
+from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv
+from fetch_stack import FetchStackEnv
 import os, time
 import imageio
+import csv,pickle
 import argparse
 import numpy as np
-from run_ppo_augment import stack_eval_model, eval_model, log_eval, egonav_eval_model
+from run_ppo_augment import stack_eval_model, eval_model, log_eval,eval_img_model, egonav_eval_model
+from utils.wrapper import DoneOnSuccessWrapper,VAEWrappedEnv
 
 try:
     from mpi4py import MPI
@@ -23,6 +33,13 @@ except ImportError:
 
 hard_test = False
 
+IMAGE_ENTRY_POINT = {
+    'Image84SawyerPushAndReachArenaTrainEnvBig-v0':  'ImagePushAndReach',
+    'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0':  'ImagePushAndReach',
+    'Image48PointmassUWallTrainEnvBig-v0':'ImageUWall',
+    'Image48PointmassUWallTrainEnvBigUnlimit-v0': 'ImageUWall',
+
+}
 
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -49,7 +66,158 @@ def arg_parse():
     parser.add_argument('--export_gif', action="store_true", default=False)
     args = parser.parse_args()
     return args
+ENTRY_POINT = {'FetchPushWallObstacle-v4': FetchPushWallObstacleEnv_v4,
+               'FetchPushWallObstacleUnlimit-v4': FetchPushWallObstacleEnv_v4,
+               # 'FetchPushWall-v1': FetchPushWallEnv,
+               # 'FetchPushBox-v1': FetchPushBoxEnv,
+               }
+MASS_ENTRY_POINT = {
+    'MasspointPushSingleObstacle-v2': MasspointPushSingleObstacleEnv_v2,
+    'MasspointPushSingleObstacleUnlimit-v2': MasspointPushSingleObstacleEnv_v2,
+    'MasspointPushDoubleObstacle-v1': MasspointPushDoubleObstacleEnv,
+    'MasspointPushDoubleObstacleUnlimit-v1': MasspointPushDoubleObstacleEnv,
+    'MasspointMaze-v1': MasspointMazeEnv,
+    'MasspointMazeUnlimit-v1': MasspointMazeEnv,
+    'MasspointMaze-v2': MasspointSMazeEnv,
+    'MasspointMazeUnlimit-v2': MasspointSMazeEnv,
+}
 
+PICK_ENTRY_POINT = {
+    'FetchStack-v1': FetchStackEnv,
+    'FetchStackUnlimit-v1': FetchStackEnv,
+}
+VAE_LOAD_PATH = {
+    'Image84SawyerPushAndReachArenaTrainEnvBig-v0':'/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
+    'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
+
+    'Image48PointmassUWallTrainEnvBig-v0':'/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
+    'Image48PointmassUWallTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
+
+}
+# load the vae_model
+# ENV_NAME= 'Image48PointmassUWallTrainEnvBig-v0'
+# VAE_FILE = open(VAE_LOAD_PATH[ENV_NAME], 'rb')
+# VAE_MODEL = pickle.load(VAE_FILE)
+# import utils.torch.pytorch_util as ptu
+# ptu.set_device(0)
+# ptu.set_gpu_mode(True)
+# VAE_MODEL.cuda()
+
+def create_image_84_sawyer_pnr_arena_train_env_big_v0():
+    from multiworld.core.image_env import ImageEnv
+    from multiworld.envs.mujoco.cameras import sawyer_pusher_camera_tdm_v4
+
+    wrapped_env = gym.make('SawyerPushAndReachArenaTrainEnvBig-v0')
+    return ImageEnv(
+        wrapped_env,
+        84,
+        init_camera=sawyer_pusher_camera_tdm_v4,
+        transpose=True,
+        normalize=True,
+        reward_type='sparse'
+    )
+def create_image_48_pointmass_uwall_train_env_big_v0():
+    from multiworld.core.image_env import ImageEnv
+
+    wrapped_env = gym.make('PointmassUWallTrainEnvBig-v0')
+    return ImageEnv(
+        wrapped_env,
+        48,
+        init_camera=None,
+        transpose=True,
+        normalize=True,
+        non_presampled_goal_img_is_garbage=False,
+    )
+
+def make_env(env_id, seed, rank,epsilon=1.0, log_dir=None, allow_early_resets=True, kwargs=None):
+    """
+    Create a wrapped, monitored gym.Env for MuJoCo.
+
+    :param env_id: (str) the environment ID
+    :param seed: (int) the inital seed for RNG
+    :param allow_early_resets: (bool) allows early reset of the environment
+    :return: (Gym Environment) The mujoco environment
+    """
+    if env_id in ENTRY_POINT.keys() or env_id in MASS_ENTRY_POINT.keys() or env_id in PICK_ENTRY_POINT.keys() or env_id in IMAGE_ENTRY_POINT.keys():
+        # env = ENTRY_POINT[env_id](**kwargs)
+        # print(env)
+        # from gym.wrappers.time_limit import TimeLimit
+        kwargs = kwargs.copy()
+        max_episode_steps = 100
+        if env_id in IMAGE_ENTRY_POINT.keys():
+            if IMAGE_ENTRY_POINT[env_id] == 'ImagePushAndReach':
+                gym.register(
+                    id=env_id,
+                    entry_point=create_image_84_sawyer_pnr_arena_train_env_big_v0,
+                    max_episode_steps=max_episode_steps,
+                    tags={
+                        'git-commit-hash': 'e5c11ac',
+                        'author': 'Soroush'
+                    },
+                )
+            elif IMAGE_ENTRY_POINT[env_id] =='ImageUWall':
+                gym.register(
+                    id=env_id,
+                    entry_point=create_image_48_pointmass_uwall_train_env_big_v0,
+                    max_episode_steps=max_episode_steps,
+
+                    tags={
+                        'git-commit-hash': 'e5c11ac',
+                        'author': 'Soroush'
+                    },
+                )
+            env = gym.make(env_id)
+            # env.wrapped_env.reward_type='sparse'
+
+            # env = VAEWrappedEnv(env,vae_model)
+            # env_name = 'Image48PointmassUWallTrainEnvBig-v0'
+            vae_file = open(VAE_LOAD_PATH[env_id], 'rb')
+            vae_model = pickle.load(vae_file)
+            import utils.torch.pytorch_util as ptu
+            # if rank > 3:
+            #     ptu.set_device(1)
+            # else:
+            ptu.set_device(0)
+            ptu.set_gpu_mode(True)
+            env = VAEWrappedEnv(env,vae_model,epsilon=epsilon,use_vae_goals=False,imsize=48,reward_params=dict(type='state_distance'))
+
+            # env.wrapped_env.reward_type='wrapped_env'
+            # env.reward_type=kwargs['reward_type']
+            # import ipdb;ipdb.set_trace()
+
+        else:
+            if 'max_episode_steps' in kwargs:
+                max_episode_steps = kwargs['max_episode_steps']
+                del kwargs['max_episode_steps']
+            if env_id in ENTRY_POINT.keys():
+                gym.register(env_id, entry_point=ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
+            elif env_id in MASS_ENTRY_POINT.keys():
+                gym.register(env_id, entry_point=MASS_ENTRY_POINT[env_id], max_episode_steps=max_episode_steps, kwargs=kwargs)
+            elif env_id in PICK_ENTRY_POINT.keys():
+                gym.register(env_id, entry_point=PICK_ENTRY_POINT[env_id], max_episode_steps=max_episode_steps,
+                             kwargs=kwargs)
+            env = gym.make(env_id)
+
+
+        # env = TimeLimit(env, max_episode_steps=50)
+    else:
+        env = gym.make(env_id, reward_type='sparse')
+    # env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
+    if env_id in PICK_ENTRY_POINT.keys() and kwargs['reward_type'] == 'dense':
+        env = DoneOnSuccessWrapper(env, reward_offset=0.0)
+    elif kwargs['reward_type'] in ('latent_distance','state_distance'):
+        print('reward_type',kwargs['reward_type'])
+        env = DoneOnSuccessWrapper(env, reward_offset=0.0)
+
+    else:
+        env = DoneOnSuccessWrapper(env)
+    if log_dir is not None:
+        env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets,
+                      info_keywords=('is_success',))
+
+
+    # env.seed(seed + 10000 * rank)
+    return env
 
 def configure_logger(log_path, **kwargs):
     if log_path is not None:
@@ -81,8 +249,13 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     #                   max_episode_steps=None if sequential else 100,
     #                   reward_type=reward_type,
     #                   n_object=n_object, )
-    env_kwargs = get_env_kwargs(env_name, random_ratio=random_ratio, sequential=sequential,
+    if env_name in IMAGE_ENTRY_POINT.keys():
+        env_kwargs = dict(max_episode_steps=100,
+                          reward_type='state_distance')
+    else:
+        env_kwargs = get_env_kwargs(env_name, random_ratio=random_ratio, sequential=sequential,
                                 reward_type=reward_type, n_object=n_object)
+
 
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
@@ -94,7 +267,12 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     #     env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
 
     def make_thunk_aug(rank):
-        return lambda: FlattenDictWrapper(make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs),
+        if env_name in IMAGE_ENTRY_POINT.keys():
+
+            return lambda: FlattenDictWrapper(make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs),['latent_observation','latent_achieved_goal','latent_desired_goal'])
+        else:
+            print('using FlattenDictWrapper')
+            return lambda: FlattenDictWrapper(make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs),
                                           ['observation', 'achieved_goal', 'desired_goal'])
 
     aug_env_kwargs = env_kwargs.copy()
@@ -109,7 +287,13 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     eval_env_kwargs = env_kwargs.copy()
     eval_env_kwargs['random_ratio'] = 0.0
     eval_env = make_env(env_id=env_name, seed=seed, rank=0, kwargs=eval_env_kwargs)
-    eval_env = FlattenDictWrapper(eval_env, ['observation', 'achieved_goal', 'desired_goal'])
+    if env_name not in IMAGE_ENTRY_POINT.keys():
+
+        eval_env = FlattenDictWrapper(eval_env, ['observation', 'achieved_goal', 'desired_goal'])
+
+    else :
+        eval_env = FlattenDictWrapper(eval_env, ['latent_observation', 'latent_achieved_goal', 'latent_desired_goal'])
+
 
     if not play:
         os.makedirs(log_dir, exist_ok=True)
@@ -147,7 +331,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             if n_workers == 1:
                 pass
                 # del train_kwargs['priority_buffer']
-            if 'FetchStack' in env_name:
+            if env_name  in ('FetchStack',IMAGE_ENTRY_POINT.keys()) :
                 train_kwargs['ent_coef'] = "auto"
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
@@ -178,6 +362,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                         mean_eval_reward2 = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"],
                                                               goal_idx=0)
                         log_eval(_locals['self'].num_timesteps, mean_eval_reward2, file_name="eval_box.csv")
+                    elif env_name in IMAGE_ENTRY_POINT.keys():
+                        mean_eval_reward = eval_img_model(eval_env,_locals["self"])
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
                     log_eval(_locals['self'].num_timesteps, mean_eval_reward)
@@ -214,7 +400,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             print('train_kwargs', train_kwargs)
             print('policy_kwargs', policy_kwargs)
         # Wrap the model
-        model = HER_HACK(policy, env, model_class, n_sampled_goal=4,
+        model = HER_HACK(policy=policy, env=env, model_class=model_class,env_id=env_name, n_sampled_goal=4,
                          start_augment_time=start_augment,
                          goal_selection_strategy=goal_selection_strategy,
                          num_workers=n_workers,
@@ -224,7 +410,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         print(model.get_parameter_list())
 
         # Train the model
-        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=100)
+        model.learn(num_timesteps, seed=seed, callback=callback, log_interval=10)
 
         if rank == 0:
             model.save(os.path.join(log_dir, 'final'))
@@ -233,7 +419,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     # or wrap your environment with HERGoalEnvWrapper to use the predict method
     if play and rank == 0:
         assert load_path is not None
-        model = HER_HACK.load(load_path, env=env)
+        model = HER_HACK.load(load_path,env=env)
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()
@@ -244,13 +430,15 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         #     if not hard_test:
         #         break
         #     obs = env.reset()
-        print('gripper_pos', obs['observation'][0:3])
-        img = env.render(mode='rgb_array')
+        # print('gripper_pos', obs['observation'][0:3])
+        # img = env.render(mode='rgb_array')
+        img = env.env_method('get_image')[0]
         episode_reward = 0.0
         images = []
         frame_idx = 0
         episode_idx = 0
-        for i in range(env.spec.max_episode_steps * 6):
+        #env.spec.max_episode_steps
+        for i in range(100 * 10):
             # images.append(img)
             action, _ = model.predict(obs)
             # print('action', action)
@@ -261,8 +449,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             ax.cla()
             img = env.render(mode='rgb_array')
             ax.imshow(img)
-            ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
-                         ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
+            # ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
+                         # ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
+            ax.set_title('episode'+str(episode_idx)+',frame'+str(frame_idx)+'reward'+str(reward)+'done'+str(done))
             if export_gif:
                 plt.savefig('tempimg' + str(i) + '.png')
             plt.pause(0.02)
@@ -273,13 +462,14 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 #     if not hard_test:
                 #         break
                 #     obs = env.reset()
-                print('gripper_pos', obs['observation'][0:3])
+                # print('gripper_pos', obs['observation'][0:3])
                 print('episode_reward', episode_reward)
                 episode_reward = 0.0
                 frame_idx = 0
                 episode_idx += 1
         if export_gif:
-            for i in range(env.spec.max_episode_steps * 6):
+            #env.spec.max_episode_steps
+            for i in range(100 * 10):
                 images.append(plt.imread('tempimg' + str(i) + '.png'))
                 os.remove('tempimg' + str(i) + '.png')
             imageio.mimsave(env_name + '.gif', images)

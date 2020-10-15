@@ -207,8 +207,14 @@ class PPO2(ActorCriticRLModel):
                             for var in self.params:
                                 tf.summary.histogram(var.name, var)
                     grads = tf.gradients(loss, self.params)
+                    for i in range(len(self.params)):
+                        print(i,'params',self.params[i])
+                    grads = [tf.debugging.assert_all_finite(grad,msg=f'rip grad{i}') if grad is not None else None
+                             for i, grad in enumerate(grads) ]
                     if self.max_grad_norm is not None:
                         grads, _grad_norm = tf.clip_by_global_norm(grads, self.max_grad_norm)
+                        tf.summary.scalar('grad_norm', _grad_norm)
+                        tf.summary.scalar('grad_12', grads[12])
                     grads = list(zip(grads, self.params))
                 trainer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph, epsilon=1e-5)
                 self._train = trainer.apply_gradients(grads)
@@ -464,7 +470,12 @@ class Runner(AbstractEnvRunner):
         super().__init__(env=env, model=model, n_steps=n_steps)
         self.lam = lam
         self.gamma = gamma
-        self.goal_dim = self.env.get_attr('goal')[0].shape[0]
+        self.latent_mode = True
+        if self.latent_mode:
+            # self.goal_dim = self.env.env_method('get_goal')[0]['latent_desired_goal'].shape[0]
+            self.goal_dim = self.env.get_attr('goal_dim')[0]
+        else:
+            self.goal_dim = self.env.get_attr('goal')[0].shape[0]
 
     def run(self):
         """
@@ -484,7 +495,10 @@ class Runner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [], [], [], [], [], []
         mb_states = self.states
         ep_infos = []
-        mb_goals = self.env.get_attr('goal')
+        if self.latent_mode:
+            mb_goals = self.env.env_method('get_goal')
+        else:
+            mb_goals = self.env.get_attr('goal')
         for _ in range(self.n_steps):
             actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones)
             mb_obs.append(self.obs.copy())
@@ -502,7 +516,10 @@ class Runner(AbstractEnvRunner):
                 if maybe_ep_info is not None:
                     # if self.goal_dim > 3 and np.argmax(mb_goals[idx][3:]) == 0:
                     ep_infos.append(maybe_ep_info)
-                    mb_goals[idx] = self.env.get_attr('goal', indices=idx)[0]
+                    if self.latent_mode:
+                        mb_goals[idx] = self.env.env_method('get_goal', indices=idx)[0]
+                    else:
+                        mb_goals[idx] = self.env.get_attr('goal', indices=idx)[0]
                 if self.dones[idx] and (not info['is_success']):
                     rewards[idx] = self.model.value(np.expand_dims(info['terminal_observation'], axis=0))
             mb_rewards.append(rewards)

@@ -92,7 +92,7 @@ def create_image_48_pointmass_uwall_train_env_big_v0():
         non_presampled_goal_img_is_garbage=False,
     )
 
-def make_env(env_id, epsilon,seed, rank, log_dir=None, allow_early_resets=True, kwargs=None):
+def make_env(env_id, seed, rank,epsilon=1.0, log_dir=None, allow_early_resets=True, kwargs=None):
     """
     Create a wrapped, monitored gym.Env for MuJoCo.
 
@@ -142,7 +142,8 @@ def make_env(env_id, epsilon,seed, rank, log_dir=None, allow_early_resets=True, 
             # else:
             ptu.set_device(0)
             ptu.set_gpu_mode(True)
-            env = VAEWrappedEnv(env,vae_model,epsilon=epsilon,use_vae_goals=False,imsize=48,reward_params=dict(type='state_distance'))
+            env = VAEWrappedEnv(env,vae_model,epsilon=epsilon,use_vae_goals=False,imsize=48,
+                                reward_params=dict(type=kwargs['reward_type']))
 
             # env.wrapped_env.reward_type='wrapped_env'
             # env.reward_type=kwargs['reward_type']
@@ -165,16 +166,18 @@ def make_env(env_id, epsilon,seed, rank, log_dir=None, allow_early_resets=True, 
         # env = TimeLimit(env, max_episode_steps=50)
     else:
         env = gym.make(env_id, reward_type='sparse')
-    # env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
-    env = FlattenDictWrapper(env,['latent_observation','latent_achieved_goal','latent_desired_goal'])
+    if env_id not in IMAGE_ENTRY_POINT.keys():
+        env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
+    else:
+        env = FlattenDictWrapper(env,['latent_observation','latent_achieved_goal','latent_desired_goal'])
     if env_id in PICK_ENTRY_POINT.keys() and kwargs['reward_type'] == 'dense':
         env = DoneOnSuccessWrapper(env, reward_offset=0.0)
     elif kwargs['reward_type'] in ('latent_distance','state_distance'):
         print('reward_type',kwargs['reward_type'])
         env = DoneOnSuccessWrapper(env, reward_offset=0.0)
-
     else:
         env = DoneOnSuccessWrapper(env)
+        print('reward_offset=1.0')
     if log_dir is not None:
         env = Monitor(env, os.path.join(log_dir, str(rank) + ".monitor.csv"), allow_early_resets=allow_early_resets,
                       info_keywords=('is_success',))
@@ -199,7 +202,7 @@ def arg_parse():
     parser.add_argument('--sil_clip', default=0.2, type=float)
     parser.add_argument('--start_augment', type=float, default=0)
     parser.add_argument('--reuse_times', default=1, type=int)
-    parser.add_argument('--reward_type', default="sparse", type=str)
+    parser.add_argument('--reward_type', default="state_distance", type=str)
     parser.add_argument('--n_object', default=2, type=int)
     parser.add_argument('--curriculum', action="store_true", default=False)
     parser.add_argument('--play', action="store_true", default=False)
@@ -294,6 +297,7 @@ def eval_img_model(eval_env, model):
         ep_reward = 0.0
         ep_success = 0.0
         obs = env.reset()
+        # print('obs',obs.shape)
         # goal_dim = env.goal.shape[0]
         # if goal_dim > 3:
         #     while (np.argmax(obs[-goal_dim + 3:]) != 0):
@@ -351,6 +355,7 @@ def stack_eval_model(eval_env, model, init_on_table=False):
         ep_reward = 0.0
         ep_success = 0.0
         obs = env.reset()
+        # print('obs',obs.shape)
         while env.current_nobject != env.n_object or (hasattr(env, 'task_mode') and env.task_mode != 1):
             obs = env.reset()
         goal_dim = env.goal.shape[0]
@@ -440,7 +445,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
                           n_object=n_object, )
     elif env_name in IMAGE_ENTRY_POINT.keys():
         env_kwargs = dict(max_episode_steps=100,
-                          reward_type='state_distance')
+                          reward_type=reward_type)
+        print(reward_type)
     else:
         raise NotImplementedError("%s not implemented" % env_name)
 
@@ -489,6 +495,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
             n_steps = 8192 # 1024
         else:
             n_steps = 2048
+        print('n_steps',n_steps)
         policy = 'MlpPolicy'
         from utils.attention_policy import AttentionPolicy
         register_policy('AttentionPolicy', AttentionPolicy)
