@@ -153,7 +153,7 @@ class ImageEnv(ProxyEnv, MultitaskEnv):
         return self._update_obs(self.wrapped_env._get_obs())
 
     def get_obs(self):
-        return self._update_obs(self.wrapped_env._get_obs())
+        return self._update_obs(self.wrapped_env.get_obs())
 
     def _update_obs(self, obs):
         img_obs = self._get_flat_img()

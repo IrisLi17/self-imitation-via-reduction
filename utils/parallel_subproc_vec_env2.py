@@ -73,12 +73,9 @@ class ParallelSubprocVecEnv(VecEnv):
     """
     Creates a multiprocess vectorized wrapper for multiple environments, distributing each environment to its own
     process, allowing significant speed up when the environment is computationally complex.
-
     For performance reasons, if your environment is not IO bound, the number of environments should not exceed the
     number of logical cores on your CPU.
-
     .. warning::
-
         Only 'forkserver' and 'spawn' start methods are thread-safe,
         which is important when TensorFlow sessions or other non thread-safe
         libraries are used in the parent (see issue #217). However, compared to
@@ -86,7 +83,6 @@ class ParallelSubprocVecEnv(VecEnv):
         global variables. With those methods, users must wrap the code in an
         ``if __name__ == "__main__":`` block.
         For more information, see the multiprocessing documentation.
-
     :param env_fns: ([Gym Environment]) Environments to run in subprocesses
     :param start_method: (str) method used to start the subprocesses.
            Must be one of the methods returned by multiprocessing.get_all_start_methods().
@@ -205,7 +201,6 @@ class ParallelSubprocVecEnv(VecEnv):
         """
         Get the connection object needed to communicate with the wanted
         envs that are in subprocesses.
-
         :param indices: (None,int,Iterable) refers to indices of envs.
         :return: ([multiprocessing.Connection]) Connection object to communicate between processes.
         """
@@ -216,7 +211,6 @@ class ParallelSubprocVecEnv(VecEnv):
 def _flatten_obs(obs, space):
     """
     Flatten observations, depending on the observation space.
-
     :param obs: (list<X> or tuple<X> where X is dict<ndarray>, tuple<ndarray> or ndarray) observations.
                 A list or tuple of observations, one per environment.
                 Each environment observation may be a NumPy array, or a dict or tuple of NumPy arrays.

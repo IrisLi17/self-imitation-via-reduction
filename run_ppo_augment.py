@@ -6,7 +6,7 @@ from stable_baselines.common.vec_env import SubprocVecEnv
 from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
 from gym.wrappers import FlattenDictWrapper
 from stable_baselines.common.policies import register_policy
-
+import utils.torch.pytorch_util as ptu
 from push_wall_obstacle import FetchPushWallObstacleEnv_v4
 from masspoint_env import MasspointPushSingleObstacleEnv_v2, MasspointPushDoubleObstacleEnv
 from masspoint_env import MasspointMazeEnv, MasspointSMazeEnv
@@ -286,7 +286,7 @@ def eval_model(eval_env, model):
         n_episode += 1
     return np.mean(ep_successes)
 
-def eval_img_model(eval_env, model):
+def eval_img_model(eval_env, model,vae_model):
     env = eval_env
     # if hasattr(env.unwrapped, 'random_ratio'):
     #     assert abs(env.unwrapped.random_ratio) < 1e-4
@@ -304,7 +304,11 @@ def eval_img_model(eval_env, model):
         #         obs = env.reset()
         done = False
         while not done:
-            action, _ = model.predict(obs)
+            obs_reshape = obs.reshape(-1,vae_model.imlength)
+            obs_latent_var,_ = vae_model.encode(ptu.np_to_var(obs_reshape))
+            obs_latent = ptu.get_numpy(obs_latent_var)
+            obs_latent_reshape = obs_latent.reshape(16*3,)
+            action, _ = model.predict(obs_latent_reshape)
             obs, reward, done, info = env.step(action)
             ep_reward += reward
             ep_success += info['is_success']
@@ -481,6 +485,15 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
     eval_env = make_env(env_id=env_name,epsilon=epsilon, seed=seed, rank=0, kwargs=eval_env_kwargs)
     # eval_env.vae.cuda()
     print(eval_env)
+    vae_file = open(VAE_LOAD_PATH[env_name], 'rb')
+    vae_model = pickle.load(vae_file)
+    import utils.torch.pytorch_util as ptu
+    # if rank > 3:
+    #     ptu.set_device(1)
+    # else:
+    ptu.set_device(0)
+    ptu.set_gpu_mode(True)
+
     # print(eval_env.goal.shape[0], eval_env.n_object)
     if not play:
         os.makedirs(log_dir, exist_ok=True)
@@ -530,7 +543,7 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play,epsilon, expor
             if 'FetchStack' in env_name:
                 mean_eval_reward = stack_eval_model(eval_env, _locals["self"])
             elif env_name in IMAGE_ENTRY_POINT.keys():
-                mean_eval_reward = eval_img_model(eval_env,_locals["self"])
+                mean_eval_reward = eval_img_model(eval_env,_locals["self"],vae_model)
             else:
                 mean_eval_reward = eval_model(eval_env, _locals["self"])
             log_eval(num_update, mean_eval_reward)

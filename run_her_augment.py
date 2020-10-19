@@ -3,6 +3,8 @@ from stable_baselines.sac.policies import FeedForwardPolicy as SACPolicy
 from stable_baselines.common.policies import register_policy
 from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
 from utils.parallel_subproc_vec_env2 import ParallelSubprocVecEnv as ParallelSubprocVecEnv2
+from utils.subproc_vec_vae_env import ParallelVAESubprocVecEnv
+from utils.subproc_vec_vae_env2 import ParallelVAESubprocVecEnv as ParallelVAESubprocVecEnv2
 from gym.wrappers import FlattenDictWrapper
 import gym
 import matplotlib.pyplot as plt
@@ -21,10 +23,11 @@ import os, time
 import imageio
 import csv,pickle
 import argparse
+import utils.torch.pytorch_util as ptu
+from run_ppo_augment import stack_eval_model, eval_model, log_eval, egonav_eval_model
+from utils.wrapper import DoneOnSuccessWrapper,VAEWrappedEnv,LatentWrappedEnv
+from sklearn.neighbors import KNeighborsRegressor
 import numpy as np
-from run_ppo_augment import stack_eval_model, eval_model, log_eval,eval_img_model, egonav_eval_model
-from utils.wrapper import DoneOnSuccessWrapper,VAEWrappedEnv
-
 try:
     from mpi4py import MPI
 except ImportError:
@@ -102,6 +105,49 @@ VAE_LOAD_PATH = {
 # ptu.set_device(0)
 # ptu.set_gpu_mode(True)
 # VAE_MODEL.cuda()
+def eval_img_model(eval_env, model,vae_model,regressor=None):
+    env = eval_env
+    n_episode = 0
+    ep_rewards = []
+    ep_successes = []
+    while n_episode < 20:
+        ep_reward = 0.0
+        ep_success = 0.0
+        obs = env.reset()
+        obs_reshape = obs.reshape(-1, vae_model.imlength)
+        obs_latent_var, _ = vae_model.encode(ptu.np_to_var(obs_reshape))
+        obs_latent = ptu.get_numpy(obs_latent_var)
+        obs_latent_reshape = obs_latent.reshape(16 * 3, )
+
+        done = False
+        step = 0
+        while not done:
+            step +=1
+            action, _ = model.predict(obs_latent_reshape)
+            obs, reward, done, info = env.step(action)
+            obs_reshape = obs.reshape(-1, vae_model.imlength)
+            obs_latent_var, _ = vae_model.encode(ptu.np_to_var(obs_reshape))
+            obs_latent = ptu.get_numpy(obs_latent_var)
+            obs_latent_reshape = obs_latent.reshape(16 * 3, )
+            obs_latent_input = obs_latent.reshape(3,16)
+            state = regressor.predict(obs_latent_input)
+            achieved_state = state[1]
+            desired_state = state[2]
+            if achieved_state.shape[0] == 4:
+                puck_dist = achieved_state[:2]-desired_state[:2]
+                hand_dist = achieved_state[-2:]-desired_state[-2:]
+                dist = np.linalg.norm(puck_dist)+np.linalg.norm(hand_dist)
+            else:
+                dist = np.linalg.norm(achieved_state-desired_state)
+            reward = -1.0*(dist>= 0.06) + 1.0
+            info['is_success'] = dist< 0.06
+            done = done or info['is_success']
+            ep_reward += reward
+            ep_success += info['is_success']
+        ep_rewards.append(ep_reward)
+        ep_successes.append(ep_success)
+        n_episode += 1
+    return np.mean(ep_successes)
 
 def create_image_84_sawyer_pnr_arena_train_env_big_v0():
     from multiworld.core.image_env import ImageEnv
@@ -129,7 +175,7 @@ def create_image_48_pointmass_uwall_train_env_big_v0():
         non_presampled_goal_img_is_garbage=False,
     )
 
-def make_env(env_id, seed, rank,epsilon=1.0, log_dir=None, allow_early_resets=True, kwargs=None):
+def make_env(env_id, seed, rank,epsilon=1.0, log_dir=None, allow_early_resets=True, kwargs=None,regressor=None):
     """
     Create a wrapped, monitored gym.Env for MuJoCo.
 
@@ -146,6 +192,7 @@ def make_env(env_id, seed, rank,epsilon=1.0, log_dir=None, allow_early_resets=Tr
         max_episode_steps = 100
         if env_id in IMAGE_ENTRY_POINT.keys():
             if IMAGE_ENTRY_POINT[env_id] == 'ImagePushAndReach':
+                imsize = 84
                 gym.register(
                     id=env_id,
                     entry_point=create_image_84_sawyer_pnr_arena_train_env_big_v0,
@@ -156,6 +203,7 @@ def make_env(env_id, seed, rank,epsilon=1.0, log_dir=None, allow_early_resets=Tr
                     },
                 )
             elif IMAGE_ENTRY_POINT[env_id] =='ImageUWall':
+                imsize = 48
                 gym.register(
                     id=env_id,
                     entry_point=create_image_48_pointmass_uwall_train_env_big_v0,
@@ -167,20 +215,18 @@ def make_env(env_id, seed, rank,epsilon=1.0, log_dir=None, allow_early_resets=Tr
                     },
                 )
             env = gym.make(env_id)
-            # env.wrapped_env.reward_type='sparse'
 
-            # env = VAEWrappedEnv(env,vae_model)
-            # env_name = 'Image48PointmassUWallTrainEnvBig-v0'
-            vae_file = open(VAE_LOAD_PATH[env_id], 'rb')
-            vae_model = pickle.load(vae_file)
-            import utils.torch.pytorch_util as ptu
-            # if rank > 3:
-            #     ptu.set_device(1)
-            # else:
-            ptu.set_device(0)
-            ptu.set_gpu_mode(True)
-            env = VAEWrappedEnv(env,vae_model,epsilon=epsilon,use_vae_goals=False,imsize=48,reward_params=dict(type='state_distance'))
-
+            # vae_file = open(VAE_LOAD_PATH[env_id], 'rb')
+            # vae_model = pickle.load(vae_file)
+            # import utils.torch.pytorch_util as ptu
+            # # if rank > 3:
+            # #     ptu.set_device(1)
+            # # else:
+            # ptu.set_device(0)
+            # ptu.set_gpu_mode(True)
+            # env = VAEWrappedEnv(env,vae_model,epsilon=epsilon,use_vae_goals=False,imsize=48,reward_params=dict(type='state_distance'))
+            epsilon = env.indicator_threshold
+            env = LatentWrappedEnv(env,epsilon=epsilon,use_vae_goals=False,imsize=imsize,reward_params=dict(type='state_sparse'))
             # env.wrapped_env.reward_type='wrapped_env'
             # env.reward_type=kwargs['reward_type']
             # import ipdb;ipdb.set_trace()
@@ -209,6 +255,9 @@ def make_env(env_id, seed, rank,epsilon=1.0, log_dir=None, allow_early_resets=Tr
         print('reward_type',kwargs['reward_type'])
         env = DoneOnSuccessWrapper(env, reward_offset=0.0)
 
+    elif env_id in IMAGE_ENTRY_POINT.keys():
+        env = env
+        print('env_type',env)
     else:
         env = DoneOnSuccessWrapper(env)
     if log_dir is not None:
@@ -241,7 +290,20 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     set_global_seeds(seed)
 
     model_class = SAC_augment  # works also with SAC, DDPG and TD3
+    vae_file = open(VAE_LOAD_PATH[env_name], 'rb')
+    vae_model = pickle.load(vae_file)
+    vae_model.cuda()
+    import utils.torch.pytorch_util as ptu
+    ptu.set_device(0)
+    ptu.set_gpu_mode(True)
+    ## load knn regressor
 
+
+    train_latent = np.load('sawyer_dataset_latents.npy')
+    train_state = np.load('sawyer_dataset_states.npy')
+    regressor = KNeighborsRegressor()
+    regressor.fit(train_latent, train_state)
+    print('regressor fit finished!')
     # env_kwargs = dict(random_box=True,
     #                   random_ratio=random_ratio,
     #                   random_gripper=True,
@@ -251,7 +313,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     #                   n_object=n_object, )
     if env_name in IMAGE_ENTRY_POINT.keys():
         env_kwargs = dict(max_episode_steps=100,
-                          reward_type='state_distance')
+                          reward_type=reward_type)
     else:
         env_kwargs = get_env_kwargs(env_name, random_ratio=random_ratio, sequential=sequential,
                                 reward_type=reward_type, n_object=n_object)
@@ -259,8 +321,12 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
 
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
-
-    env = ParallelSubprocVecEnv2([make_thunk(i) for i in range(n_workers)])
+    if env_name in IMAGE_ENTRY_POINT.keys():
+        env = ParallelVAESubprocVecEnv2([make_thunk(i) for i in range(n_workers)],env_id=env_name,log_dir=log_path,regressor=regressor)
+    else:
+        env = ParallelSubprocVecEnv2([make_thunk(i) for i in range(n_workers)])
+    # env_test = env.env_fns
+    # print('paralel_env',env_test)
     # if n_workers > 1:
     #     # env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
     # else:
@@ -268,8 +334,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
 
     def make_thunk_aug(rank):
         if env_name in IMAGE_ENTRY_POINT.keys():
-
-            return lambda: FlattenDictWrapper(make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs),['latent_observation','latent_achieved_goal','latent_desired_goal'])
+            # return lambda: make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs),['observation','achieved_goal','desired_goal']
+            #
+            return lambda: FlattenDictWrapper(make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs),['observation','achieved_goal','desired_goal'])
         else:
             print('using FlattenDictWrapper')
             return lambda: FlattenDictWrapper(make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs),
@@ -279,7 +346,11 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     del aug_env_kwargs['max_episode_steps']
     aug_env_name = env_name.split('-')[0] + 'Unlimit-' + env_name.split('-')[1]
     # aug_env = make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs)
-    aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_workers)])
+    if env_name in IMAGE_ENTRY_POINT.keys():
+        aug_env = ParallelVAESubprocVecEnv([make_thunk_aug(i) for i in range(n_workers)],env_id=env_name,log_dir=log_path,regressor=regressor)
+
+    else:
+        aug_env = ParallelSubprocVecEnv([make_thunk_aug(i) for i in range(n_workers)])
 
     if os.path.exists(os.path.join(logger.get_dir(), 'eval.csv')):
         os.remove(os.path.join(logger.get_dir(), 'eval.csv'))
@@ -292,7 +363,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         eval_env = FlattenDictWrapper(eval_env, ['observation', 'achieved_goal', 'desired_goal'])
 
     else :
-        eval_env = FlattenDictWrapper(eval_env, ['latent_observation', 'latent_achieved_goal', 'latent_desired_goal'])
+        # changing the dict for eval_env
+        eval_env = FlattenDictWrapper(eval_env, ['observation', 'achieved_goal', 'desired_goal'])
 
 
     if not play:
@@ -363,7 +435,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                                                               goal_idx=0)
                         log_eval(_locals['self'].num_timesteps, mean_eval_reward2, file_name="eval_box.csv")
                     elif env_name in IMAGE_ENTRY_POINT.keys():
-                        mean_eval_reward = eval_img_model(eval_env,_locals["self"])
+                        mean_eval_reward = eval_img_model(eval_env,_locals["self"],vae_model,regressor=regressor)
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
                     log_eval(_locals['self'].num_timesteps, mean_eval_reward)
@@ -396,9 +468,9 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             policy_kwargs["layer_norm"] = True
         elif policy == "CustomSACPolicy":
             policy_kwargs["layer_norm"] = True
-        if rank == 0:
-            print('train_kwargs', train_kwargs)
-            print('policy_kwargs', policy_kwargs)
+        # if rank == 0:
+            # print('train_kwargs', train_kwargs)
+            # print('policy_kwargs', policy_kwargs)
         # Wrap the model
         model = HER_HACK(policy=policy, env=env, model_class=model_class,env_id=env_name, n_sampled_goal=4,
                          start_augment_time=start_augment,
@@ -407,7 +479,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                          policy_kwargs=policy_kwargs,
                          verbose=1,
                          **train_kwargs)
-        print(model.get_parameter_list())
+        # print(model.get_parameter_list())
 
         # Train the model
         model.learn(num_timesteps, seed=seed, callback=callback, log_interval=10)

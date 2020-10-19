@@ -326,6 +326,35 @@ class Point2DEnv(MultitaskEnv, Serializable):
             img = (-r + b)
             return img
 
+    def get_image_with_goal(self,render_goal=True,width=None, height=None,):
+        """Returns a black and white image"""
+        if width is not None:
+            if width != height:
+                raise NotImplementedError()
+            if width != self.render_size:
+                self.drawer = PygameViewer(
+                    screen_width=width,
+                    screen_height=height,
+                    x_bounds=(-self.boundary_dist - self.ball_radius, self.boundary_dist + self.ball_radius),
+                    y_bounds=(-self.boundary_dist - self.ball_radius, self.boundary_dist + self.ball_radius),
+                    render_onscreen=self.render_onscreen,
+                )
+                self.render_size = width
+
+        if render_goal:
+            self.render_target=True
+        else:
+            self.render_target=False
+
+        self.render()
+        img = self.drawer.get_image()
+        if self.images_are_rgb:
+            return img.transpose((1, 0, 2))
+        else:
+            r, g, b = img[:, :, 0], img[:, :, 1], img[:, :, 2]
+            img = (-r + b)
+            return img
+
     def update_subgoals(self, subgoals, subgoals_reproj=None, subgoal_v_vals=None):
         self.subgoals = subgoals
 

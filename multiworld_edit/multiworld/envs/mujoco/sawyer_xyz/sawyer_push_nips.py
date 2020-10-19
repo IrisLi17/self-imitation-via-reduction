@@ -265,6 +265,9 @@ class SawyerPushAndReachXYEnv(MujocoEnv, Serializable, MultitaskEnv):
         state_distance_l2 = np.linalg.norm(state_diff, ord=2)
 
         return dict(
+            is_success = float(
+                hand_distance+puck_distance < self.indicator_threshold
+            ),
             hand_distance=hand_distance, hand_distance_l2=hand_distance_l2,
             puck_distance=puck_distance, puck_distance_l2=puck_distance_l2,
             touch_distance=touch_distance, touch_distance_l2=touch_distance_l2,
@@ -308,6 +311,8 @@ class SawyerPushAndReachXYEnv(MujocoEnv, Serializable, MultitaskEnv):
             proprio_desired_goal=self._state_goal[:2],
             proprio_achieved_goal=flat_obs[:2],
         )
+    def get_obs(self):
+        return self._get_obs()
 
     def compute_rewards(self, actions, obs, prev_obs=None, reward_type=None):
         if reward_type is None:
@@ -571,8 +576,8 @@ class SawyerPushAndReachXYEnv(MujocoEnv, Serializable, MultitaskEnv):
         base_state = copy.deepcopy(base_state)
         return base_state
 
-    def set_state(self,state):
-        base_state, goal = state
+    def set_state_wrapper(self,state):
+        base_state = state
         joint_state, mocap_state = base_state
         self.sim.set_state(joint_state)
         mocap_pos, mocap_quat = mocap_state
