@@ -3,6 +3,8 @@ from stable_baselines.sac.policies import FeedForwardPolicy as SACPolicy
 from stable_baselines.common.policies import register_policy
 from stable_baselines.common.vec_env import SubprocVecEnv
 from utils.parallel_subproc_vec_env2 import ParallelSubprocVecEnv
+import pickle
+from utils.subproc_vec_vae_env2 import ParallelVAESubprocVecEnv
 from baselines import HER_HACK, SAC_parallel
 from utils.wrapper import DoneOnSuccessWrapper
 from gym.wrappers import FlattenDictWrapper
@@ -20,7 +22,9 @@ import imageio
 import argparse
 import numpy as np
 from run_ppo_augment import stack_eval_model, eval_model, log_eval, egonav_eval_model
-
+import utils.torch.pytorch_util as ptu
+from utils.wrapper import LatentWrappedEnv
+from sklearn.neighbors import KNeighborsRegressor
 try:
     from mpi4py import MPI
 except ImportError:
@@ -42,7 +46,21 @@ ENTRY_POINT = {
     }
 
 hard_test = False
+IMAGE_ENTRY_POINT = {
+    'Image84SawyerPushAndReachArenaTrainEnvBig-v0':  'ImagePushAndReach',
+    'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0':  'ImagePushAndReach',
+    'Image48PointmassUWallTrainEnvBig-v0':'ImageUWall',
+    'Image48PointmassUWallTrainEnvBigUnlimit-v0': 'ImageUWall',
 
+}
+VAE_LOAD_PATH = {
+    'Image84SawyerPushAndReachArenaTrainEnvBig-v0':'/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
+    'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
+
+    'Image48PointmassUWallTrainEnvBig-v0':'/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
+    'Image48PointmassUWallTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
+
+}
 
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -60,6 +78,8 @@ def arg_parse():
     parser.add_argument('--random_ratio', type=float, default=1.0)
     parser.add_argument('--gamma', type=float, default=0.95)
     parser.add_argument('--reward_type', type=str, default='sparse')
+    parser.add_argument('--reward_object',type=int,default=1)
+    parser.add_argument('--epsilon',type=float,default=0.06)
     parser.add_argument('--n_object', type=int, default=2)
     parser.add_argument('--priority', action="store_true", default=False)
     parser.add_argument('--curriculum', action="store_true", default=False)
@@ -76,7 +96,75 @@ def configure_logger(log_path, **kwargs):
         logger.configure(log_path)
     else:
         logger.configure(**kwargs)
+### evaluation model part
+def eval_img_model(eval_env, model,vae_model,regressor=None):
+    env = eval_env
+    n_episode = 0
+    ep_rewards = []
+    ep_successes = []
+    while n_episode < 20:
+        ep_reward = 0.0
+        ep_success = 0.0
+        obs = env.reset()
+        obs_reshape = obs.reshape(-1, vae_model.imlength)
+        obs_latent_var, _ = vae_model.encode(ptu.np_to_var(obs_reshape))
+        obs_latent = ptu.get_numpy(obs_latent_var)
+        obs_latent_reshape = obs_latent.reshape(16 * 3, )
+        done = False
+        step = 0
+        while not done:
+            step +=1
+            action, _ = model.predict(obs_latent_reshape)
+            obs, reward, done, info = env.step(action)
+            obs_reshape = obs.reshape(-1, vae_model.imlength)
+            obs_latent_var, _ = vae_model.encode(ptu.np_to_var(obs_reshape))
+            obs_latent = ptu.get_numpy(obs_latent_var)
+            obs_latent_reshape = obs_latent.reshape(16 * 3, )
+            obs_latent_input = obs_latent.reshape(3,16)
+            state = regressor.predict(obs_latent_input)
+            achieved_state = state[1]
+            desired_state = state[2]
+            if achieved_state.shape[0] == 4:
+                puck_dist = achieved_state[:2]-desired_state[:2]
+                hand_dist = achieved_state[-2:]-desired_state[-2:]
+                dist = np.linalg.norm(puck_dist)+np.linalg.norm(hand_dist)
+            else:
+                dist = np.linalg.norm(achieved_state-desired_state)
+            reward = -1.0*(dist>= 0.06) + 1.0
+            info['is_success'] = dist< 0.06
+            done = done or info['is_success']
+            ep_reward += reward
+            ep_success += info['is_success']
+        ep_rewards.append(ep_reward)
+        ep_successes.append(ep_success)
+        n_episode += 1
+    return np.mean(ep_successes)
 
+def create_image_84_sawyer_pnr_arena_train_env_big_v0():
+    from multiworld.core.image_env import ImageEnv
+    from multiworld.envs.mujoco.cameras import sawyer_pusher_camera_tdm_v4
+
+    wrapped_env = gym.make('SawyerPushAndReachArenaTrainEnvBig-v0')
+    return ImageEnv(
+        wrapped_env,
+        84,
+        init_camera=sawyer_pusher_camera_tdm_v4,
+        transpose=True,
+        normalize=True,
+        reward_type='sparse'
+    )
+def create_image_48_pointmass_uwall_train_env_big_v0():
+    from multiworld.core.image_env import ImageEnv
+
+    wrapped_env = gym.make('PointmassUWallTrainEnvBig-v0')
+    return ImageEnv(
+        wrapped_env,
+        48,
+        init_camera=None,
+        transpose=True,
+        normalize=True,
+        non_presampled_goal_img_is_garbage=False,
+    )
 
 def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=None):
     """
@@ -87,7 +175,49 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     :param allow_early_resets: (bool) allows early reset of the environment
     :return: (Gym Environment) The mujoco environment
     """
-    if env_id in ENTRY_POINT.keys():
+    max_episode_steps = kwargs['max_episode_steps']
+    if env_id in IMAGE_ENTRY_POINT.keys():
+        if IMAGE_ENTRY_POINT[env_id] == 'ImagePushAndReach':
+            imsize = 84
+            gym.register(
+                id=env_id,
+                entry_point=create_image_84_sawyer_pnr_arena_train_env_big_v0,
+                max_episode_steps=max_episode_steps,
+                tags={
+                    'git-commit-hash': 'e5c11ac',
+                    'author': 'Soroush'
+                },
+            )
+        elif IMAGE_ENTRY_POINT[env_id] == 'ImageUWall':
+            imsize = 48
+            gym.register(
+                id=env_id,
+                entry_point=create_image_48_pointmass_uwall_train_env_big_v0,
+                max_episode_steps=max_episode_steps,
+
+                tags={
+                    'git-commit-hash': 'e5c11ac',
+                    'author': 'Soroush'
+                },
+            )
+        env = gym.make(env_id)
+
+        # vae_file = open(VAE_LOAD_PATH[env_id], 'rb')
+        # vae_model = pickle.load(vae_file)
+        # import utils.torch.pytorch_util as ptu
+        # # if rank > 3:
+        # #     ptu.set_device(1)
+        # # else:
+        # ptu.set_device(0)
+        # ptu.set_gpu_mode(True)
+        # env = VAEWrappedEnv(env,vae_model,epsilon=epsilon,use_vae_goals=False,imsize=48,reward_params=dict(type='state_distance'))
+        epsilon = kwargs['reward_threshold']
+        env = LatentWrappedEnv(env, epsilon=epsilon, use_vae_goals=False, imsize=imsize,
+                               reward_params=dict(type=kwargs['reward_type'], object=kwargs['reward_object']))
+        # env.wrapped_env.reward_type='wrapped_env'
+        # env.reward_type=kwargs['reward_type']
+        # import ipdb;ipdb.set_trace()
+    elif env_id in ENTRY_POINT.keys():
         # env = ENTRY_POINT[env_id](**kwargs)
         # print(env)
         # from gym.wrappers.time_limit import TimeLimit
@@ -109,6 +239,8 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
             or ('FetchPushWallObstacle' in env_id and kwargs['reward_type'] != 'sparse') \
             or ('MasspointPushDoubleObstacle' in env_id and kwargs['reward_type'] != 'sparse'):
         env = DoneOnSuccessWrapper(env, 0.0)
+    elif env_id in IMAGE_ENTRY_POINT.keys():
+        env = env
     else:
         env = DoneOnSuccessWrapper(env)
     if log_dir is not None:
@@ -117,8 +249,11 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     return env
 
 
-def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None, n_object=None):
-    if env_id == 'FetchStack-v1' or env_id == 'FetchStack-v2':
+def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None, n_object=None,reward_object=None,reward_threshold=None):
+    if env_id  in IMAGE_ENTRY_POINT.keys():
+        return dict(max_episode_steps=100,
+                          reward_type=reward_type,reward_object=reward_object,reward_threshold=reward_threshold)
+    elif env_id == 'FetchStack-v1' or env_id == 'FetchStack-v2':
         return dict(random_box=True,
                     random_ratio=random_ratio,
                     random_gripper=True,
@@ -148,7 +283,7 @@ def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None,
 
 
 def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
-         export_gif, gamma, random_ratio, action_noise, reward_type, n_object,
+         export_gif, gamma, random_ratio, action_noise, reward_type, reward_object,n_object,epsilon,
          priority, learning_rate, num_workers, policy, curriculum, sequential,
          sil, sil_coef):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
@@ -164,7 +299,19 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     # model_class = SAC  # works also with SAC, DDPG and TD3
     # model_class = SAC_parallel if num_workers > 1 else SAC
     model_class = SAC_parallel
+    vae_file = open(VAE_LOAD_PATH[env_name], 'rb')
+    vae_model = pickle.load(vae_file)
+    vae_model.cuda()
+    import utils.torch.pytorch_util as ptu
+    ptu.set_device(0)
+    ptu.set_gpu_mode(True)
+    ## load knn regressor
 
+    train_latent = np.load('sawyer_dataset_latents.npy')
+    train_state = np.load('sawyer_dataset_states.npy')
+    regressor = KNeighborsRegressor()
+    regressor.fit(train_latent, train_state)
+    print('regressor fit finished!')
     # if env_name in ENTRY_POINT.keys():
     #     kwargs = dict(penaltize_height=False, heavy_obstacle=heavy_obstacle, random_gripper=random_gripper)
     #     print(kwargs)
@@ -182,11 +329,15 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     #                   reward_type=reward_type,
     #                   n_object=n_object, )
     env_kwargs = get_env_kwargs(env_name, random_ratio=random_ratio, sequential=sequential,
-                                reward_type=reward_type, n_object=n_object)
+                                reward_type=reward_type, n_object=n_object,reward_object=reward_object,reward_threshold=epsilon)
     # env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
-    env = ParallelSubprocVecEnv([make_thunk(i) for i in range(n_workers)])
+    if env_name in IMAGE_ENTRY_POINT.keys():
+        env = ParallelVAESubprocVecEnv([make_thunk(i) for i in range(n_workers)],env_id=env_name,log_dir=log_path,regressor=regressor)
+
+    else:
+        env = ParallelSubprocVecEnv([make_thunk(i) for i in range(n_workers)])
     # if n_workers > 1:
     #     # env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
     # else:
@@ -256,6 +407,12 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                 train_kwargs['gamma'] = 0.99
                 train_kwargs['batch_size'] = 256
                 train_kwargs['random_exploration'] = 0.2
+            elif env_name in IMAGE_ENTRY_POINT.keys():
+                train_kwargs['ent_coef'] = "auto"
+                train_kwargs['tau'] = 0.001
+                train_kwargs['gamma'] = 0.98
+                train_kwargs['batch_size'] = 256
+                train_kwargs['random_exploration'] = 0.1
             policy_kwargs = {}
 
             def callback(_locals, _globals):
@@ -267,11 +424,14 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                         mean_eval_reward = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"])
                         mean_eval_reward2 = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"], goal_idx=0)
                         log_eval(_locals['self'].num_timesteps, mean_eval_reward2, file_name="eval_box.csv")
+                    elif env_name in IMAGE_ENTRY_POINT.keys():
+                        mean_eval_reward = eval_img_model(eval_env,_locals["self"],vae_model,regressor=regressor)
+
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
                     log_eval(_locals['self'].num_timesteps, mean_eval_reward)
-                if _locals['step'] % int(2e4) == 0:
-                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(2e4)))
+                if _locals['step'] % int(2e3) == 0:
+                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(2e3)))
                     model.save(model_path)
                     print('model saved to', model_path)
                 return True
@@ -304,11 +464,11 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         #     policy = 'LnMlpPolicy'
         # else:
         #     policy = 'MlpPolicy'
-        if rank == 0:
-            print('train_kwargs', train_kwargs)
-            print('policy_kwargs', policy_kwargs)
+        # if rank == 0:
+        #     print('train_kwargs', train_kwargs)
+        #     print('policy_kwargs', policy_kwargs)
         # Wrap the model
-        model = HER_HACK(policy, env, model_class, n_sampled_goal=4,
+        model = HER_HACK(policy=policy, env=env, model_class=model_class, env_id=env_name,n_sampled_goal=4,
                          goal_selection_strategy=goal_selection_strategy,
                          num_workers=num_workers,
                          policy_kwargs=policy_kwargs,
@@ -322,95 +482,232 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
         if rank == 0:
             model.save(os.path.join(log_dir, 'final'))
 
+
     # WARNING: you must pass an env
     # or wrap your environment with HERGoalEnvWrapper to use the predict method
     if play and rank == 0:
         assert load_path is not None
-        model = HER_HACK.load(load_path, env=env)
-
-        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-        obs = env.reset()
-        if 'FetchStack' in env_name:
-            env.env_method('set_task_array', [[(env.get_attr('n_object')[0], 0)]])
-            obs = env.reset()
-            while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
-                obs = env.reset()
-        elif 'FetchPushWallObstacle' in env_name:
-            while not (obs['observation'][0][4] > 0.7 and obs['observation'][0][4] < 0.8):
-                obs = env.reset()
-            env.env_method('set_goal', [np.array([1.18, 0.8, 0.425, 1, 0])])
-            obs = env.env_method('get_obs')
-            obs = {'observation': obs[0]['observation'][None],
-                    'achieved_goal': obs[0]['achieved_goal'][None],
-                    'desired_goal': obs[0]['desired_goal'][None]}
-            # obs[0] = np.concatenate([obs[0][key] for key in ['observation', 'achieved_goal', 'desired_goal']])
-        elif 'MasspointPushDoubleObstacle' in env_name or 'FetchPushWallObstacle' in env_name:
-            while np.argmax(obs['desired_goal'][0][3:]) != 0:
-                obs = env.reset()
-        elif 'MasspointMaze-v2' in env_name:
-            while obs['observation'][0][0] < 3 or obs['observation'][0][1] < 3:
-                obs = env.reset()
-            env.env_method('set_goal', [np.array([1., 1., 0.15])])
-            obs = env.env_method('get_obs')
-            obs = {'observation': obs[0]['observation'][None],
-                    'achieved_goal': obs[0]['achieved_goal'][None],
-                    'desired_goal': obs[0]['desired_goal'][None]}
-
-        print('goal', obs['desired_goal'][0], 'obs', obs['observation'][0])
+        model = HER_HACK.load(load_path,env=env,env_id=env_name)
+        print('load finished')
+        fig, ax = plt.subplots(1, 1, figsize=(16, 16))
+        # fig1,ax1 = plt.subplots(1,1,figsize=(8,8))
+        obs = env.env_method('reset')[0]
+        obs_img_obs = obs['image_observation']
+        obs_img_achieved_goal = obs['image_achieved_goal']
+        obs_img_desired_goal = obs['image_desired_goal']
+        obs_img = np.stack([obs_img_obs,obs_img_achieved_goal,obs_img_desired_goal])
+        obs_latent =ptu.get_numpy(vae_model.encode(ptu.np_to_var(obs_img))[0])
+        obs_latent = obs_latent.reshape(-1,vae_model.representation_size*3)
+        # sim_state = env.sim.get_state()
+        # print(sim_state)
+        # while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
+        #             obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
+        #     if not hard_test:
+        #         break
+        #     obs = env.reset()
+        # print('gripper_pos', obs['observation'][0:3])
+        # img = env.render(mode='rgb_array')
+        # img = env.env_method('get_image')[0]
+        img = env.env_method('get_image_plt')[0]
         episode_reward = 0.0
         images = []
         frame_idx = 0
-        num_episode = 0
-        for i in range(env_kwargs['max_episode_steps'] * 10):
-            img = env.render(mode='rgb_array')
-            ax.cla()
-            ax.imshow(img)
-            # ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
-            #              ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
-            tasks = ['pick and place', 'stack']
-            ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)
-                         + ', task: ' + tasks[np.argmax(obs['observation'][0][-2:])])
-            images.append(img)
-            action, _ = model.predict(obs, deterministic=True)
+        episode_idx = 0
+        #env.spec.max_episode_steps
+        for i in range(100 * 10):
+            # images.append(img)
+
+            action, _ = model.predict(obs_latent)
+            actions = np.repeat(action,32,axis=0)
+            print('action',action)
+
             # print('action', action)
             # print('obstacle euler', obs['observation'][20:23])
-            # adv, logpac = model.model.sess.run([model.model.step_ops[4] - model.model.step_ops[6], model.model.logpac_op],
-            #                           {model.model.observations_ph: np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']], axis=-1),
-            #                            model.model.actions_ph: action})
-            # print(adv, logpac)
-            obs, reward, done, _ = env.step(action)
+            # obs, reward, done, _ = env.env_method('step',actions)[0]
+            obs,rewards,dones,_ = env.step(actions)
+            reward = rewards[0]
+            done = dones[0]
+            state = obs['state_observation'][0]
+            goal = obs['state_desired_goal'][0]
+            hand_state=state[:2]
+            puck_state=state[-2:]
+            hand_goal=goal[:2]
+            puck_goal=goal[-2:]
+            hand_dist = round(np.linalg.norm(hand_state-hand_goal),3)
+            puck_dist = round(np.linalg.norm(puck_state-puck_goal),3)
+            obs_img_obs = obs['image_observation'][0]
+            obs_img_achieved_goal = obs['image_achieved_goal'][0]
+            obs_img_desired_goal = obs['image_desired_goal'][0]
+            obs_img = np.stack([obs_img_obs, obs_img_achieved_goal, obs_img_desired_goal])
+            obs_latent = ptu.get_numpy(vae_model.encode(ptu.np_to_var(obs_img))[0])
+            obs_latent = obs_latent.reshape(-1,vae_model.representation_size*3)
+            obs_latent_input = obs_latent.reshape(-1,16)
+
+            states = regressor.predict(obs_latent_input)
+            state_obs = states[0]
+            states_desired_goal = states[2]
+            state_diff = round(np.linalg.norm(state_obs - state),3)
+            goal_diff = round(np.linalg.norm(states_desired_goal - goal),3)
+            print('done',done)
             episode_reward += reward
             frame_idx += 1
+            ax.cla()
+            # img = env.render(mode='rgb_array')
+            img = env.env_method('get_image_plt')[0]
+            img_robot = (obs['image_observation'][0].reshape(3,vae_model.imsize,vae_model.imsize).transpose(1,2,0)*255).astype('uint8')
+            ax.imshow(img)
+            # ax1.imshow(img_robot)
+            # ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
+                         # ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
+            ax.set_title('ep:'+str(episode_idx)+',fp:'+str(frame_idx)+'rew:'
+                         +str(reward)+str(done)+'hand_d:'+str(hand_dist)+'puck_d:'+str(puck_dist)+'state_d'+str(state_diff)+'goal_d'+str(goal_diff))
+            # ax1.set_title('episode '+str(episode_idx)+',frame'+str(frame_idx)+' reward'+str(reward)+' done'+str(done))
+
             if export_gif:
-                plt.imsave(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % i), img)
-            else:
-                plt.pause(0.02)
+                plt.savefig(os.path.join(os.path.dirname(load_path),'tempimg' + str(i) + '.png'))
+                # plt.savefig('temp1img'+str(i) + '.png')
+            plt.pause(0.02)
+            ##plot another view from the viewer
+
+            ax.cla()
+            ax.imshow(img_robot)
+            ax.set_title(
+                'ep:' + str(episode_idx) + ',fp:' + str(frame_idx) + 'rew:' + str(reward) + str(done) + 'h_d:' + str(
+                    hand_dist) + 'p_d:' + str(puck_dist))
+
+            if export_gif:
+                plt.savefig(os.path.join(os.path.dirname(load_path),'temp1img' + str(i) + '.png'))
+            plt.pause(0.02)
+
+            # plt1.pause(0.02)
             if done:
+                obs = env.env_method('reset')[0]
+                obs_img_obs = obs['image_observation']
+                obs_img_achieved_goal = obs['image_achieved_goal']
+                obs_img_desired_goal = obs['image_desired_goal']
+                obs_img = np.stack([obs_img_obs, obs_img_achieved_goal, obs_img_desired_goal])
+                obs_latent = ptu.get_numpy(vae_model.encode(ptu.np_to_var(obs_img))[0])
+                obs_latent = obs_latent.reshape(-1,vae_model.representation_size*3)
+                # while not (obs['desired_goal'][0] < env.pos_wall[0] < obs['achieved_goal'][0] or
+                #             obs['desired_goal'][0] > env.pos_wall[0] > obs['achieved_goal'][0]):
+                #     if not hard_test:
+                #         break
+                #     obs = env.reset()
+                # print('gripper_pos', obs['observation'][0:3])
                 print('episode_reward', episode_reward)
-                obs = env.reset()
-                if 'FetchStack' in env_name:
-                    while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or \
-                                    env.get_attr('task_mode')[0] != 1:
-                        obs = env.reset()
-                elif 'MasspointPushDoubleObstacle' in env_name or 'FetchPushWallObstacle' in env_name:
-                    while np.argmax(obs['desired_goal'][0][3:]) != 0:
-                        obs = env.reset()
-                print('goal', obs['desired_goal'][0])
                 episode_reward = 0.0
                 frame_idx = 0
-                num_episode += 1
-                if num_episode >= 1:
-                    break
-        exit()
+                episode_idx += 1
         if export_gif:
-            os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
+            # #env.spec.max_episode_steps
+            # for i in range(100 * 10):
+            #     images.append(plt.imread('tempimg' + str(i) + '.png'))
+            #     os.remove('tempimg' + str(i) + '.png')
+            # imageio.mimsave(env_name + '.gif', images)
+            os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(
+                load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
                       os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
-            for i in range(env_kwargs['max_episode_steps'] * 10):
+            os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(
+                load_path) + '/temp1img%d.png -c:v libx264 -pix_fmt yuv420p ' +
+                      os.path.join(os.path.dirname(load_path), env_name+'viewer' + '.mp4'))
+            for i in range(100*10):
                 # images.append(plt.imread('tempimg' + str(i) + '.png'))
                 try:
-                    os.remove(os.path.join(os.path.dirname(load_path), 'tempimg' + str(i) + '.png'))
+                    os.remove( os.path.join(os.path.dirname(load_path),'tempimg' + str(i) + '.png'))
+                    os.remove(os.path.join(os.path.dirname(load_path), 'temp1img' + str(i) + '.png'))
+
                 except:
                     pass
+
+    # # WARNING: you must pass an env
+    # # or wrap your environment with HERGoalEnvWrapper to use the predict method
+    # if play and rank == 0:
+    #     assert load_path is not None
+    #     model = HER_HACK.load(load_path, env=env)
+    #
+    #     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+    #     obs = env.reset()
+    #     if 'FetchStack' in env_name:
+    #         env.env_method('set_task_array', [[(env.get_attr('n_object')[0], 0)]])
+    #         obs = env.reset()
+    #         while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or env.get_attr('task_mode')[0] != 1:
+    #             obs = env.reset()
+    #     elif 'FetchPushWallObstacle' in env_name:
+    #         while not (obs['observation'][0][4] > 0.7 and obs['observation'][0][4] < 0.8):
+    #             obs = env.reset()
+    #         env.env_method('set_goal', [np.array([1.18, 0.8, 0.425, 1, 0])])
+    #         obs = env.env_method('get_obs')
+    #         obs = {'observation': obs[0]['observation'][None],
+    #                 'achieved_goal': obs[0]['achieved_goal'][None],
+    #                 'desired_goal': obs[0]['desired_goal'][None]}
+    #         # obs[0] = np.concatenate([obs[0][key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+    #     elif 'MasspointPushDoubleObstacle' in env_name or 'FetchPushWallObstacle' in env_name:
+    #         while np.argmax(obs['desired_goal'][0][3:]) != 0:
+    #             obs = env.reset()
+    #     elif 'MasspointMaze-v2' in env_name:
+    #         while obs['observation'][0][0] < 3 or obs['observation'][0][1] < 3:
+    #             obs = env.reset()
+    #         env.env_method('set_goal', [np.array([1., 1., 0.15])])
+    #         obs = env.env_method('get_obs')
+    #         obs = {'observation': obs[0]['observation'][None],
+    #                 'achieved_goal': obs[0]['achieved_goal'][None],
+    #                 'desired_goal': obs[0]['desired_goal'][None]}
+    #
+    #     print('goal', obs['desired_goal'][0], 'obs', obs['observation'][0])
+    #     episode_reward = 0.0
+    #     images = []
+    #     frame_idx = 0
+    #     num_episode = 0
+    #     for i in range(env_kwargs['max_episode_steps'] * 10):
+    #         img = env.render(mode='rgb_array')
+    #         ax.cla()
+    #         ax.imshow(img)
+    #         # ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
+    #         #              ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
+    #         tasks = ['pick and place', 'stack']
+    #         ax.set_title('episode ' + str(num_episode) + ', frame ' + str(frame_idx)
+    #                      + ', task: ' + tasks[np.argmax(obs['observation'][0][-2:])])
+    #         images.append(img)
+    #         action, _ = model.predict(obs, deterministic=True)
+    #         # print('action', action)
+    #         # print('obstacle euler', obs['observation'][20:23])
+    #         # adv, logpac = model.model.sess.run([model.model.step_ops[4] - model.model.step_ops[6], model.model.logpac_op],
+    #         #                           {model.model.observations_ph: np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']], axis=-1),
+    #         #                            model.model.actions_ph: action})
+    #         # print(adv, logpac)
+    #         obs, reward, done, _ = env.step(action)
+    #         episode_reward += reward
+    #         frame_idx += 1
+    #         if export_gif:
+    #             plt.imsave(os.path.join(os.path.dirname(load_path), 'tempimg%d.png' % i), img)
+    #         else:
+    #             plt.pause(0.02)
+    #         if done:
+    #             print('episode_reward', episode_reward)
+    #             obs = env.reset()
+    #             if 'FetchStack' in env_name:
+    #                 while env.get_attr('current_nobject')[0] != env.get_attr('n_object')[0] or \
+    #                                 env.get_attr('task_mode')[0] != 1:
+    #                     obs = env.reset()
+    #             elif 'MasspointPushDoubleObstacle' in env_name or 'FetchPushWallObstacle' in env_name:
+    #                 while np.argmax(obs['desired_goal'][0][3:]) != 0:
+    #                     obs = env.reset()
+    #             print('goal', obs['desired_goal'][0])
+    #             episode_reward = 0.0
+    #             frame_idx = 0
+    #             num_episode += 1
+    #             if num_episode >= 1:
+    #                 break
+    #     exit()
+    #     if export_gif:
+    #         os.system('ffmpeg -r 5 -start_number 0 -i ' + os.path.dirname(load_path) + '/tempimg%d.png -c:v libx264 -pix_fmt yuv420p ' +
+    #                   os.path.join(os.path.dirname(load_path), env_name + '.mp4'))
+    #         for i in range(env_kwargs['max_episode_steps'] * 10):
+    #             # images.append(plt.imread('tempimg' + str(i) + '.png'))
+    #             try:
+    #                 os.remove(os.path.join(os.path.dirname(load_path), 'tempimg' + str(i) + '.png'))
+    #             except:
+    #                 pass
 
 
 if __name__ == '__main__':
@@ -419,6 +716,6 @@ if __name__ == '__main__':
          log_path=args.log_path, load_path=args.load_path, play=args.play,
          batch_size=args.batch_size, export_gif=args.export_gif,
          gamma=args.gamma, random_ratio=args.random_ratio, action_noise=args.action_noise,
-         reward_type=args.reward_type, n_object=args.n_object, priority=args.priority,
+         reward_type=args.reward_type, reward_object=args.reward_object, n_object=args.n_object, epsilon=args.epsilon, priority=args.priority,
          learning_rate=args.learning_rate, num_workers=args.num_workers, policy=args.policy,
          curriculum=args.curriculum, sequential=args.sequential, sil=args.sil, sil_coef=args.sil_coef)

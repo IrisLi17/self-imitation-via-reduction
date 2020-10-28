@@ -265,8 +265,8 @@ class PPO2_augment(ActorCriticRLModel):
                     ## adding some assertion for debuging
                     loss = tf.debugging.assert_all_finite(loss,msg='rip loss')
                     # self.params = tf.Print(self.params,['params_info',self.params])
-                    for i in range(len(self.params)):
-                        print(i,'params',self.params[i])
+                    # for i in range(len(self.params)):
+                        # print(i,'params',self.params[i])
                     grads = tf.gradients(loss, self.params)
 
                     # grads = tf.Print(grads,['gradient debug',grads])

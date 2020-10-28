@@ -1,6 +1,8 @@
 import sys, os
 import numpy as np
 import pandas
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
@@ -21,12 +23,15 @@ if __name__ == '__main__':
     for log_path in log_paths:
         progress_file = os.path.join(log_path, 'progress.csv')
         eval_file = os.path.join(log_path, 'eval.csv')
-        if 'ds' in log_path:
-            success_rate = get_item(progress_file, 'ep_success_rate')
+        # if 'ds' in log_path:
+        if True:
+            success_rate = get_item(progress_file, 'success rate')
         else:
             success_rate = get_item(progress_file, 'ep_reward_mean')
-        total_timesteps = get_item(progress_file, 'total_timesteps')
-        entropy = get_item(progress_file, 'policy_entropy')
+            success_rate = get_item(progress_file, 'ep_reward_mean')
+        total_timesteps = get_item(progress_file, 'total timesteps')
+        total_timesteps = total_timesteps/1e6
+        entropy = get_item(progress_file, 'entropy')
         try:
             eval_reward = get_item(eval_file, 'mean_eval_reward')
             n_updates = get_item(eval_file, 'n_updates')
@@ -34,8 +39,24 @@ if __name__ == '__main__':
             pass
         # success_rate = smooth(success_rate, window)
         # total_timesteps = smooth(total_timesteps, window)
+        print(log_path)
+        label = ""
         if option == 'success_rate':
-            ax[0].plot(smooth(total_timesteps, window), smooth(success_rate, window), label=log_path)
+            if log_path=='../logs/pnr_sac/sac_dense_reward':
+                # print(True)
+                label = "sir_dense_reward"
+            # elif log_path =='../logs/pnr_sac/sac_latent_debug':
+            #     label = "sir_sparse_reward"
+            elif log_path == '../logs/pnr_sac/sac_her_dense_reward':
+                label="sac_her_dense_reward"
+            elif log_path == '../logs/pnr_sac/sac_her_sparse_reward':
+                label = "sac_her_sparse_reward"
+            elif log_path == '../logs/pnr_sac/sac_sir_sparse_reward':
+                label = "sir_sparse_reward"
+            else:
+                label = log_path
+            ax[0].plot(smooth(total_timesteps, window), smooth(success_rate, window), label=label)
+
         elif option == 'eval':
             # ax[0].plot(n_updates*65536, eval_reward, label=log_path)
             
@@ -57,9 +78,23 @@ if __name__ == '__main__':
             # augment_steps = smooth(augment_steps, window)
         except:
             augment_steps = np.zeros(total_timesteps.shape)
-        ax[1].plot(smooth(total_timesteps, window), smooth(augment_steps, window), label=log_path)
+        if log_path == '../logs/pnr_sac/sac_dense_reward':
+            # print(True)
+            label = 'sir_dense_reward'
+        # elif log_path == '../logs/pnr_sac/sac_latent_debug':
+        #     label = 'sir_sparse_reward'
+        elif log_path == '../logs/pnr_sac/sac_her_dense_reward':
+            label = 'sac_her_dense_reward'
+        elif log_path == '../logs/pnr_sac/sac_her_sparse_reward':
+            label = 'sac_her_sparse_reward'
+        elif log_path == '../logs/pnr_sac/sac_sir_sparse_reward':
+            label = 'sir_sparse_reward'
+        else:
+            label = log_path
+        ax[1].plot(smooth(total_timesteps, window), smooth(augment_steps, window), label=label)
     if option == 'success_rate':
-        ax[0].set_title('ep reward mean')
+        # ax[0].set_title('ep reward mean')
+        ax[0].set_title( 'success rate')
     elif option == 'eval':
         ax[0].set_title('eval success rate')
     elif option == 'entropy':
@@ -69,8 +104,9 @@ if __name__ == '__main__':
     elif option == 'self_aug_ratio':
         ax[0].set_title('self_aug_ratio')
     ax[1].set_title('augment steps / original rollout steps')
+    ax[0].set_xlabel('samples(1e6)')
     ax[0].grid()
     ax[1].grid()
     plt.legend()
-    plt.show()
-    
+    # plt.show()
+    plt.savefig('compare_success_rate'  + '.png')

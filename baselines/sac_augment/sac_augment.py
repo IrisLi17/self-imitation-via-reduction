@@ -67,7 +67,7 @@ class SAC_augment(OffPolicyRLModel):
         Note: this has no effect on SAC logging for now
     """
 
-    def __init__(self, policy, env_id,env, trained_sac_model=None, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
+    def __init__(self, policy, env, env_id='Image84SawyerPushAndReachArenaTrainEnvBig-v0', trained_sac_model=None, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
                  priority_buffer=False, alpha=0.6,
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
@@ -80,7 +80,7 @@ class SAC_augment(OffPolicyRLModel):
 
         super(SAC_augment, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
                                           policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs)
-        # print('env_observation_spaces',env.observation_space)
+
         self.aug_env = aug_env
         # add init attr for latent case
         self.mean_value_buf = deque(maxlen=500)
@@ -205,14 +205,12 @@ class SAC_augment(OffPolicyRLModel):
                     self.augment_replay_buffer = PrioritizedMultiWorkerReplayBuffer(self.buffer_size, self.alpha,
                                                                                     num_workers=1, gamma=self.gamma)
                 else:
-                    print(self.n_envs)
                     self.replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=self.n_envs, gamma=self.gamma)
                     self.augment_replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=1,
                                                                          gamma=self.gamma)
 
                 with tf.variable_scope("input", reuse=False):
                     # Create policy and target TF objects
-                    print('observation_space',self.observation_space)
                     self.policy_tf = self.policy(self.sess, self.observation_space, self.action_space,
                                                  **self.policy_kwargs)
                     self.target_policy = self.policy(self.sess, self.observation_space, self.action_space,
@@ -578,7 +576,8 @@ class SAC_augment(OffPolicyRLModel):
             episode_successes = [[] for _ in range(self.env.env.num_envs)]
             if self.action_noise is not None:
                 self.action_noise.reset()
-            self.episode_reward = np.zeros((1,))
+            # self.episode_reward = np.zeros((1,))
+            self.episode_reward = np.zeros((self.aug_env.num_envs,))
             ep_info_buf = deque(maxlen=100)
             pp_sr_buf = deque(maxlen=5)
             stack_sr_buf = deque(maxlen=5)
@@ -593,7 +592,9 @@ class SAC_augment(OffPolicyRLModel):
                 self.env.env.env_method('set_random_ratio', [0.7] * self.env.env.num_envs)
             if 'FetchStack' in self.env_id and self.curriculum:
                 self.start_augment_time = np.inf
+            # print('reset_env_start!')
             obs = self.env.reset()
+            # print('reset_env_finished!')
             infos_values = []
             # TODO: multi-env
             self.ep_state_buf = [[] for _ in range(self.n_envs)]
@@ -609,6 +610,7 @@ class SAC_augment(OffPolicyRLModel):
             # tower_height_buf = []
             self.restart_steps = []  # Every element should be scalar
             self.subgoals = []  # Every element should be [*subgoals, ultimate goal]
+            # self.values = [] # every element should be a scalar for current subgoal value
             self.restart_states = []  # list of (n_candidate) states
             self.transition_storage = []  # every element is list of tuples. length of every element should match restart steps
             if 'FetchStack' in self.env_id:
@@ -616,10 +618,15 @@ class SAC_augment(OffPolicyRLModel):
                 self.selected_objects = []
                 self.task_mode = []
             # For debugging
-            # self.debug_value1, self.debug_value2 = [], []
+            self.debug_value1, self.debug_value2,self.normalize_value1,\
+            self.normalize_value2,self.value_prod,self.value_mean = [], [], [], [], [], []
 
             # For filtering subgoals
             self.mean_value_buf = deque(maxlen=500)
+            # self.loss_value_buf = deque(maxlen=500)
+            #
+            self.success_value_buf = deque(maxlen=500)
+            self.fail_value_buf = deque(maxlen=500)
 
             num_augment_ep_buf = deque(maxlen=100)
             num_success_augment_ep_buf = deque(maxlen=100)
@@ -627,7 +634,7 @@ class SAC_augment(OffPolicyRLModel):
             def convert_dict_to_obs(dict_obs):
                 assert isinstance(dict_obs, dict)
                 if self.latent_mode:
-                    return np.concatenate([dict_obs[key] for key in ['latent_observation', 'latent_achieved_goal', 'latent_desired_goal']])
+                    return np.concatenate([dict_obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
                 else:
                     return np.concatenate([dict_obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
 
@@ -652,16 +659,17 @@ class SAC_augment(OffPolicyRLModel):
                         return True
                     return False
 
-            def log_debug_value(value1, value2, goal_idx, is_success):
+            def log_debug_value(value1, value2, normalize_value1,normalize_value2,value_prod,value_mean,goal_idx, is_success):
                 if not os.path.exists(os.path.join(logger.get_dir(), 'debug_value.csv')):
                     with open(os.path.join(logger.get_dir(), 'debug_value.csv'), 'a', newline='') as csvfile:
                         csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
-                        title = ['value1', 'value2', 'goal_idx', 'is_success', 'num_timesteps']
+                        title = ['value1', 'value2','normalize_value1 ','normalize_value2','value_prod','value_mean','goal_idx', 'is_success', 'num_timesteps']
                         csvwriter.writerow(title)
                 with open(os.path.join(logger.get_dir(), 'debug_value.csv'), 'a', newline='') as csvfile:
                     csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
-                    data = [value1, value2, goal_idx, int(is_success), self.num_timesteps]
+                    data = [value1, value2, normalize_value1,normalize_value2,value_prod,value_mean,goal_idx, int(is_success), self.num_timesteps]
                     csvwriter.writerow(data)
+
 
 
             for step in range(total_timesteps):
@@ -760,16 +768,19 @@ class SAC_augment(OffPolicyRLModel):
                         self.ep_selected_objects[i].append(selected_objects[i])
                         self.ep_task_mode[i].append(task_modes[i])
                         self.ep_tower_height[i].append(tower_height[i])
-                    
+                # print('step_starts')
                 new_obs, rewards, dones, infos = self.env.step(rescaled_action)
+                # print('step_stops')
                 next_obs = new_obs.copy()
                 for i in range(self.n_envs):
                     if dones[i]:
                         next_obs[i] = self.env.convert_dict_to_obs(infos[i]['terminal_observation'])
                     self.ep_transition_buf[i].append((obs[i], action[i], rewards[i], next_obs[i], dones[i]))
-                
                 # Store transition in the replay buffer.
+                # print('add_buffer_starts')
+
                 self.replay_buffer.add(obs, action, rewards, next_obs, dones)
+                # print('add_buffer_stops')
                 obs = new_obs
                 
                 for idx, _done in enumerate(dones):
@@ -806,8 +817,12 @@ class SAC_augment(OffPolicyRLModel):
                             # Sample start step and perturbation
                             select_subgoal_time0 = time.time()
                             if self.latent_mode :
-                                _restart_steps, _subgoals = self.select_subgoal_cem(self.ep_transition_buf[idx],
+
+
+                                _restart_steps, _subgoals= self.select_subgoal_cem(self.ep_transition_buf[idx],
                                                                                 k=self.n_subgoal,)
+
+
                             else:
                                 _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx],
                                                                             k=self.n_subgoal,
@@ -817,6 +832,8 @@ class SAC_augment(OffPolicyRLModel):
                             for j in range(_restart_steps.shape[0]):
                                 self.restart_steps.append(_restart_steps[j])
                                 self.subgoals.append([np.array(_subgoals[j]), goal.copy()])
+                                # adding value buf for record success value and fail value
+                                # self.values.append(_loss_values[j])
                                 assert len(self.subgoals[-1]) == 2
                                 self.restart_states.append(self.ep_state_buf[idx][_restart_steps[j]])
                                 self.transition_storage.append(self.ep_transition_buf[idx][:_restart_steps[j]])
@@ -838,23 +855,37 @@ class SAC_augment(OffPolicyRLModel):
                         if flag:
                             env_subgoals[idx].pop(0)
                             # self.aug_env.set_attr('goal', env_subgoals[idx][0], indices=idx)
-                            self.aug_env.env_method('set_goal', [env_subgoals[idx][0]], indices=idx)
+
+                            ## TODO make the api the same for all env
+                            if self.latent_mode:
+                                self.aug_env.set_goal([env_subgoals[idx][0]], indices=idx)
+                            else:
+                                self.aug_env.env_method('set_goal', [env_subgoals[idx][0]], indices=idx)
                             if 'FetchStack' in self.env_id:
                                 # Use stack as ultimate task.
                                 assert self.task_mode[idx] == 1
                                 self.aug_env.env_method('set_task_mode', [self.task_mode[idx]], indices=idx)
                             switch_goal_flag[idx] = False
-                            current_obs[idx] = convert_dict_to_obs(self.aug_env.env_method('get_obs', indices=idx)[0])
+                            if self.latent_mode:
+                                current_obs[idx] = convert_dict_to_obs(self.aug_env.get_obs(indices=idx)[0])
+                            else:
+                                current_obs[idx] = convert_dict_to_obs(self.aug_env.env_method('get_obs', indices=idx)[0])
 
                 while (len(self.restart_steps) >= self.aug_env.num_envs):
                     # TODO Hard work here
                     env_restart_steps = self.restart_steps[:self.aug_env.num_envs]
                     env_subgoals = self.subgoals[:self.aug_env.num_envs]
+                    ## adding value for record the fail value and success value
+                    # env_values = self.values[:self.aug_env.num_envs]
+
                     temp_subgoals = [goals[-2] for goals in env_subgoals].copy()
                     ultimate_goals = [goals[-1] for goals in env_subgoals]
                     env_storage = self.transition_storage[:self.aug_env.num_envs]
                     env_increment_storage = [[] for _ in range(self.aug_env.num_envs)]
-                    self.aug_env.env_method('set_goal', [env_subgoals[idx][0] for idx in range(self.aug_env.num_envs)])
+                    if self.latent_mode:
+                        self.aug_env.set_goal( [env_subgoals[idx][0] for idx in range(self.aug_env.num_envs)])
+                    else:
+                        self.aug_env.env_method('set_goal', [env_subgoals[idx][0] for idx in range(self.aug_env.num_envs)])
                     switch_goal_flag = [False for _ in range(self.aug_env.num_envs)]
                     env_end_flag = [False for _ in range(self.aug_env.num_envs)]
                     env_end_step = [np.inf for _ in range(self.aug_env.num_envs)]
@@ -865,7 +896,10 @@ class SAC_augment(OffPolicyRLModel):
                         self.aug_env.env_method('set_selected_objects', self.selected_objects[:self.aug_env.num_envs])
                         # Use pick and place as sub-task
                         self.aug_env.env_method('set_task_mode', np.zeros(self.aug_env.num_envs))
-                    env_obs = self.aug_env.env_method('get_obs')
+                    if self.latent_mode:
+                        env_obs = self.aug_env.get_obs()
+                    else:
+                        env_obs = self.aug_env.env_method('get_obs')
                     env_obs = [convert_dict_to_obs(d) for d in env_obs]
                     increment_step = 0
                     while not sum(env_end_flag) == self.aug_env.num_envs:
@@ -884,7 +918,7 @@ class SAC_augment(OffPolicyRLModel):
                                                       self.aug_env.action_space.high)
                         env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
                         self.num_aug_steps += (self.aug_env.num_envs - sum(env_end_flag))
-                        if self.reward_type in ('sparse','state_distance'):
+                        if self.reward_type in ('sparse','state_distance','state_sparse'):
                             temp_info = [None for _ in range(self.aug_env.num_envs)]
                         else:
                             temp_info = [{'previous_obs': env_obs[i]} for i in range(self.aug_env.num_envs)]
@@ -893,24 +927,36 @@ class SAC_augment(OffPolicyRLModel):
                             _retask_env_next_obs[:, self.obs_dim - 2:self.obs_dim] = 0
                             _retask_env_next_obs[:, self.obs_dim - 1] = 1  # Stack
                             relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs, ultimate_goals, self.task_mode)
-                            env_reward = self.aug_env.env_method('compute_reward', _retask_env_next_obs, ultimate_goals,
+                            if self.latent_mode:
+                                env_reward = self.aug_env.compute_reward( _retask_env_next_obs, ultimate_goals,
                                                                  temp_info)
-                            if self.reward_type != "sparse":
-                                env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
-                                                                                 _retask_env_next_obs, ultimate_goals,
-                                                                                 temp_info)
+                            else:
+                                env_reward = self.aug_env.env_method('compute_reward', _retask_env_next_obs,
+                                                                     ultimate_goals,
+                                                                     temp_info)
+                            if self.reward_type not in ("sparse",'state_sparse'):
+                                if self.latent_mode:
+                                    env_reward_and_success = self.aug_env.compute_reward_and_success(
+                                                                                     _retask_env_next_obs, ultimate_goals,
+                                                                                     temp_info)
+                                else:
+                                    env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
+                                                                                     _retask_env_next_obs,
+                                                                                     ultimate_goals,
+                                                                                     temp_info)
                         else:
+
                             relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs,
                                                                            ultimate_goals)
                             if self.latent_mode:
-                                env_reward = self.aug_env.env_method('compute_reward', env_next_obs[:,self.latent_dim:self.latent_dim*2], ultimate_goals,
+                                env_reward = self.aug_env.compute_reward(env_next_obs[:,self.latent_dim:self.latent_dim*2], ultimate_goals,
                                                                      temp_info)
                             else:
                                 env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals,
                                                                  temp_info)
-                            if self.reward_type != "sparse":
+                            if self.reward_type not in ("sparse",'state_sparse'):
                                 if self.latent_mode:
-                                    env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
+                                    env_reward_and_success = self.aug_env.compute_reward_and_success(
                                                                                      env_next_obs[:,self.latent_dim:self.latent_dim*2], ultimate_goals,
                                                                                      temp_info)
                                 else:
@@ -933,10 +979,11 @@ class SAC_augment(OffPolicyRLModel):
 
                         for idx, info in enumerate(env_info):
                             # Special case, the agent succeeds the final goal half way
-                            if self.reward_type == 'sparse' and env_reward[idx] > 0 and env_end_flag[idx] is False:
+                            if self.reward_type in ('sparse','state_sparse') and env_reward[idx] > 0 and env_end_flag[idx] is False:
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
-                            elif self.reward_type != 'sparse' and env_reward_and_success[idx][1] and env_end_flag[
+                                # self.success_value_buf.append(env_values[idx])
+                            elif self.reward_type not in ('sparse','state_sparse') and env_reward_and_success[idx][1] and env_end_flag[
                                 idx] is False:
                                 env_end_flag[idx] = True
                                 env_end_step[idx] = env_restart_steps[idx] + increment_step
@@ -944,8 +991,12 @@ class SAC_augment(OffPolicyRLModel):
                             if env_end_flag[idx] is False and env_restart_steps[idx] + increment_step \
                                     > self.get_horizon(self.current_nobject[idx] if 'FetchStack' in self.env_id else None):
                                 env_end_flag[idx] = True
+                                # self.fail_value_buf.append(env_values[idx])
+
                                 # But env_end_step is still np.inf
                             if info['is_success']:
+                                # self.success_value_buf.append(env_values[idx])
+
                                 if len(env_subgoals[idx]) >= 2:
                                     switch_goal_flag[idx] = True
                                     # if idx == 0:
@@ -964,7 +1015,10 @@ class SAC_augment(OffPolicyRLModel):
                     # print('end step', env_end_step)
                     for idx, end_step in enumerate(env_end_step):
                         if end_step <= self.get_horizon(self.current_nobject[idx] if 'FetchStack' in self.env_id else None):
-                            # log_debug_value(self.debug_value1[idx], self.debug_value2[idx], np.argmax(temp_subgoals[idx][3:]), True)
+                            log_debug_value(self.debug_value1[idx], self.debug_value2[idx],
+                                            self.normalize_value1[idx],self.normalize_value2[idx],
+                                            self.value_prod[idx],self.value_mean[idx], np.argmax(temp_subgoals[idx]), True)
+                            self.success_value_buf.append(self.value_prod[idx])
                             # print(temp_subgoals[idx])
                             # is_self_aug = temp_subgoals[idx][3]
                             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
@@ -986,12 +1040,18 @@ class SAC_augment(OffPolicyRLModel):
                                         *([np.expand_dims(item, axis=0) for item in transitions[i]]))
                                 else:
                                     self.augment_replay_buffer.add(*(transitions[i]))
-                        # else:
-                        #     log_debug_value(self.debug_value1[idx], self.debug_value2[idx], np.argmax(temp_subgoals[idx][3:]), False)
+                        else:
+                            log_debug_value(self.debug_value1[idx], self.debug_value2[idx],
+                                            self.normalize_value1[idx], self.normalize_value2[idx],
+                                            self.value_prod[idx], self.value_mean[idx],
+                                            np.argmax(temp_subgoals[idx]), False)
+                            self.fail_value_buf.append(self.value_prod[idx])
 
 
                     self.restart_steps = self.restart_steps[self.aug_env.num_envs:]
                     self.subgoals = self.subgoals[self.aug_env.num_envs:]
+                    ## adding value record for success value and fail value
+                    # self.values = self.values[self.aug_env.num_envs:]
                     self.restart_states = self.restart_states[self.aug_env.num_envs:]
                     self.transition_storage = self.transition_storage[self.aug_env.num_envs:]
                     if 'FetchStack' in self.env_id:
@@ -999,8 +1059,13 @@ class SAC_augment(OffPolicyRLModel):
                         self.selected_objects = self.selected_objects[self.aug_env.num_envs:]
                         self.task_mode = self.task_mode[self.aug_env.num_envs:]
                     # For debugging
-                    # self.debug_value1 = self.debug_value1[self.aug_env.num_envs:]
-                    # self.debug_value2 = self.debug_value2[self.aug_env.num_envs:]
+                    self.debug_value1 = self.debug_value1[self.aug_env.num_envs:]
+                    self.debug_value2 = self.debug_value2[self.aug_env.num_envs:]
+                    self.normalize_value1 = self.normalize_value1[self.aug_env.num_envs:]
+                    self.normalize_value2 = self.normalize_value2[self.aug_env.num_envs:]
+                    self.value_prod = self.value_prod[self.aug_env.num_envs:]
+                    self.value_mean = self.value_mean[self.aug_env.num_envs:]
+
 
 
                 if step % self.train_freq == 0:
@@ -1043,7 +1108,7 @@ class SAC_augment(OffPolicyRLModel):
                 else:
                     mean_reward = round(float(
                         np.mean(np.concatenate([episode_rewards[i][-101:-1] for i in range(self.env.env.num_envs)]))),
-                                        1)
+                                        3)
 
                 num_episodes = sum([len(episode_rewards[i]) for i in range(len(episode_rewards))])
                 self.num_timesteps += self.env.env.num_envs
@@ -1052,9 +1117,15 @@ class SAC_augment(OffPolicyRLModel):
                     fps = int(self.num_timesteps / (time.time() - start_time))
                     logger.logkv("episodes", num_episodes)
                     logger.logkv("mean 100 episode reward", mean_reward)
+                    # adding logger for value success and fail
+                    if len(self.success_value_buf):
+                        logger.logkv("mean success value buf",safe_mean(self.success_value_buf))
+                    if len(self.fail_value_buf):
+                        logger.logkv("mean fail value buf",safe_mean(self.fail_value_buf))
                     if len(ep_info_buf) > 0 and len(ep_info_buf[0]) > 0:
                         logger.logkv('ep_rewmean', safe_mean([ep_info['r'] for ep_info in ep_info_buf]))
                         logger.logkv('eplenmean', safe_mean([ep_info['l'] for ep_info in ep_info_buf]))
+                        logger.logkv('ep_success_rate',safe_mean([ep_info['is_success'] for ep_info in ep_info_buf]))
                     logger.logkv("n_updates", n_updates)
                     logger.logkv("current_lr", current_lr)
                     logger.logkv("fps", fps)
@@ -1241,13 +1312,11 @@ class SAC_augment(OffPolicyRLModel):
 
     def select_subgoal_cem(self, transition_buf, k):
         # self.ep_transition_buf, self.model.value
-        assert len(transition_buf) == 100, len(transition_buf)
+        filter_low = 0.0
+        filter_high = 1.0
+        # assert len(transition_buf) == 100, len(transition_buf)
         obs_buf, *_ = zip(*transition_buf)
         obs_buf = np.asarray(obs_buf)
-        opt_samples=[]
-        opt_values = []
-        opt_mean_values=[]
-        print('test_gpu_availability',tf.test.is_gpu_available())
 
         batch_sizes = [self.frac_total] * (self.num_iters // 2) + [self.frac_total] * (
                     self.num_iters - (self.num_iters // 2))
@@ -1273,6 +1342,12 @@ class SAC_augment(OffPolicyRLModel):
 
         elites=[]
         mean_value_chosen = []
+        loss_chosen=[]
+        value1_chosen=[]
+        value2_chosen = []
+        normalize_value1_chosen = []
+        normalize_value2_chosen = []
+        value_prod_chosen = []
         sorted_losses= []
         mean_values = []
         sorted_indices=[]
@@ -1325,17 +1400,22 @@ class SAC_augment(OffPolicyRLModel):
             #     print('value2-division',np.max(value2),np.min(value2))
             #     print('value2',value2)
             # trying another type of loss
-            # normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
-            # normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
-            # loss = (normalize_value1*normalize_value2)
+            normalize_value1 = (value1 - np.min(value1)) / (np.max(value1) - np.min(value1))
+            normalize_value2 = (value2 - np.min(value2)) / (np.max(value2) - np.min(value2))
+            loss = (normalize_value1*normalize_value2)
             # mean loss
-            loss = (value1+value2)/2
+            # loss = (value1+value2)/2
             # sorted_losses = np.sort(loss)
             sorted_indices = np.argsort(loss)
             mean_values = (value1 + value2 )/2
             num_top_chosen = int(frac_top_chosens[i]*batch_sizes[i])
             elite_indices = sorted_indices[-num_top_chosen:]
             mean_value_chosen = mean_values[elite_indices]
+            loss_chosen = loss[elite_indices]
+            normalize_value1_chosen = normalize_value1[elite_indices]
+            normalize_value2_chosen = normalize_value2[elite_indices]
+            value1_chosen = value1[elite_indices]
+            value2_chosen = value2[elite_indices]
             # print('top_chosen_indices',elite_indices)
             elites = samples[elite_indices]
             mu = np.mean(elites)
@@ -1346,20 +1426,43 @@ class SAC_augment(OffPolicyRLModel):
         # opt_value = sorted_losses[-k:]
         # calculate the mean
         # good_ind = elite_indices[-k:]
+        ### option for product value
+        loss_values = loss_chosen[-k:]
+        value1s = value1_chosen[-k:]
+        value2s = value2_chosen[-k:]
+        normalize_value1s = normalize_value1_chosen[-k:]
+        normalize_value2s = normalize_value2_chosen[-k:]
+        ### option for mean value
         mean_values = mean_value_chosen[-k:]
         elites_top_k = elites[-k:]
         # mean_values = (value1[good_ind] + value2[good_ind]) / 2
+        # For debugging
+        for i in range(k):
+            self.debug_value1.append(value1s[i])
+            self.debug_value2.append(value2s[i])
+            self.normalize_value1.append(normalize_value1s[i])
+            self.normalize_value2.append(normalize_value2s[i])
+            self.value_prod.append(loss_values[i])
+            self.value_mean.append(mean_values[i])
+        assert loss_values.shape[0] == k
         assert mean_values.shape[0] == k
         for i in range(k):
             self.mean_value_buf.append(mean_values[i])
+            # self.loss_value_buf.append(loss_values[i])
+        if self.reward_type in ('state_sparse','sparse'):
+            filtered_idx = np.where(np.logical_and(loss_values <= filter_high, loss_values >= filter_low))[0]
+        else:
+            filtered_idx = np.arange(k)
         # filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
-        # print('filtered_idx',filtered_idx)
+        print('filtered_idx',filtered_idx)
+        print('loss_value',loss_values)
         print('mean_value',mean_values)
         print('global_mean_value',np.mean(self.mean_value_buf))
+        #### option 1 filter with low and high
+        opt_sample = elites_top_k[filtered_idx]
+        ##### option 2 without filter
+        # opt_sample = elites_top_k
 
-        # opt_sample = elites_top_k[filtered_idx]
-        opt_sample = elites_top_k
-        filtered_idx = k
         # good_ind = good_ind[filtered_idx]
         # opt_sample = samples[good_ind]
         # opt_mean_value = mean_values[sorted_indices[-k:]]
@@ -1373,7 +1476,7 @@ class SAC_augment(OffPolicyRLModel):
         # print('opt_subgoal',opt_subgoal)
         #top_k = np.zeros(k).astype('int')
         # print('k',k)
-        restart_steps = np.array([0]*k)
+        restart_steps = np.array([0]*filtered_idx.shape[0])
         # restart_steps =np.floor(top_k/k)
         # for index in range(k):
         #     opt_mean_values.append(opt_mean_value[index])
@@ -1411,12 +1514,14 @@ class SAC_augment(OffPolicyRLModel):
         import torch
         # print('encoding debug',encoding,encoding.shape,np.mean(encoding),np.min(encoding),np.max(encoding))
         # ptu.set_device(0)
-        # encoding = ptu.np_to_var(encoding).view(-1,self.latent_dim)
+        encoding = ptu.np_to_var(encoding)
 
         ## TODO HOW TO enable cuda rendering because if rendering is enabled, the cuda illegal access memory would return
-        encoding=torch.tensor(encoding, requires_grad=False).float()
-        imgs = self.aug_env.get_attr('vae')[0].decode(encoding)
-        reconstr_encoding = self.aug_env.get_attr('vae')[0].encode(imgs)[0]
+        # encoding=torch.tensor(encoding, requires_grad=False).float()
+        # print('aug_vae',self.aug_env.vae_model)
+        vae_model = self.aug_env.vae_model
+        imgs = vae_model.decode(encoding)
+        reconstr_encoding = vae_model.encode(imgs)[0]
         reconstr_encoding_np = ptu.get_numpy(reconstr_encoding)
         return reconstr_encoding_np
 

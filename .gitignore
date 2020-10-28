@@ -4,6 +4,8 @@
 __pycache__/*
 logs/*
 model/*
+plot/data/*
+plot/n_subgoal_2/*
 *.png
 *.gif
 MUJOCO_LOG.TXT

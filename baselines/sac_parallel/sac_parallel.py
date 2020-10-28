@@ -68,7 +68,7 @@ class SAC_parallel(OffPolicyRLModel):
         Note: this has no effect on SAC logging for now
     """
 
-    def __init__(self, policy, env, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
+    def __init__(self, policy, env, env_id=None,gamma=0.99, learning_rate=3e-4, buffer_size=50000,
                  priority_buffer=False, alpha=0.6,
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
@@ -89,6 +89,7 @@ class SAC_parallel(OffPolicyRLModel):
         self.train_freq = train_freq
         self.batch_size = batch_size
         self.tau = tau
+        self.env_id = env_id
         # In the original paper, same learning rate is used for all networks
         # self.policy_lr = learning_rate
         # self.qf_lr = learning_rate
@@ -427,7 +428,7 @@ class SAC_parallel(OffPolicyRLModel):
                 as writer:
 
             self._setup_learn(seed)
-            self.env_id = self.env.env.get_attr('spec')[0].id
+            # self.env_id = self.env.env.get_attr('spec')[0].id
 
             # Transform to callable if needed
             self.learning_rate = get_schedule_fn(self.learning_rate)
@@ -443,7 +444,9 @@ class SAC_parallel(OffPolicyRLModel):
             if self.action_noise is not None:
                 self.action_noise.reset()
             assert isinstance(self.env.env, VecEnv)
-            self.episode_reward = np.zeros((1,))
+            # self.episode_reward = np.zeros((1,))
+            self.episode_reward = np.zeros((self.env.env.num_envs,))
+
             ep_info_buf = deque(maxlen=100)
             n_updates = 0
             infos_values = []

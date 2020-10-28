@@ -86,6 +86,7 @@ class HindsightExperienceReplayWrapper(object):
         assert self.replay_buffer is not None
         assert obs_t.shape[0] == self.replay_buffer.num_workers
         self._next_idx = self.replay_buffer._next_idx
+
         for i in range(self.replay_buffer.num_workers):
             self.replay_buffer.local_transitions[i].append((obs_t[i], action[i], reward[i], obs_tp1[i], done[i]))
             if done[i]:
@@ -102,36 +103,46 @@ class HindsightExperienceReplayWrapper(object):
                     reward = self.env.compute_reward(next_obs_dict['desired_goal'], next_obs_dict['achieved_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
                     success = (np.array(reward) > 0.5).tolist()
                 else:
-                    if self.env.reward_type != 'sparse':
+                    if self.env.reward_type not in ('sparse','state_sparse'):
                         # print('env_type',self.env)
                         # print('compute_reward_and_success',next_obs)
-                        reward_and_success = self.env.compute_reward_and_success(np.asarray(next_obs)[:,:16], next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                        reward_and_success = self.env.compute_reward_and_success(next_obs_dict['achieved_goal'], next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
                         reward, success = zip(*reward_and_success)
                         reward = list(reward)
                         success = list(success)
                     else:
-                        reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
+                        if 'Image' in self.env_id:
+                            reward = np.stack(self.env.compute_reward(next_obs_dict['achieved_goal'], next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs))))
+
+                        else:
+                            reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'], [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
                         success = (np.array(reward) > 0.5).tolist()
                 self.temp_container['reward'][_ * self.replay_buffer.num_workers : (_ + 1) * self.replay_buffer.num_workers] = reward.copy()
                 self.temp_container['done'][_ * self.replay_buffer.num_workers : (_ + 1) * self.replay_buffer.num_workers] = success.copy()
             # Remainer
             if len(self.temp_container['observation']) % self.replay_buffer.num_workers:
                 next_obs = self.temp_container['next_observation'][len(self.temp_container['observation']) // self.replay_buffer.num_workers * self.replay_buffer.num_workers : len(self.temp_container['observation'])]
+
                 next_obs_dict = self.env.convert_obs_to_dict(np.asarray(next_obs))
                 if self.env.goal_dim == 3:
-                    assert self.env.reward_type == 'sparse'
+                    assert self.env.reward_type in ('sparse','state_sparse')
                     reward = self.env.compute_reward(next_obs_dict['desired_goal'], next_obs_dict['achieved_goal'],
                                                      [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
                     success = (np.array(reward) > 0.5).tolist()
                 else:
-                    if self.env.reward_type != 'sparse':
-                        reward_and_success = self.env.compute_reward_and_success(np.asarray(next_obs)[:,:16], next_obs_dict['desired_goal'],
+                    if self.env.reward_type not in ('sparse','state_sparse'):
+                        reward_and_success = self.env.compute_reward_and_success(next_obs_dict['achieved_goal'], next_obs_dict['desired_goal'],
                                                                                  [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
                         reward, success = zip(*reward_and_success)
                         reward = list(reward)
                         success = list(success)
                     else:
-                        reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'],
+                        if 'Image' in self.env_id:
+                            reward = np.stack(self.env.compute_reward(next_obs_dict['achieved_goal'], next_obs_dict['desired_goal'],
+                                                             [None] * self.replay_buffer.num_workers,
+                                                             indices=range(len(next_obs))))
+                        else:
+                            reward = self.env.compute_reward(next_obs, next_obs_dict['desired_goal'],
                                                          [None] * self.replay_buffer.num_workers, indices=range(len(next_obs)))
                         success = (np.array(reward) > 0.5).tolist()
                 self.temp_container['reward'][len(self.temp_container['observation']) // self.replay_buffer.num_workers * self.replay_buffer.num_workers : len(self.temp_container['observation'])] = reward.copy()

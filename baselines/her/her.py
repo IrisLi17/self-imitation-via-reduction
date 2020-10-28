@@ -19,7 +19,7 @@ class HER_HACK(BaseRLModel):
     :param goal_selection_strategy: (GoalSelectionStrategy or str)
     """
 
-    def __init__(self, policy, env, model_class, env_id='Image48PointmassUWallTrainEnvBig-v0',n_sampled_goal=4,
+    def __init__(self, policy, env, model_class, env_id='Image84SawyerPushAndReachArenaTrainEnvBig-v0',n_sampled_goal=4,
                  goal_selection_strategy='future', num_workers=1, *args, **kwargs):
 
         assert not isinstance(env, VecEnvWrapper), "HER does not support VecEnvWrapper"
@@ -35,7 +35,7 @@ class HER_HACK(BaseRLModel):
         # Save dict observation space (used for checks at loading time)
         if env is not None:
             self.observation_space = env.observation_space
-            print('self.observation_space',self.observation_space)
+            # print('self.observation_space',self.observation_space)
             self.action_space = env.action_space
 
         # Convert string to GoalSelectionStrategy object
@@ -52,7 +52,7 @@ class HER_HACK(BaseRLModel):
         assert issubclass(model_class, OffPolicyRLModel), \
             "Error: HER only works with Off policy model (such as DDPG, SAC, TD3 and DQN)."
 
-        self.model = self.model_class(policy,self.env_id,self.env, *args, **kwargs)
+        self.model = self.model_class(policy,env_id=self.env_id,env=self.env, *args, **kwargs)
         # Patch to support saving/loading
         self.model._save_to_file = self._save_to_file
 
@@ -150,7 +150,7 @@ class HER_HACK(BaseRLModel):
         data['goal_selection_strategy'] = self.goal_selection_strategy
         data['model_class'] = self.model_class
         data['her_obs_space'] = self.observation_space
-        print('her_obs_space',self.observation_space)
+        # print('her_obs_space',self.observation_space)
         data['her_action_space'] = self.action_space
         super()._save_to_file(save_path, data, params, cloudpickle=cloudpickle)
 
@@ -158,7 +158,7 @@ class HER_HACK(BaseRLModel):
         self.model.save(save_path, cloudpickle=cloudpickle)
 
     @classmethod
-    def load(cls, load_path, env=None, custom_objects=None, **kwargs):
+    def load(cls, load_path, env=None, env_id=None,custom_objects=None, **kwargs):
         data, _ = cls._load_from_file(load_path,custom_objects=custom_objects)
 
         if 'policy_kwargs' in kwargs and kwargs['policy_kwargs'] != data['policy_kwargs']:
@@ -166,15 +166,15 @@ class HER_HACK(BaseRLModel):
                              "Stored kwargs: {}, specified kwargs: {}".format(data['policy_kwargs'],
                                                                               kwargs['policy_kwargs']))
 
-        model = cls(policy=data["policy"], env=env, model_class=data['model_class'],
+        model = cls(policy=data["policy"], env=env,env_id=env_id, model_class=data['model_class'],
                     n_sampled_goal=data['n_sampled_goal'],
                     goal_selection_strategy=data['goal_selection_strategy'],
                     _init_setup_model=False)
         model.__dict__['observation_space'] = data['her_obs_space']
         model.__dict__['action_space'] = data['her_action_space']
-        print('env_type',model.get_env())
-        print('env_obs',model.get_env().observation_space)
-        print('kwargs',kwargs)
+        # print('env_type',model.get_env())
+        # print('env_obs',model.get_env().observation_space)
+        # print('kwargs',kwargs)
         model.model = data['model_class'].load(load_path, env=model.get_env(), **kwargs)
         model.model._save_to_file = model._save_to_file
         return model

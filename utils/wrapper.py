@@ -256,6 +256,7 @@ class LatentWrappedEnv(ProxyEnv,Env):
         self.imsize = imsize
         self.reward_params = reward_params
         self.reward_type = self.reward_params.get("type", 'latent_distance')
+        self.reward_object = self.reward_params.get('object',1)
         self.norm_order = self.reward_params.get("norm_order", norm_order)
         self.epsilon = self.reward_params.get("epsilon", epsilon)  # for sparse reward
         self.temperature = self.reward_params.get("temperature", temperature)  # for exponential reward
@@ -311,8 +312,10 @@ class LatentWrappedEnv(ProxyEnv,Env):
         return self.wrapped_env.get_obs()
         # return self._update_obs(self.wrapped_env.get_obs())
 
-
-
+    def step(self,action):
+        new_obs, reward, done, info = self.wrapped_env.step(action)
+        # print('latent_env_done',done)
+        return new_obs,reward+1.0,done,info
 
     def compute_reward(self, achieved_goal, desired_goal, temp_info=None, action=None, prev_obs=None):
 
@@ -334,18 +337,49 @@ class LatentWrappedEnv(ProxyEnv,Env):
 
         return reward, success
 
-    def compute_state_reward_and_success(self,achieved_goal,desired_goal,temp_info=None,action=None,prev_obs=None):
+    def compute_state_reward_and_success(self,achieved_goal,desired_goal,info=False,temp_info=None,action=None,prev_obs=None):
         size = achieved_goal.shape[0]
-        puck_dist = achieved_goal[:size // 2] - desired_goal[:size // 2]
-        hand_dist = achieved_goal[-size // 2:] - desired_goal[-size // 2:]
-        dist = np.linalg.norm(hand_dist)+ np.linalg.norm(puck_dist)
-        reward = (dist >= self.epsilon) * -1.0
-        success = dist < 1.0
-        ## add reward_offset for sparse environment
-        if self.reward_type in ('state_sparse','sparse'):
-            reward=reward+1.0
+        # if self.reward_type in ('state_sparse','sparse'):
+        dist = 0
+        ## first two element is for the hand_pos and the later two element is for the puck_pos
+        hand_dist = achieved_goal[:size//2]-desired_goal[:size//2]
+        puck_dist = achieved_goal[-size//2:]-desired_goal[-size//2:]
+        # puck_dist = achieved_goal[:size // 2] - desired_goal[:size // 2]
+        # hand_dist = achieved_goal[-size // 2:] - desired_goal[-size // 2:]
+        puck_dist_2 = np.linalg.norm(puck_dist)
+        hand_dist_2 = np.linalg.norm(hand_dist)
+        if self.reward_object==2:
 
-        return reward, success
+            dist = np.linalg.norm(hand_dist)+ np.linalg.norm(puck_dist)
+
+        elif self.reward_object == 1:
+
+            dist = np.linalg.norm(achieved_goal-desired_goal)
+
+        print('reward_type',self.reward_type)
+        print('self.epsilon',self.epsilon)
+        ## add reward_offset for sparse environment
+        if self.reward_type in ('state_sparse') and self.reward_type == 2:
+            reward = (not ( (puck_dist_2  < self.epsilon) and (hand_dist_2 < self.epsilon) )) * -1.0
+            reward = reward + 1.0
+            success = (puck_dist_2  < self.epsilon) and (hand_dist_2 < self.epsilon)
+        elif self.reward_type in ('state_sparse','sparse') and self.reward_type !=2 :
+            reward = (dist >= self.epsilon) * -1.0
+            success = dist < self.epsilon
+            reward=reward+1.0
+        else:
+            reward = -dist
+            success = dist < self.epsilon
+        if info:
+            return reward,success,dict(puck_success=puck_dist_2<0.06,hand_success = hand_dist_2 < 0.06)
+        else:
+            return reward, success
+
+    #[ 0.00205863  0.53339054  0.02616989  0.59154211]
+#  [-0.04464616  0.60091807 -0.09635188  0.57438248]]
+# desired_state [[ 0.13523878  0.62652773 -0.07158087  0.51752794]
+#  [ 0.02142931  0.5346298  -0.14061854  0.50677612]]
+
 
     def compute_img_reward_and_success(self,achieved_goal,desired_goal,temp_info=None,action=None,prev_obs=None):
         achieved_state = self.image_goal_to_state(achieved_goal)
@@ -429,7 +463,7 @@ class LatentWrappedEnv(ProxyEnv,Env):
         # self.desired_goal['latent_desired_goal_mean'] = goal
         # print('goal_shape',goal)
         # image_goal = self._decode(goal)[0]
-        print('goal_type',isinstance(goal,dict))
+
         if isinstance(goal,dict):
             self.wrapped_env.set_goal(goal)
         else:

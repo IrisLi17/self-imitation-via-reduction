@@ -7,7 +7,7 @@ from stable_baselines.common.vec_env import VecEnv
 # Important: gym mixes up ordered and unordered keys
 # and the Dict space may return a different order of keys that the actual one
 KEY_ORDER = ['observation', 'achieved_goal', 'desired_goal']
-
+KEY_LATENT_ORDER=['latent_observation', 'latent_achieved_goal', 'latent_desired_goal']
 
 class HERGoalEnvWrapper(object):
     """
@@ -52,7 +52,7 @@ class HERGoalEnvWrapper(object):
         elif isinstance(self.spaces[0], spaces.Box):
             if env_id is not None:
                 # print('goal',self.goal_dim,'obs',self.obs_dim)
-                keys = ('latent_observation','latent_achieved_goal','latent_desired_goal')
+                keys = ('observation','achieved_goal','desired_goal')
                 lows = np.concatenate([self.env.observation_space.spaces[key].low for key in keys])
                 highs = np.concatenate([self.env.observation_space.spaces[key].high for key in keys])
             else:
@@ -100,6 +100,7 @@ class HERGoalEnvWrapper(object):
         ])
 
     def step(self, action):
+
         obs, reward, done, info = self.env.step(action)
         return self.convert_dict_to_obs(obs), reward, done, info
 
@@ -110,11 +111,15 @@ class HERGoalEnvWrapper(object):
         return self.convert_dict_to_obs(self.env.reset())
 
     def compute_reward(self, achieved_goal, desired_goal, info, indices=None):
+        if self.env_id is not None:
+            return self.env.compute_reward(achieved_goal, desired_goal, info, indices=indices)
         if isinstance(self.env, VecEnv):
             return self.env.env_method('compute_reward', achieved_goal, desired_goal, info, indices=indices)
         return self.env.compute_reward(achieved_goal, desired_goal, info)
 
     def compute_reward_and_success(self, achieved_goal, desired_goal, info, indices=None):
+        if self.env_id is not None:
+            return self.env.compute_reward_and_success(achieved_goal, desired_goal, info,indices=indices)
         if isinstance(self.env, VecEnv):
             return self.env.env_method('compute_reward_and_success', achieved_goal, desired_goal, info, indices=indices)
         return self.env.compute_reward_and_success(achieved_goal, desired_goal, info)

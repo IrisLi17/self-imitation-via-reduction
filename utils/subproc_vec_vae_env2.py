@@ -97,7 +97,8 @@ class ParallelVAESubprocVecEnv(VecEnv):
         self.env_id = env_id
         self.regressor = regressor
         n_envs = len(env_fns)
-        self.rewards = [[] for i in range(n_envs)]
+        # print('env_fns',env_fns)
+        self.rewards = [[] for _ in range(n_envs)]
         ## adding some logging info here
         self.t_start = time.time()
         filenames= [os.path.join(log_dir, str(rank) + ".update_monitor.csv") for rank in range(n_envs)]
@@ -107,7 +108,7 @@ class ParallelVAESubprocVecEnv(VecEnv):
             file_handler = open(filenames[i], "wt")
             file_handler.write('#%s\n' % json.dumps({"t_start": self.t_start}))
             logger = csv.DictWriter(file_handler,
-                                         fieldnames=('r', 'l', 't') + ('is_success',))
+                                         fieldnames=('r', 'l', 't') + ('is_success','puck_success','hand_success'))
             logger.writeheader()
             file_handler.flush()
             self.loggers.append(logger)
@@ -152,7 +153,6 @@ class ParallelVAESubprocVecEnv(VecEnv):
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
         obs, rews, dones, infos = zip(*results)
-        print('original_dones',dones)
         # process the img_obs to latent_obs and process the rewards
         # for info in infos:
         #     info['terminal_observation'] = self.process_obs(info['terminal_observation'])
@@ -162,45 +162,52 @@ class ParallelVAESubprocVecEnv(VecEnv):
 
             achieved_latent_obs = np.asarray([obs['achieved_goal'] for obs in obs_dicts])
             desired_latent_obs = np.asarray([obs['desired_goal'] for obs in obs_dicts])
-            rews_and_successes = self.compute_reward_and_success(achieved_goal= achieved_latent_obs,desired_goal=desired_latent_obs)
+            rews_and_successes = self.compute_reward_and_success(achieved_goal= achieved_latent_obs,desired_goal=desired_latent_obs,info=True)
             rews = [rew_and_suc[0] for rew_and_suc in rews_and_successes]
             successes = [rew_and_suc[1] for rew_and_suc in rews_and_successes]
+            state_infos = [rew_and_suc[2] for rew_and_suc in rews_and_successes]
             ## add rewards to the episode reward
             for i,rew_and_suc in enumerate(rews_and_successes):
                 self.rewards[i].append(rew_and_suc[0])
 
-
             for i,info in enumerate(infos):
-                info['is_success'] = successes[i]
+                infos[i]['is_success'] = successes[i]
             ## done once succeed wrapper and add terminal_observation in this part
-
+            dones = list(dones)
             for i,done in enumerate(dones):
             # dones = [done or successes[i] for i,done in enumerate(dones)]
             #     print('env_num',i,'done',done,'success',successes[i])
-                done = done or successes[i]
-                if done:
+                dones[i] = dones[i] or successes[i]
+                if dones[i]:
+                    infos[i]['is_success'] = successes[i]
                     infos[i]['terminal_observation']=obs[i]
                     infos[i]['terminal_state'] = self.env_method('get_state',indices=i)[0]
-                    observation = self.env_method('reset',indices=i)
-                    observation_process = self.process_obs(observation)
-                    obs_dicts = list(obs_dicts)
-                    obs_dicts[i]=observation_process[0]
-                    obs_dicts = tuple(obs_dicts)
+                    state_dict = state_infos[i]
                 ## adding info[episode] for loggin the episode mean reward
                     # print('reward_length',len(self.rewards[i]), 'env_id',i)
                     # assert len(self.rewards[i])>1
-                    ep_info = {'r':round(sum(self.rewards[i]),6),'l':len(self.rewards[i]),'t':round(time.time() - self.t_start, 6),'is_success':infos[i]['is_success']}
+                    sum_reward = round(sum(self.rewards[i]),6)
+                    len_reward = len(self.rewards[i])
+                    ep_info = {'r':sum_reward,'l':len_reward,'t':round(time.time() - self.t_start, 6),
+                               'is_success':infos[i]['is_success'],
+                               'puck_success':state_dict['puck_success'],'hand_success':state_dict['hand_success']}
                     # infos[i]['episode']['r']= round(sum(self.rewards[i]),6)
                     # infos[i]['episode']['l']= len(self.rewards[i])
                     # infos[i]['episode']['is_success']= infos[i]['is_success']
                     infos[i]['episode']= ep_info
-                    self.rewards[i]=[]
+
                     self.loggers[i].writerow(infos[i]['episode'])
                     self.file_handlers[i].flush()
+                    observation = self.env_method('reset', indices=i)
+                    self.rewards[i] = []
+                    observation_process = self.process_obs(observation)
+                    obs_dicts = list(obs_dicts)
+                    obs_dicts[i] = observation_process[0]
+                    obs_dicts = tuple(obs_dicts)
         #    return flatten_latent_obs,np.stack(rews),np.stack(dones),infos
-        return _flatten_obs(obs_dicts, self.observation_space), np.stack(rews), np.stack(dones), self.process_infos(infos)
+        return _flatten_obs(obs_dicts, self.observation_space), np.stack(rews), np.stack(dones), self.process_infos_dict(infos)
 
-    def process_infos(self,infos_dicts):
+    def process_infos_dict(self,infos_dicts):
         img_obs = []
         for infos_dict in infos_dicts:
             if 'terminal_observation' in infos_dict.keys():
@@ -211,11 +218,31 @@ class ParallelVAESubprocVecEnv(VecEnv):
             img_obs_stack= np.concatenate(img_obs)
             latent_obs = self.img_to_latent(img_obs_stack)
             index=0
-            for infos_dict in infos_dicts:
+            for i,infos_dict in enumerate(infos_dicts):
                 if 'terminal_observation' in infos_dict.keys():
-                    infos_dict['terminal_observation']['observation']=latent_obs[3*index]
-                    infos_dict['terminal_observation']['achieved_goal']=latent_obs[3*index+1]
-                    infos_dict['terminal_observation']['desired_goal']=latent_obs[3*index+2]
+                    infos_dicts[i]['terminal_observation']['observation']=latent_obs[3*index]
+                    infos_dicts[i]['terminal_observation']['achieved_goal']=latent_obs[3*index+1]
+                    infos_dicts[i]['terminal_observation']['desired_goal']=latent_obs[3*index+2]
+                    index += 1
+        return infos_dicts
+
+    def process_infos(self,infos_dicts):
+        img_obs = []
+        for infos_dict in infos_dicts:
+            if 'terminal_observation' in infos_dict.keys():
+                obs_ter = infos_dict['terminal_observation']
+                # img_stack = np.stack([obs_ter['image_observation'],obs_ter['image_achieved_goal'],obs_ter['image_desired_goal']])
+                img_obs.append(obs_ter)
+        if len(img_obs):
+            img_obs_stack= np.concatenate(img_obs)
+            latent_obs = self.img_to_latent(img_obs_stack)
+            index=0
+            for i,infos_dict in enumerate(infos_dicts):
+                if 'terminal_observation' in infos_dict.keys():
+                    infos_dicts[i]['terminal_observation'] = np.concatenate(latent_obs[3*index:3*index+3])
+            #         infos_dict['terminal_observation']['observation']=latent_obs[3*index]
+            #         infos_dict['terminal_observation']['achieved_goal']=latent_obs[3*index+1]
+            #         infos_dict['terminal_observation']['desired_goal']=latent_obs[3*index+2]
                     index += 1
         return infos_dicts
 
@@ -227,9 +254,9 @@ class ParallelVAESubprocVecEnv(VecEnv):
         img_obs_stack= np.concatenate(img_obs)
         latent_obs = self.img_to_latent(img_obs_stack)
         for i,obs_dict in enumerate(obs_dicts):
-            obs_dict['observation']=latent_obs[3*i]
-            obs_dict['achieved_goal']=latent_obs[3*i+1]
-            obs_dict['desired_goal']=latent_obs[3*i+2]
+            obs_dicts[i]['observation']=latent_obs[3*i]
+            obs_dicts[i]['achieved_goal']=latent_obs[3*i+1]
+            obs_dicts[i]['desired_goal']=latent_obs[3*i+2]
         return obs_dicts
 
 
@@ -303,7 +330,7 @@ class ParallelVAESubprocVecEnv(VecEnv):
 
     ## TODO update compute_reward function
     ## for the api in sac_augment
-    def compute_reward_and_success(self,achieved_goal,desired_goal,temp_info=None,prev_obs=None,indices=None):
+    def compute_reward_and_success(self,achieved_goal,desired_goal,temp_info=None,prev_obs=None,indices=None,info=False):
         if isinstance(achieved_goal, list) or isinstance(desired_goal, list):
             achieved_goal = np.concatenate(achieved_goal)
             desired_goal = np.concatenate(desired_goal)
@@ -316,7 +343,7 @@ class ParallelVAESubprocVecEnv(VecEnv):
             size = states_all.shape[0]//2
             achieved_state = states_all[:size]
             desired_state = states_all[-size:]
-            rews_and_sucesses = self.env_method('compute_state_reward_and_success', achieved_state, desired_state,
+            rews_and_sucesses = self.env_method('compute_state_reward_and_success', achieved_state, desired_state, info=info,
                                                 indices=indices)
         else:
             image_all = self.decode_goal(latents_all)
