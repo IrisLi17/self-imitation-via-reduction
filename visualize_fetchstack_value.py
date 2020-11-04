@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from run_ppo import make_env
 from stable_baselines import PPO2
-
+## set_to_pos function would set the current state and return the obs
 
 def gen_value_with_obstacle(obs, model, goal_idx, env_hyperparam, axes='xz'):
     obs = obs.copy()

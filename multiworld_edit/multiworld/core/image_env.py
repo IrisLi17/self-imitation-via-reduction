@@ -149,6 +149,15 @@ class ImageEnv(ProxyEnv, MultitaskEnv):
 
         return self._update_obs(obs)
 
+    ## add set the state function
+    def set_state_xypos(self,pos):
+        obs = self.wrapped_env.set_state_pos(pos)
+        if not isinstance(obs,dict):
+            print('collision detect')
+            return 0
+        else:
+            return self._update_obs(obs)
+
     def _get_obs(self):
         return self._update_obs(self.wrapped_env._get_obs())
 

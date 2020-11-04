@@ -266,7 +266,7 @@ class SawyerPushAndReachXYEnv(MujocoEnv, Serializable, MultitaskEnv):
 
         return dict(
             is_success = float(
-                hand_distance+puck_distance < self.indicator_threshold
+                hand_distance+puck_distance < self.indicator_threshold_3
             ),
             hand_distance=hand_distance, hand_distance_l2=hand_distance_l2,
             puck_distance=puck_distance, puck_distance_l2=puck_distance_l2,
@@ -498,6 +498,18 @@ class SawyerPushAndReachXYEnv(MujocoEnv, Serializable, MultitaskEnv):
         self._set_hand_xy(state_goal[:2])
         self._set_puck_xy(state_goal[-2:])
 
+    ## set the state with puck and hand xy position
+    def set_state_pos(self,pos):
+        if self.realistic_state_np(pos):
+            hand_state = pos[:2]
+            puck_state = pos[2:]
+            self._set_hand_xy(hand_state)
+            self._set_puck_xy(puck_state)
+            return self._get_obs()
+        else:
+            print('pos collision detect, set again!')
+            return 0
+
     def _set_hand_xy(self, xy):
         for _ in range(10):
             self.data.set_mocap_pos('mocap', np.array([xy[0], xy[1], self.hand_z_position])) #0.02
@@ -671,7 +683,7 @@ class SawyerPushAndReachXYEnv(MujocoEnv, Serializable, MultitaskEnv):
                       vals=None,
                       extent=None,
                       imsize=84,
-                      draw_state=True, draw_goal=False, draw_subgoals=False,
+                      draw_state=True, draw_goal=True, draw_subgoals=False,
                       state=None, goal=None, subgoals=None):
         if extent is None:
             x_bounds = np.array([self.hand_space.low[0] - 0.03, self.hand_space.high[0] + 0.03])

@@ -9,6 +9,5 @@ plot/n_subgoal_2/*
 *.png
 *.gif
 MUJOCO_LOG.TXT
-*.npy
 *.zip
 

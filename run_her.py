@@ -306,9 +306,12 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     ptu.set_device(0)
     ptu.set_gpu_mode(True)
     ## load knn regressor
-
-    train_latent = np.load('sawyer_dataset_latents.npy')
-    train_state = np.load('sawyer_dataset_states.npy')
+    ## update knn regressor with more data
+    # train_latent = np.load('sawyer_dataset_latents.npy')
+    # train_state = np.load('sawyer_dataset_states.npy')
+    train_latent = np.load('sawyer_dataset_train_latents_all_21.npy')
+    train_state = np.load('sawyer_dataset_train_states_all_21.npy')
+    print('training_dataset_size',train_latent.shape[0])
     regressor = KNeighborsRegressor()
     regressor.fit(train_latent, train_state)
     print('regressor fit finished!')
@@ -430,7 +433,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
                     log_eval(_locals['self'].num_timesteps, mean_eval_reward)
-                if _locals['step'] % int(2e3) == 0:
+                if _locals['step'] % int(1e4) == 0:
                     model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(2e3)))
                     model.save(model_path)
                     print('model saved to', model_path)
@@ -548,6 +551,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             states_desired_goal = states[2]
             state_diff = round(np.linalg.norm(state_obs - state),3)
             goal_diff = round(np.linalg.norm(states_desired_goal - goal),3)
+            hand_state_dist_pred = round(np.linalg.norm(state_obs[:2]-states_desired_goal[:2]),3)
+            puck_state_dist_pred = round(np.linalg.norm(state_obs[-2:]-states_desired_goal[-2:]),3)
             print('done',done)
             episode_reward += reward
             frame_idx += 1
@@ -560,7 +565,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             # ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
                          # ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
             ax.set_title('ep:'+str(episode_idx)+',fp:'+str(frame_idx)+'rew:'
-                         +str(reward)+str(done)+'hand_d:'+str(hand_dist)+'puck_d:'+str(puck_dist)+'state_d'+str(state_diff)+'goal_d'+str(goal_diff))
+                         +str(reward)+str(done)+'hand_d:'+str(hand_dist)+'puck_d:'+str(puck_dist)+'p_pred '+str(puck_state_dist_pred)+'h_pred '+str(hand_state_dist_pred)+'state_diff'+str(state_diff)+'goal_diff'+str(goal_diff))
             # ax1.set_title('episode '+str(episode_idx)+',frame'+str(frame_idx)+' reward'+str(reward)+' done'+str(done))
 
             if export_gif:
