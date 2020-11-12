@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mujoco>
+	<compiler angle="radian" coordinate="local"></compiler>
+	<option timestep="0.005">
+		<flag warmstart="enable"></flag>
+	</option>
+
+	<asset>
+		<material name="floor_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.2 0.2 0.2 1"></material>
+        <material name="table_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.93 0.93 0.93 1"></material>
+        <material name="block_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.1 0.1 0.5 1"></material>
+        <material name="stick_mat" specular="0" shininess="0.5" reflectance="0" rgba="0.5 0.2 0.0 0.5"></material>
+	</asset>
+
+	<worldbody>
+		<camera name="fixed" pos="2.5 2.5 8" quat="1 0 0 0"/>
+		<geom name="floor0" pos="2.5 2.5 0" size="30 30 1" type="plane" condim="3" material="floor_mat"></geom>
+		<body name="floor0" pos="2.5 2.5 0">
+			<site name="target0" pos="0.7 0.0 0.4" size="0.10 0.10 0.10" rgba="1 0 0 1" type="sphere"></site>
+		</body>
+
+		<geom name="bound0" pos="-0.2 2.5 0.25" size="0.2 2.9 0.25" type="box" mass="2000" material="table_mat"></geom>
+		<geom name="bound1" pos="5.2 2.5 0.25" size="0.2 2.9 0.25" type="box" mass="2000" material="table_mat"></geom>
+		<geom name="bound2" pos="2.5 -0.2 0.25" size="2.5 0.2 0.25" type="box" mass="2000" material="table_mat"></geom>
+		<geom name="bound3" pos="2.5 5.2 0.25" size="2.5 0.2 0.25" type="box" mass="2000" material="table_mat"></geom>
+		<geom name="wall0" pos="2.0 2.0 0.25" size="0.15 2.0 0.25" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
+        <geom name="wall1" pos="3.0 3.0 0.25" size="0.15 2.0 0.25" type="box" condim="3" mass="100" material="table_mat" rgba="0.93 0.93 0.93 0.5"></geom>
+
+		<body pos="0 0 0" name="masspoint">
+			<geom name="masspoint" size="0.15" type="sphere" material="stick_mat" mass="1" euler="1.57 0 0" rgba="0.1 1.0 0.1 1"></geom>
+			<joint axis="1 0 0" name="masspoint:slidex" type="slide" damping="0.1"></joint>
+			<joint axis="0 1 0" name="masspoint:slidey" type="slide" damping="0.1"></joint>
+			<joint axis="0 0 1" name="masspoint:slidez" type="slide" damping="10000"></joint>
+			<site name="masspoint" pos="0 0 0" size="0.02 0.02 0.02" rgba="0.1 1.0 0.1 1" type="sphere"></site>
+		</body>
+
+		<light directional="true" ambient="0.2 0.2 0.2" diffuse="0.8 0.8 0.8" specular="0.3 0.3 0.3" castshadow="false" pos="0 0 4" dir="0 0 -1" name="light0"></light>
+	</worldbody>
+
+	<actuator>
+		<motor gear="100" joint="masspoint:slidex"></motor>
+		<motor gear="100" joint="masspoint:slidey"></motor>
+	</actuator>
+</mujoco>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mujoco>
+	<compiler angle="radian" coordinate="local" meshdir="../stls/fetch" texturedir="../textures"></compiler>
+	<option timestep="0.002">
+		<flag warmstart="enable"></flag>
+	</option>
+
+	<include file="shared.xml"></include>
+
+	<worldbody>
+		<geom name="floor0" pos="0.8 0.75 0" size="0.85 0.7 1" type="plane" condim="3" material="floor_mat"></geom>
+		<body name="floor0" pos="0.8 0.75 0">
+			<site name="target0" pos="0 0 0.5" size="0.02 0.02 0.02" rgba="1 0 0 1" type="sphere"></site>
+		</body>
+
+		<include file="robot.xml"></include>
+
+		<body pos="1.3 0.75 0.15" name="table0">
+			<geom size="0.25 0.40 0.15" type="box" mass="2000" material="table_mat"></geom>
+		</body>
+
+		<!--body name="object0" pos="0.025 0.025 0.025">
+			<joint name="object0:joint" type="free" damping="0.01"></joint>
+			<geom size="0.025 0.025 0.025" type="box" condim="3" name="object0" material="block_mat" mass="2"></geom>
+			<site name="object0" pos="0 0 0" size="0.02 0.02 0.02" rgba="1 0 0 1" type="sphere"></site>
+		</body!-->
+
+        <body name="box" pos="1.30 0.60 0.3">
+          <geom rgba="1 0.3 0.3 0.1" type="box" contype="1" size="0.06 0.06 0.001" name="box_bottom" conaffinity="1" pos="0 0 0.001" mass="1000" friction="1 0.1 0.002" />
+          <geom rgba="1 0.3 0.3 0.1" type="box" contype="1" size="0.06 0.001 0.05" name="box_wall1" conaffinity="1" pos="0.0 0.06 0.052" mass="1000" friction="1 0.1 0.002" />
+          <geom rgba="1 0.3 0.3 0.1" type="box" contype="1" size="0.06 0.001 0.05" name="box_wall2" conaffinity="1" pos="0.0 -0.06 0.052" mass="1000" friction="1 0.1 0.002" />
+          <geom rgba="1 0.3 0.3 0.1" type="box" contype="1" size="0.001 0.06 0.05" name="box_wall3" conaffinity="1" pos="0.06 0 0.052" mass="1000" friction="1 0.1 0.002" />
+          <geom rgba="1 0.3 0.3 0.1" type="box" contype="1" size="0.001 0.06 0.05" name="box_wall4" conaffinity="1" pos="-0.06 0 0.052" mass="1000" friction="1 0.1 0.002" />
+        </body>
+        <body name="cover" pos="0. 0. 0.113">
+          <inertial pos="0 0 0" mass="1" diaginertia="100000 100000 10000"/>
+
+          <geom rgba="0.3 0.3 1 0.2" type="box" contype="1" size="0.07 0.07 0.011" name="cover_top" conaffinity="1" pos="0 0 0" mass="1" friction="1 0.1 0.002" />
+          <!--geom rgba="0.3 0.3 1 1" type="box" contype="1" size="0.106 0.001 0.01" name="cover_wall1" conaffinity="1" pos="0.0 0.107 -0.0099" mass="1" friction="1 0.1 0.002" />
+          <geom rgba="0.3 0.3 1 1" type="box" contype="1" size="0.106 0.001 0.01" name="cover_wall2" conaffinity="1" pos="0.0 -0.107 -0.0099" mass="1" friction="1 0.1 0.002" />
+          <geom rgba="0.3 0.3 1 1" type="box" contype="1" size="0.001 0.106 0.01" name="cover_wall3" conaffinity="1" pos="0.107 0 -0.0099" mass="1" friction="1 0.1 0.002" />
+          <geom rgba="0.3 0.3 1 1" type="box" contype="1" size="0.001 0.106 0.01" name="cover_wall4" conaffinity="1" pos="-0.107 0 -0.0099" mass="1" friction="1 0.1 0.002" /!-->
+          <geom type="box" pos="0 0 0.06" size="0.05 0.01 0.01" rgba="0 0 0 1" contype="1" conaffinity="1" name="handle" friction="2 0.1 0.002" />
+          <geom type="box" pos="0.045 0 0.025" size="0.01 0.01 0.025" rgba="0 0 0 1" contype="1" conaffinity="1" friction="2 0.1 0.002" />
+          <geom type="box" pos="-0.045 0 0.025" size="0.01 0.01 0.025" rgba="0 0 0 1" contype="1" conaffinity="1" friction="2 0.1 0.002" />
+          <joint name="cover:joint" type="free" limited='false' damping="1"/>
+          <site name="object0" pos="0 0 0" size="0.02 0.02 0.02" rgba="0.3 0.3 1 0" type="sphere" />
+        </body>
+
+		<light directional="true" ambient="0.2 0.2 0.2" diffuse="0.8 0.8 0.8" specular="0.3 0.3 0.3" castshadow="false" pos="0 0 4" dir="0 0 -1" name="light0"></light>
+	</worldbody>
+
+	<actuator>
+		<position ctrllimited="true" ctrlrange="0 0.2" joint="robot0:l_gripper_finger_joint" kp="30000" name="robot0:l_gripper_finger_joint" user="1"></position>
+		<position ctrllimited="true" ctrlrange="0 0.2" joint="robot0:r_gripper_finger_joint" kp="30000" name="robot0:r_gripper_finger_joint" user="1"></position>
+	</actuator>
+</mujoco>
