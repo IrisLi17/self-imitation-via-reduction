@@ -21,6 +21,7 @@ import os, time
 import imageio
 import argparse
 import numpy as np
+# from run_her_augment import VAE_LOAD_PATH
 from run_ppo_augment import stack_eval_model, eval_model, log_eval, egonav_eval_model
 import utils.torch.pytorch_util as ptu
 from utils.wrapper import LatentWrappedEnv
@@ -54,13 +55,21 @@ IMAGE_ENTRY_POINT = {
 
 }
 VAE_LOAD_PATH = {
-    'Image84SawyerPushAndReachArenaTrainEnvBig-v0':'/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
-    'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
+    'Image84SawyerPushAndReachArenaTrainEnvBig-v0':'/home/yilin/vae_data/pnr//vae.pkl',
+    'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0': '/home/yilin/vae_data/pnr/vae.pkl',
 
-    'Image48PointmassUWallTrainEnvBig-v0':'/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
-    'Image48PointmassUWallTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
+    'Image48PointmassUWallTrainEnvBig-v0':'/home/yilin/vae_data/pm//vae.pkl',
+    'Image48PointmassUWallTrainEnvBigUnlimit-v0': '/home/yilin/vae_data/pm/vae.pkl',
 
 }
+# VAE_LOAD_PATH = {
+#     'Image84SawyerPushAndReachArenaTrainEnvBig-v0':'/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
+#     'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
+#
+#     'Image48PointmassUWallTrainEnvBig-v0':'/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
+#     'Image48PointmassUWallTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
+#
+# }
 
 def arg_parse():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -433,8 +442,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
                     log_eval(_locals['self'].num_timesteps, mean_eval_reward)
-                if _locals['step'] % int(1e4) == 0:
-                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(2e3)))
+                if _locals['step'] % int(2e4) == 0:
+                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(2e4)))
                     model.save(model_path)
                     print('model saved to', model_path)
                 return True

@@ -13,15 +13,15 @@ import time
 import csv
 import json
 import os
-
 VAE_LOAD_PATH = {
-    'Image84SawyerPushAndReachArenaTrainEnvBig-v0':'/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
-    'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
+    'Image84SawyerPushAndReachArenaTrainEnvBig-v0':'/home/yilin/vae_data/pnr//vae.pkl',
+    'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0': '/home/yilin/vae_data/pnr/vae.pkl',
 
-    'Image48PointmassUWallTrainEnvBig-v0':'/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
-    'Image48PointmassUWallTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
+    'Image48PointmassUWallTrainEnvBig-v0':'/home/yilin/vae_data/pm//vae.pkl',
+    'Image48PointmassUWallTrainEnvBigUnlimit-v0': '/home/yilin/vae_data/pm/vae.pkl',
 
 }
+
 
 def _worker(remote, parent_remote, env_fn_wrapper):
     parent_remote.close()

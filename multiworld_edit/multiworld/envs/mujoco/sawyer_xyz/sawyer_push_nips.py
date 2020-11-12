@@ -483,8 +483,12 @@ class SawyerPushAndReachXYEnv(MujocoEnv, Serializable, MultitaskEnv):
 
     def set_goal(self, goal):
         self._state_goal = goal['state_desired_goal']
+        self._state_goal[:2] = np.clip(self._state_goal[:2], self.hand_space.low, self.hand_space.high)
+        self._state_goal[-2:] = np.clip(self._state_goal[-2:], self.puck_space.low, self.puck_space.high)
         hand_goal = self._state_goal[:2]
         puck_goal = self._state_goal[-2:]
+
+
         qpos = self.data.qpos.flat.copy()
         qvel = self.data.qvel.flat.copy()
         qpos[14:17] = np.hstack((hand_goal.copy(), np.array([self.hand_z_position]))) #0.02
@@ -579,6 +583,7 @@ class SawyerPushAndReachXYEnv(MujocoEnv, Serializable, MultitaskEnv):
         self.data.set_mocap_pos('mocap', mocap_pos)
         self.data.set_mocap_quat('mocap', mocap_quat)
         self.set_goal({'state_desired_goal': goal})
+        # self.sim.forward()
 
     ## adding the same api part for sir code
     def get_state(self):
@@ -595,6 +600,7 @@ class SawyerPushAndReachXYEnv(MujocoEnv, Serializable, MultitaskEnv):
         mocap_pos, mocap_quat = mocap_state
         self.data.set_mocap_pos('mocap', mocap_pos)
         self.data.set_mocap_quat('mocap', mocap_quat)
+        self.sim.forward()
 
 
     def reset_mocap_welds(self):

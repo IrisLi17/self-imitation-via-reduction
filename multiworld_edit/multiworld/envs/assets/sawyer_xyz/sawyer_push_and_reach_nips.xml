@@ -215,18 +215,7 @@
 
         <body name="puck" pos="0 0 0.1">
             <joint name="puckjoint" type="free" limited='false' damping="0" armature="0" />
-            <!--<joint name="puckjoint-x" type="slide" limited='false' pos="0 0 0"-->
-                   <!--axis="1 0 0"-->
-                   <!--/>-->
-            <!--<joint name="puckjoint-y" type="slide" limited='false' pos="0 0 0"-->
-                   <!--axis="0 1 0"-->
-            <!--/>-->
-            <!--<joint name="puckjoint-z" type="slide" limited='false' pos="0 0 0"-->
-                   <!--axis="0 0 1"-->
-            <!--/>-->
             <inertial pos="0 0 0" mass=".1" diaginertia="100000 100000 100000"/>
-            <!--type="box"-->
-            <!--size="0.02 0.02 0.02"-->
             <geom name="puckbox"
                   type="cylinder"
                   pos="0 0 0"

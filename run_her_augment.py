@@ -92,11 +92,11 @@ PICK_ENTRY_POINT = {
     'FetchStackUnlimit-v1': FetchStackEnv,
 }
 VAE_LOAD_PATH = {
-    'Image84SawyerPushAndReachArenaTrainEnvBig-v0':'/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
-    'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192/vae.pkl',
+    'Image84SawyerPushAndReachArenaTrainEnvBig-v0':'/home/yilin/vae_data/pnr//vae.pkl',
+    'Image84SawyerPushAndReachArenaTrainEnvBigUnlimit-v0': '/home/yilin/vae_data/pnr/vae.pkl',
 
-    'Image48PointmassUWallTrainEnvBig-v0':'/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
-    'Image48PointmassUWallTrainEnvBigUnlimit-v0': '/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047/vae.pkl',
+    'Image48PointmassUWallTrainEnvBig-v0':'/home/yilin/vae_data/pm//vae.pkl',
+    'Image48PointmassUWallTrainEnvBigUnlimit-v0': '/home/yilin/vae_data/pm/vae.pkl',
 
 }
 # load the vae_model
@@ -336,7 +336,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     #     # env = SubprocVecEnv([make_thunk(i) for i in range(n_workers)])
     # else:
     #     env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
-    print('env',env)
+    # print('env',env)
     def make_thunk_aug(rank):
         if env_name in IMAGE_ENTRY_POINT.keys():
             # return lambda: make_env(env_id=aug_env_name, seed=seed, rank=rank, kwargs=aug_env_kwargs),['observation','achieved_goal','desired_goal']
@@ -409,12 +409,19 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             if n_workers == 1:
                 pass
                 # del train_kwargs['priority_buffer']
-            if env_name in ('FetchStack',IMAGE_ENTRY_POINT.keys()) :
+            if env_name in ('FetchStack') :
                 train_kwargs['ent_coef'] = "auto"
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
                 train_kwargs['batch_size'] = 256
                 train_kwargs['random_exploration'] = 0.1
+            elif env_name in IMAGE_ENTRY_POINT.keys():
+                train_kwargs['ent_coef'] = "auto"
+                train_kwargs['tau'] = 0.001
+                train_kwargs['gamma'] = 0.98
+                train_kwargs['batch_size'] = 256
+                train_kwargs['random_exploration'] = 0.1
+                train_kwargs['n_subgoal']=1
             elif 'FetchPushWallObstacle' in env_name:
                 train_kwargs['tau'] = 0.001
                 train_kwargs['gamma'] = 0.98
@@ -445,8 +452,8 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
                     else:
                         mean_eval_reward = eval_model(eval_env, _locals["self"])
                     log_eval(_locals['self'].num_timesteps, mean_eval_reward)
-                if _locals['step'] % int(1e4) == 0:
-                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(2e3)))
+                if _locals['step'] % int(2e4) == 0:
+                    model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(2e4)))
                     model.save(model_path)
                     print('model saved to', model_path)
                 return True

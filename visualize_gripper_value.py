@@ -59,8 +59,8 @@ if __name__ == '__main__':
     logger.writeheader()
     file_handler.flush()
 
-    train_latent = np.load('sawyer_dataset_latents.npy')
-    train_state = np.load('sawyer_dataset_states.npy')
+    train_latent = np.load('sawyer_dataset_latents_total_all_21.npy')
+    train_state = np.load('sawyer_dataset_states_total_all_21.npy')
     regressor = KNeighborsRegressor()
     regressor.fit(train_latent, train_state)
 
@@ -111,6 +111,7 @@ if __name__ == '__main__':
     model.model.normalize_value2=[]
     model.model.value_prod=[]
     model.model.value_mean=[]
+    model.model.latent_list = []
     # model.model.noise_mag = noise_mag
     # model.model.n_object = n_object
     success_flag=False
@@ -230,17 +231,17 @@ if __name__ == '__main__':
         # select subgoal with cem
         SAC_augment.reward_type = 'dense'
         SAC_augment.aug_env = env
-        restart_step, subgoal_min,debug_dict_min = SAC_augment.select_subgoal_cem(model.model, transition_buf, 2,'min')
-        _, subgoal_mean,debug_dict_mean = SAC_augment.select_subgoal_cem(model.model, transition_buf, 2,'mean')
+        # restart_step, subgoal_min,debug_dict_min = SAC_augment.select_subgoal_cem(model.model, transition_buf, 1,'min')
+        _, subgoal_mean,debug_dict_mean = SAC_augment.select_subgoal_cem(model.model, transition_buf, 1)
 
-        img_goal_min = decode_goal(vae_model, subgoal_min)
+        # img_goal_min = decode_goal(vae_model, subgoal_min)
         img_goal_mean = decode_goal(vae_model,subgoal_mean)
-        for i in range(2):
-            min_img_subgoal = (
-                        img_goal_min[i].reshape(3, vae_model.imsize, vae_model.imsize).transpose(1, 2, 0) * 255).astype(
-                'uint8')
-            cv2.imwrite(os.path.join(os.path.dirname(model_path), 'min_subgoal_'+str(i)+'episode_'+str(episode)+'.png' ),
-                        min_img_subgoal)
+        for i in range(1):
+            # min_img_subgoal = (
+            #             img_goal_min[i].reshape(3, vae_model.imsize, vae_model.imsize).transpose(1, 2, 0) * 255).astype(
+            #     'uint8')
+            # cv2.imwrite(os.path.join(os.path.dirname(model_path), 'min_subgoal_'+str(i)+'episode_'+str(episode)+'.png' ),
+            #             min_img_subgoal)
             mean_img_subgoal = (
                         img_goal_mean[i].reshape(3, vae_model.imsize, vae_model.imsize).transpose(1, 2, 0) * 255).astype(
                 'uint8')
@@ -251,21 +252,21 @@ if __name__ == '__main__':
         # selected_subgoal_puck_dist_to_init,selected_subgoal_puck_dist_to_goal,\
         #     value1,value2,value_mean= [np.zeros((2))]*8
         ## TODO DEBUG purpose
-        debug_mu_min = debug_dict_min['debug_mu']
-        debug_chosen_value_min = debug_dict_min['debug_chosen_value']
-        print('mu_shape',np.stack(debug_mu_min).shape)
-        img_mu_min_decode_goal = decode_goal(vae_model,np.stack(debug_mu_min))
+        # debug_mu_min = debug_dict_min['debug_mu']
+        # debug_chosen_value_min = debug_dict_min['debug_chosen_value']
+        # print('mu_shape',np.stack(debug_mu_min).shape)
+        # img_mu_min_decode_goal = decode_goal(vae_model,np.stack(debug_mu_min))
         debug_mu_mean = debug_dict_mean['debug_mu']
         debug_chosen_value_mean = debug_dict_mean['debug_chosen_value']
         print('mu_shape', np.stack(debug_mu_mean).shape)
         img_mu_mean_decode_goal = decode_goal(vae_model, np.stack(debug_mu_mean))
-        for i in range(img_mu_min_decode_goal.shape[0]):
-            vae_mu_min_decoded_img_subgoal = (
-                    img_mu_min_decode_goal[i].reshape(3, vae_model.imsize, vae_model.imsize).transpose(1, 2, 0) * 255).astype(
-                'uint8')
-            cv2.imwrite(os.path.join(os.path.dirname(model_path),
-                                     'vae_mu_min_subgoal_' + str(i) + 'value2_'+ str(int(round(np.mean(debug_chosen_value_min[i]),3)*1000)) +'episode_' + str(episode) + '.png'),
-                        vae_mu_min_decoded_img_subgoal)
+        for i in range(img_mu_mean_decode_goal.shape[0]):
+            # vae_mu_min_decoded_img_subgoal = (
+            #         img_mu_min_decode_goal[i].reshape(3, vae_model.imsize, vae_model.imsize).transpose(1, 2, 0) * 255).astype(
+            #     'uint8')
+            # cv2.imwrite(os.path.join(os.path.dirname(model_path),
+            #                          'vae_mu_min_subgoal_' + str(i) + 'value2_'+ str(int(round(np.mean(debug_chosen_value_min[i]),3)*1000)) +'episode_' + str(episode) + '.png'),
+            #             vae_mu_min_decoded_img_subgoal)
             vae_mu_mean_decoded_img_subgoal = (
                     img_mu_mean_decode_goal[i].reshape(3, vae_model.imsize, vae_model.imsize).transpose(1, 2, 0) * 255).astype(
                 'uint8')

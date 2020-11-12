@@ -90,15 +90,21 @@ class SAC_augment(OffPolicyRLModel):
         self.latent_mode = True
         self.use_true_prior=True
         self.set_range = True
+        ## filter range
+        self.filter_low = -0.2
+        self.filter_high = 0.0
+        self.value_count = 0
+        self.start_step = 0
+
 
         if 'Image84SawyerPushAndReachArenaTrainEnvBig-v0' in self.env_id:
-            base_dir = '/home/yilin/leap/data/pnr/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_16_10_33_id000--s85192'
+            base_dir = '/home/yilin/vae_data/pnr'
             path = osp.join(base_dir, 'latent_info.npy')
             latent_range = np.load(path)
             self.range_min = latent_range[:self.latent_dim]
             self.range_max = latent_range[-self.latent_dim:]
         elif 'Image48PointmassUWallTrainEnvBig-v0' in self.env_id:
-            base_dir = '/home/yilin/leap/data/pm/09-20-train-vae-local/09-20-train-vae-local_2020_09_20_22_23_14_id000--s4047'
+            base_dir = '/home/yilin/vae_data/pm'
             path = osp.join(base_dir, 'latent_info.npy')
             latent_range = np.load(path)
             self.range_min = latent_range[:self.latent_dim]
@@ -175,6 +181,7 @@ class SAC_augment(OffPolicyRLModel):
         self.processed_next_obs_ph = None
         self.log_ent_coef = None
         self.num_aug_steps = 0
+        self.num_suc_aug_steps = 0
 
         if _init_setup_model:
             self.setup_model()
@@ -619,14 +626,14 @@ class SAC_augment(OffPolicyRLModel):
                 self.task_mode = []
             # For debugging
             self.debug_value1, self.debug_value2,self.normalize_value1,\
-            self.normalize_value2,self.value_prod,self.value_mean,self.latent_list = [], [], [], [], [], [],[]
+            self.normalize_value2,self.latent_list = [], [], [], [], []
 
             # For filtering subgoals
             self.mean_value_buf = deque(maxlen=500)
             # self.loss_value_buf = deque(maxlen=500)
             #
-            self.success_value_buf = deque(maxlen=500)
-            self.fail_value_buf = deque(maxlen=500)
+            # self.success_value_buf = deque(maxlen=500)
+            # self.fail_value_buf = deque(maxlen=500)
 
             num_augment_ep_buf = deque(maxlen=100)
             num_success_augment_ep_buf = deque(maxlen=100)
@@ -659,16 +666,51 @@ class SAC_augment(OffPolicyRLModel):
                         return True
                     return False
 
-            def log_debug_value(value1, value2, normalize_value1,normalize_value2,value_prod,value_mean,goal_idx,latents,is_success):
+            def log_debug_value(value1, value2, normalize_value1,normalize_value2,goal_idx,is_success):
                 if not os.path.exists(os.path.join(logger.get_dir(), 'debug_value.csv')):
                     with open(os.path.join(logger.get_dir(), 'debug_value.csv'), 'a', newline='') as csvfile:
                         csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
-                        title = ['value1', 'value2','normalize_value1 ','normalize_value2','value_prod','value_mean','goal_idx','latents', 'is_success', 'num_timesteps']
+                        title = ['value1', 'value2','normalize_value1 ','normalize_value2','goal_idx', 'is_success', 'num_timesteps']
+                        # for i in range(48):
+                        #     title.append('latent_'+str(i))
                         csvwriter.writerow(title)
                 with open(os.path.join(logger.get_dir(), 'debug_value.csv'), 'a', newline='') as csvfile:
                     csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
-                    data = [value1, value2, normalize_value1,normalize_value2,value_prod,value_mean,goal_idx, latents,int(is_success), self.num_timesteps]
+                    data = [value1, value2, normalize_value1,normalize_value2,goal_idx, int(is_success), self.num_timesteps]
+                    data = np.array(data)
+                    # data = np.concatenate([data,latents.reshape(48,)])
                     csvwriter.writerow(data)
+
+            def log_debug_transition(transitions,num_timesteps):
+                if not os.path.exists(os.path.join(logger.get_dir(), 'debug_transition.csv')):
+                    with open(os.path.join(logger.get_dir(), 'debug_transition.csv'), 'a',
+                              newline='') as csvfile:
+                        csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',',
+                                               quoting=csv.QUOTE_MINIMAL)
+
+                        title = ['latent_' + str(i) for i in range(48)]
+                        title.append('action_1')
+                        title.append('action_2')
+                        for i in range(48):
+                            title.append('next_obs_latent_' + str(i))
+                        title.append('reward')
+                        title.append('success')
+                        title.append('num_timesteps')
+                        title.append('episode_len')
+                        csvwriter.writerow(title)
+                with open(os.path.join(logger.get_dir(), 'debug_transition.csv'), 'a', newline='') as csvfile:
+                    csvwriter = csv.writer(csvfile, delimiter=',', quotechar=',', quoting=csv.QUOTE_MINIMAL)
+                    for i in range(len(transitions)):
+                        obs = transitions[i][0]
+                        action = transitions[i][1]
+                        trans = np.concatenate([obs, action])
+                        reward = transitions[i][2]
+                        next_obs = transitions[i][3]
+                        success = transitions[i][4]
+                        data_part = np.array([reward,success,num_timesteps,len(transitions)])
+                        trans = np.concatenate([trans,next_obs])
+                        trans = np.concatenate([trans,data_part])
+                        csvwriter.writerow(trans)
 
 
 
@@ -820,7 +862,7 @@ class SAC_augment(OffPolicyRLModel):
 
 
                                 _restart_steps, _subgoals= self.select_subgoal_cem(self.ep_transition_buf[idx],
-                                                                                k=self.n_subgoal,)
+                                                                                k=self.n_subgoal)
 
 
                             else:
@@ -1017,18 +1059,31 @@ class SAC_augment(OffPolicyRLModel):
                         if end_step <= self.get_horizon(self.current_nobject[idx] if 'FetchStack' in self.env_id else None):
                             log_debug_value(self.debug_value1[idx], self.debug_value2[idx],
                                             self.normalize_value1[idx],self.normalize_value2[idx],
-                                            self.value_prod[idx],self.value_mean[idx], self.latent_list[idx], np.argmax(temp_subgoals[idx]), True)
-                            self.success_value_buf.append(self.value_prod[idx])
+                                            np.argmax(temp_subgoals[idx]), True)
+                            # self.success_value_buf.append(self.value_prod[idx])
                             # print(temp_subgoals[idx])
                             # is_self_aug = temp_subgoals[idx][3]
                             transitions = env_increment_storage[idx][:end_step - env_restart_steps[idx]]
+
+                            ## TODO save transition for debugging
+                            self.num_suc_aug_steps += (end_step - env_restart_steps[idx])
+                            # log_debug_transition(transitions,self.num_timesteps)
+                            # print('self.num_suc_aug_steps ',self.num_suc_aug_steps)
+                            # print('len of the env_storage ',len(env_storage[idx]))
+                            # print('len of the transitions ',len(transitions))
+                            # print('steps added ',end_step-env_restart_steps[idx])
+                            # len_prev = len(self.augment_replay_buffer)
+                            # print('len of the augment replay buffer',len_prev)
                             for i in range(len(env_storage[idx])):
                                 if isinstance(self.augment_replay_buffer.replay_buffer, MultiWorkerReplayBuffer) \
                                         or isinstance(self.augment_replay_buffer.replay_buffer, PrioritizedMultiWorkerReplayBuffer):
                                     self.augment_replay_buffer.add(
                                         *([np.expand_dims(item, axis=0) for item in env_storage[idx][i]]))
+
                                 else:
                                     self.augment_replay_buffer.add(*(env_storage[idx][i]))
+                            # print('len added for env_storage ',len(self.augment_replay_buffer)-len_prev)
+                            # len_prev = len(self.augment_replay_buffer)
                             for i in range(len(transitions)):
                                 if i == len(transitions) - 1:
                                     temp = list(transitions[i])
@@ -1040,12 +1095,13 @@ class SAC_augment(OffPolicyRLModel):
                                         *([np.expand_dims(item, axis=0) for item in transitions[i]]))
                                 else:
                                     self.augment_replay_buffer.add(*(transitions[i]))
+                            # print('len added for transitions',len(self.augment_replay_buffer)-len_prev)
                         else:
                             log_debug_value(self.debug_value1[idx], self.debug_value2[idx],
                                             self.normalize_value1[idx], self.normalize_value2[idx],
-                                            self.value_prod[idx], self.value_mean[idx],self.latent_list[idx],
-                                            np.argmax(temp_subgoals[idx]), False)
-                            self.fail_value_buf.append(self.value_prod[idx])
+                                            np.argmax(temp_subgoals[idx]),False)
+                            # self.fail_value_buf.append(self.value_prod[idx])
+                            # self.num_fail_aug_steps += (end_step - env_restart_steps[idx])
 
 
                     self.restart_steps = self.restart_steps[self.aug_env.num_envs:]
@@ -1063,9 +1119,7 @@ class SAC_augment(OffPolicyRLModel):
                     self.debug_value2 = self.debug_value2[self.aug_env.num_envs:]
                     self.normalize_value1 = self.normalize_value1[self.aug_env.num_envs:]
                     self.normalize_value2 = self.normalize_value2[self.aug_env.num_envs:]
-                    self.value_prod = self.value_prod[self.aug_env.num_envs:]
-                    self.value_mean = self.value_mean[self.aug_env.num_envs:]
-                    self.latent_list = self.latent_list[self.aug_env.num_envs:]
+                    # self.latent_list = self.latent_list[self.aug_env.num_envs:]
 
 
                 if step % self.train_freq == 0:
@@ -1118,10 +1172,10 @@ class SAC_augment(OffPolicyRLModel):
                     logger.logkv("episodes", num_episodes)
                     logger.logkv("mean 100 episode reward", mean_reward)
                     # adding logger for value success and fail
-                    if len(self.success_value_buf):
-                        logger.logkv("mean success value buf",safe_mean(self.success_value_buf))
-                    if len(self.fail_value_buf):
-                        logger.logkv("mean fail value buf",safe_mean(self.fail_value_buf))
+                    # if len(self.success_value_buf):
+                    #     logger.logkv("mean success value buf",safe_mean(self.success_value_buf))
+                    # if len(self.fail_value_buf):
+                    #     logger.logkv("mean fail value buf",safe_mean(self.fail_value_buf))
                     if len(ep_info_buf) > 0 and len(ep_info_buf[0]) > 0:
                         logger.logkv('ep_rewmean', safe_mean([ep_info['r'] for ep_info in ep_info_buf]))
                         logger.logkv('eplenmean', safe_mean([ep_info['l'] for ep_info in ep_info_buf]))
@@ -1141,6 +1195,8 @@ class SAC_augment(OffPolicyRLModel):
                     logger.logkv('augmented steps', len(self.augment_replay_buffer))
                     logger.logkv("original_timesteps", self.num_timesteps)
                     logger.logkv("total timesteps", self.num_timesteps + self.num_aug_steps)
+                    logger.logkv('num_aug_steps',self.num_aug_steps)
+                    logger.logkv('num_success_aug_steps',self.num_suc_aug_steps)
                     # logger.logkv("random_ratio", self.env.env.get_attr('random_ratio')[0])
                     logger.dumpkvs()
                     # Reset infos:
@@ -1310,11 +1366,12 @@ class SAC_augment(OffPolicyRLModel):
         # print('restart step', restart_step)
         return restart_step, subgoal
 
-    def select_subgoal_cem(self, transition_buf, k):
+    def select_subgoal_cem(self, transition_buf, k,choice=None):
         # self.ep_transition_buf, self.model.value
-        filter_low = 0.0
-        filter_high = 1.0
+        # filter_low = -0.5
+        # filter_high = 0.0
         # assert len(transition_buf) == 100, len(transition_buf)
+
         obs_buf, *_ = zip(*transition_buf)
         obs_buf = np.asarray(obs_buf)
 
@@ -1335,7 +1392,7 @@ class SAC_augment(OffPolicyRLModel):
         sample_obs = obs_buf[j]
         if self.use_true_prior:
             mu = np.zeros(self.latent_dim)
-            std = np.ones(self.latent_dim)
+            std = np.ones(self.latent_dim)*1.5
         else :
             mu = self.aug_env.vae.dist_mu
             std = self.aug_env.vae.dist_std
@@ -1352,10 +1409,7 @@ class SAC_augment(OffPolicyRLModel):
         value2_chosen = []
         normalize_value1_chosen = []
         normalize_value2_chosen = []
-        value_prod_chosen = []
-        sorted_losses= []
-        mean_values = []
-        sorted_indices=[]
+
         for i in range(self.num_iters):
             # samples = torch.distributions.Normal(mu_var,std_var).sample_n(batch_sizes[i]*4096)
             # print('times',i)
@@ -1398,16 +1452,16 @@ class SAC_augment(OffPolicyRLModel):
             _values = np.squeeze(self.sess.run(self.step_ops[6], feed_dict), axis=-1)
             value2 = _values[:sample_obs_batches.shape[0]]# sample_obs_batches
             value1 = _values[sample_obs_batches.shape[0]:]# subgoal_obs
-            print('value_1',value1.shape)
+            # print('value_1',value1.shape)
             # exit()
             value_con = np.concatenate([value1.reshape(-1,1),value2.reshape(-1,1)],axis=1)
-            value_min = np.min(value_con,axis=1)
-            print('value_min',value_min.shape)
-            print('value1',value1[:3])
-            print('value2',value2[:3])
-            print('value_min',value_min[:3])
+            # value_min = np.min(value_con,axis=1)
+            # print('value_min',value_min.shape)
+            # print('value1',value1[:3])
+            # print('value2',value2[:3])
+            # print('value_min',value_min[:3])
             # loss = value_min
-            loss = (value1+value2)/2
+            # loss = (value1+value2)/2
             # if choice=='min':
             #     loss = value_min
             # elif choice=='mean':
@@ -1425,7 +1479,7 @@ class SAC_augment(OffPolicyRLModel):
             # loss = (normalize_value1*normalize_value2)
             # loss = value1
             # mean loss
-            # loss = (value1+value2)/2
+            loss = (value1+value2)/2
             # sorted_losses = np.sort(loss)
             sorted_indices = np.argsort(loss)
             mean_values = (value1 + value2 )/2
@@ -1461,37 +1515,79 @@ class SAC_augment(OffPolicyRLModel):
         mean_values = mean_value_chosen[-k:]
         elites_top_k = elites[-k:]
         # mean_values = (value1[good_ind] + value2[good_ind]) / 2
-        # For debugging
-        for i in range(k):
-            self.debug_value1.append(value1s[i])
-            self.debug_value2.append(value2s[i])
-            self.normalize_value1.append(normalize_value1s[i])
-            self.normalize_value2.append(normalize_value2s[i])
-            self.value_prod.append(loss_values[i])
-            self.value_mean.append(mean_values[i])
-            latent_sample = sample_obs.copy()
-            latent_sample[self.latent_dim:self.latent_dim*2]=elites_top_k[i]
-            self.latent_list.append(latent_sample)
+
         assert loss_values.shape[0] == k
         assert mean_values.shape[0] == k
-        for i in range(k):
-            self.mean_value_buf.append(mean_values[i])
+        assert k == 1
+        self.filter_low =0.7
+        self.filter_high=1.0
+        assert self.filter_low == 0.7
+        assert self.filter_high == 1.0
+        # assert self.filter_low >= -1.0
+        # assert self.filter_high == 0.0
+        # self.value_count +=  int(np.any(loss_values<=0.0))
+        # current_timesteps = self.num_timesteps
+        # if self.value_count>1:
+        #     if (current_timesteps) <= 3e6:
+        #         self.filter_low = round(-0.2 + -0.8 * (current_timesteps - self.start_step) / (3e6 - self.start_step),4)
+        #
+        # elif self.value_count==1:
+        #     self.start_step = current_timesteps
+
+        # for i in range(k):
             # self.loss_value_buf.append(loss_values[i])
         # print('self.reward_type',self.reward_type)
-        if self.reward_type in ('state_sparse','sparse'):
-            filtered_idx = np.where(np.logical_and(loss_values <= filter_high, loss_values >= filter_low))[0]
+        # if self.reward_type in ('state_sparse','sparse'):
+        #     filtered_idx = np.where(np.logical_and(loss_values <= filter_high, loss_values >= filter_low))[0]
+        # else:
+        #     filtered_idx = np.arange(k)
+        print('self.reward_type',self.reward_type)
+
+        if self.reward_type=='dense':
+            filtered_idx = np.where(np.logical_and(loss_values <= self.filter_high, loss_values >= self.filter_low))[0]
+        elif self.reward_type in ('sparse','state_sparse'):
+            filtered_idx = np.where(np.logical_and(loss_values <= self.filter_high, loss_values >= self.filter_low))[0]
+            # filtered_idx = np.arange(k)
         else:
-            filtered_idx = np.arange(k)
-        # filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
-        print('filtered_idx',filtered_idx)
-        print('loss_value',loss_values)
-        print('mean_value',mean_values)
-        print('global_mean_value',np.mean(self.mean_value_buf))
+            raise NotImplementedError
+        # For debugging
+
         #### option 1 filter with low and high
         opt_sample = elites_top_k[filtered_idx]
+
+        opt_value1s = value1s[filtered_idx]
+        opt_value2s = value2s[filtered_idx]
+        opt_normalize_value1s= normalize_value1s[filtered_idx]
+        opt_normalize_value2s = normalize_value2s[filtered_idx]
+        opt_mean_values = mean_values[filtered_idx]
+
+
         ##### option 2 without filter
         # opt_sample = elites_top_k
 
+        ### for debugging
+        for i in range(filtered_idx.shape[0]):
+            self.debug_value1.append(opt_value1s[i])
+            self.debug_value2.append(opt_value2s[i])
+            self.normalize_value1.append(opt_normalize_value1s[i])
+            self.normalize_value2.append(opt_normalize_value2s[i])
+            self.mean_value_buf.append(opt_mean_values[i])
+
+            # self.value_prod.append(loss_values[i])
+            # self.value_mean.append(mean_values[i])
+            # latent_sample = sample_obs.copy()
+            # latent_sample[self.latent_dim:self.latent_dim * 2] = opt_sample[i]
+            # self.latent_list.append(latent_sample)
+            # filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
+        print('filtered_idx', filtered_idx)
+        print('filter_low', self.filter_low)
+        print('filter_high',self.filter_high)
+        print('loss_value', loss_values)
+        print('mean_value',mean_values)
+        print('value_count',self.value_count)
+        print('start_step',self.start_step)
+        print('filtered_mean_value', opt_mean_values)
+        print('global_mean_value', safe_mean(self.mean_value_buf))
         # good_ind = good_ind[filtered_idx]
         # opt_sample = samples[good_ind]
         # opt_mean_value = mean_values[sorted_indices[-k:]]
@@ -1539,6 +1635,7 @@ class SAC_augment(OffPolicyRLModel):
         ## TODO remove deubg purpose part
         debug_dict = dict(debug_mu=debug_mu,debug_std=debug_std,
                           debug_chosen_value=debug_chosen_value,debug_chosen_latents=debug_chosen_latents)
+        # return restart_steps, opt_subgoal,debug_dict
         return restart_steps, opt_subgoal
 
     def reproject_encoding(self,encoding):

@@ -1,6 +1,8 @@
 import sys, os
 import numpy as np
 import pandas
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy import interpolate
 
@@ -8,7 +10,7 @@ from scipy import interpolate
 if __name__ == '__main__':
     option = sys.argv[1]
     log_paths = sys.argv[2:]
-    assert option in ['success_rate', 'eval', 'entropy', 'aug_ratio', 'self_aug_ratio']
+    assert option in ['success_rate', 'eval', 'entropy', 'aug_ratio', 'self_aug_ratio','q_loss']
     window = 20 if option == 'eval' else 100
     def get_item(log_file, label):
         data = pandas.read_csv(log_file, index_col=None, comment='#', error_bad_lines=True)
@@ -18,7 +20,12 @@ if __name__ == '__main__':
         for i in range(out.shape[0]):
             out[i] = np.mean(array[i:i + window])
         return out
-    fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+    # fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+    if option=='q_loss':
+        fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+    else:
+        fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+
     for log_path in log_paths:
         progress_file = os.path.join(log_path, 'progress.csv')
         eval_file = os.path.join(log_path, 'eval.csv')
@@ -26,6 +33,8 @@ if __name__ == '__main__':
         success_rate = get_item(progress_file, 'success rate')
         total_timesteps = get_item(progress_file, 'total timesteps')
         entropy = get_item(progress_file, 'entropy')
+        qf1_loss = get_item(progress_file,'qf1_loss')
+        qf2_loss = get_item(progress_file,'qf2_loss')
         try:
             eval_reward = get_item(eval_file, 'mean_eval_reward')
             n_updates = get_item(eval_file, 'n_updates')
@@ -56,6 +65,11 @@ if __name__ == '__main__':
         elif option == 'self_aug_ratio':
             self_aug_ratio = get_item(progress_file, 'self_aug_ratio')
             ax.plot(smooth(total_timesteps, window), smooth(self_aug_ratio, window), label=log_path)
+        elif option=='q_loss':
+            ax[0].plot(smooth(total_timesteps,window),smooth(qf1_loss,window),label=log_path)
+            ax[0].set_title('qf1_loss')
+            ax[1].plot(smooth(total_timesteps,window),smooth(qf2_loss,window),label=log_path)
+            ax[1].set_title('qf2_loss')
         '''
         try:
             original_steps = get_item(progress_file, 'original_timesteps')[0]
@@ -76,8 +90,13 @@ if __name__ == '__main__':
     elif option == 'self_aug_ratio':
         ax.set_title('self_aug_ratio')
     # ax[1].set_title('augment steps / original rollout steps')
-    ax.grid()
+    # ax.grid()
+    ax[0].grid()
+    ax[1].grid()
     # ax[1].grid()
-    plt.legend()
-    plt.show()
-    
+    # plt.legend()
+    plt.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0))
+    plt.tight_layout(pad=0.05)
+    # plt.show()
+    plt.savefig('compare_'+str(option)  + '.png')
+

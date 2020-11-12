@@ -356,17 +356,19 @@ class LatentWrappedEnv(ProxyEnv,Env):
 
             dist = np.linalg.norm(achieved_goal-desired_goal)
 
-        # print('reward_type',self.reward_type)
         # print('self.epsilon',self.epsilon)
         ## add reward_offset for sparse environment
-        if self.reward_type in ('state_sparse') and self.reward_type == 2:
-            reward = (not ( (puck_dist_2  < self.epsilon) and (hand_dist_2 < self.epsilon) )) * -1.0
+        if self.reward_type in ('state_sparse') and self.reward_object == 2:
+            reward = (not ( (puck_dist_2  < 0.06) and (hand_dist_2 < 0.03) )) * -1.0
             reward = reward + 1.0
-            success = (puck_dist_2  < self.epsilon) and (hand_dist_2 < self.epsilon)
-        elif self.reward_type in ('state_sparse','sparse') and self.reward_type !=2 :
+            success = (puck_dist_2  < 0.06) and (hand_dist_2 < 0.03)
+            # print('reward_type_object', self.reward_type, self.reward_object, type(self.reward_object))
+
+        elif self.reward_type in ('state_sparse','sparse') and self.reward_object !=2 :
             reward = (dist >= self.epsilon) * -1.0
             success = dist < self.epsilon
             reward=reward+1.0
+
         else:
             reward = -dist
             success = dist < self.epsilon
