@@ -534,6 +534,8 @@ class SAC_augment(OffPolicyRLModel):
             # Initial learning rate
             current_lr = self.learning_rate(1)
 
+            select_subgoal_time = 0.
+
             start_time = time.time()
             episode_rewards = [[0.0] for _ in range(self.env.env.num_envs)]
             episode_successes = [[] for _ in range(self.env.env.num_envs)]
@@ -759,6 +761,8 @@ class SAC_augment(OffPolicyRLModel):
                             _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx],
                                                                             k=self.n_subgoal,
                                                                             tower_height=self.ep_tower_height[idx] if 'FetchStack' in self.env_id else None)
+                            select_subgoal_time += (time.time() - select_subgoal_time0)
+                            # print('select subgoal time', select_subgoal_time)
                             assert isinstance(_restart_steps, np.ndarray)
                             assert isinstance(_subgoals, np.ndarray)
                             for j in range(_restart_steps.shape[0]):
@@ -997,6 +1001,7 @@ class SAC_augment(OffPolicyRLModel):
                     logger.logkv("current_lr", current_lr)
                     logger.logkv("fps", fps)
                     logger.logkv('time_elapsed', int(time.time() - start_time))
+                    logger.logkv('select subgoal time', select_subgoal_time)
                     if len(episode_successes[0]) > 0:
                         logger.logkv("success rate", np.mean(np.concatenate([episode_successes[i][-100:] for i in range(self.env.env.num_envs)])))
                     if len(infos_values) > 0:
@@ -1046,18 +1051,24 @@ class SAC_augment(OffPolicyRLModel):
             filter_subgoal = True  # TODO: see if it works
             sample_height = np.array(tower_height)[sample_t]
             for object_idx in range(0, self.n_object):
+                # Try to remove domain knowledge
+                '''
                 if abs(sample_height[0] + 0.05 - sample_obs[0][self.obs_dim + self.goal_dim + 2]) > 0.01 \
                         and object_idx == np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:]):
                     # If the goal is not 1 floor above towerheight, we don't perturb self position
                     continue
+                '''
                 if np.linalg.norm(sample_obs[0][3 + object_idx * 3: 3 + (object_idx + 1) * 3]) < 1e-3:
                     # This object is masked
                     continue
+                # Try to remove domain knowledge
+                '''
                 if np.linalg.norm(sample_obs[0][3 + object_idx * 3: 3 + object_idx * 3 + 2] -
                                           sample_obs[0][
                                           self.obs_dim + self.goal_dim: self.obs_dim + self.goal_dim + 2]) < 1e-3:
                     # This object is part of tower
                     continue
+                '''
                 obstacle_xy = sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 2] + noise
                 # Find how many objects have been stacked
                 obstacle_height = np.expand_dims(sample_height + 0.05, axis=1)
