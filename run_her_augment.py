@@ -62,6 +62,7 @@ def arg_parse():
     parser.add_argument('--random_ratio', type=float, default=1.0)
     parser.add_argument('--gamma', type=float, default=0.95)
     parser.add_argument('--reward_type', type=str, default='sparse')
+    parser.add_argument('--random_reset',type=bool,default=False)
     parser.add_argument('--reward_object',type=int,default=1)
     parser.add_argument('--epsilon',type=float,default=0.06)
     parser.add_argument('--n_object', type=int, default=2)
@@ -165,6 +166,19 @@ def create_image_84_sawyer_pnr_arena_train_env_big_v0():
         normalize=True,
         reward_type='hand_puck_success'
     )
+def create_image_84_sawyer_pnr_arena_train_env_big_v5():
+    from multiworld.core.image_env import ImageEnv
+    from multiworld.envs.mujoco.cameras import sawyer_pusher_camera_tdm_v4
+
+    wrapped_env = gym.make('SawyerPushAndReachArenaTrainEnvBig-v5')
+    return ImageEnv(
+        wrapped_env,
+        84,
+        init_camera=sawyer_pusher_camera_tdm_v4,
+        transpose=True,
+        normalize=True,
+        reward_type='sparse'
+    )
 def create_image_48_pointmass_uwall_train_env_big_v0():
     from multiworld.core.image_env import ImageEnv
 
@@ -195,16 +209,29 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
         max_episode_steps = 100
         if env_id in IMAGE_ENTRY_POINT.keys():
             if IMAGE_ENTRY_POINT[env_id] == 'ImagePushAndReach':
-                imsize = 84
-                gym.register(
-                    id=env_id,
-                    entry_point=create_image_84_sawyer_pnr_arena_train_env_big_v0,
-                    max_episode_steps=max_episode_steps,
-                    tags={
-                        'git-commit-hash': 'e5c11ac',
-                        'author': 'Soroush'
-                    },
-                )
+                if kwargs['random_reset']:
+                    imsize = 84
+                    gym.register(
+                        id=env_id,
+                        entry_point=create_image_84_sawyer_pnr_arena_train_env_big_v5,
+                        max_episode_steps=max_episode_steps,
+                        tags={
+                            'git-commit-hash': 'e5c11ac',
+                            'author': 'Soroush'
+                        },
+                    )
+                else:
+                    imsize = 84
+                    gym.register(
+                        id=env_id,
+                        entry_point=create_image_84_sawyer_pnr_arena_train_env_big_v0,
+                        max_episode_steps=max_episode_steps,
+                        tags={
+                            'git-commit-hash': 'e5c11ac',
+                            'author': 'Soroush'
+                        },
+                    )
+
             elif IMAGE_ENTRY_POINT[env_id] =='ImageUWall':
                 imsize = 48
                 gym.register(
@@ -282,7 +309,7 @@ def configure_logger(log_path, **kwargs):
 
 
 def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
-         export_gif, gamma, random_ratio, action_noise, reward_type, reward_object,n_object,epsilon,start_augment,
+         export_gif, gamma, random_ratio, action_noise, reward_type, reward_object,n_object,random_reset,epsilon,start_augment,
          policy, learning_rate, n_workers, priority, curriculum, imitation_coef, sequential):
     assert n_workers > 1
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
@@ -322,7 +349,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     #                   n_object=n_object, )
     if env_name in IMAGE_ENTRY_POINT.keys():
         env_kwargs = dict(max_episode_steps=100,
-                          reward_type=reward_type,reward_object=reward_object,reward_threshold=epsilon)
+                          reward_type=reward_type,reward_object=reward_object,reward_threshold=epsilon,random_reset=random_reset)
     else:
         env_kwargs = get_env_kwargs(env_name, random_ratio=random_ratio, sequential=sequential,
                                 reward_type=reward_type, n_object=n_object)
@@ -570,6 +597,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             states = regressor.predict(obs_latent_input)
             state_obs = states[0]
             states_desired_goal = states[2]
+            # goal_dist = round(np.linalg.norm(state-goal),3)
             state_diff = round(np.linalg.norm(state_obs - state),3)
             goal_diff = round(np.linalg.norm(states_desired_goal - goal),3)
             print('done',done)
@@ -584,7 +612,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             # ax.set_title('episode ' + str(episode_idx) + ', frame ' + str(frame_idx) +
                          # ', goal idx ' + str(np.argmax(obs['desired_goal'][3:])))
             ax.set_title('ep:'+str(episode_idx)+',fp:'+str(frame_idx)+'rew:'
-                         +str(reward)+str(done)+'h_d:'+str(hand_dist)+'p_d:'+str(puck_dist)+'s_d'+str(state_diff)+'g_d'+str(goal_diff))
+                         +str(reward)+'done: '+str(done)+'h_d:'+str(hand_dist)+'p_d:'+str(puck_dist)+'s_d'+str(state_diff)+'g_d'+str(goal_diff))
             # ax1.set_title('episode '+str(episode_idx)+',frame'+str(frame_idx)+' reward'+str(reward)+' done'+str(done))
 
             if export_gif:
@@ -650,6 +678,6 @@ if __name__ == '__main__':
          log_path=args.log_path, load_path=args.load_path, play=args.play,
          batch_size=args.batch_size, export_gif=args.export_gif,
          gamma=args.gamma, random_ratio=args.random_ratio, action_noise=args.action_noise,
-         reward_type=args.reward_type, reward_object=args.reward_object,n_object=args.n_object, epsilon=args.epsilon, start_augment=int(args.start_augment),
+         reward_type=args.reward_type, reward_object=args.reward_object,n_object=args.n_object, random_reset=args.random_reset,epsilon=args.epsilon, start_augment=int(args.start_augment),
          policy=args.policy, n_workers=args.num_workers, priority=args.priority, curriculum=args.curriculum,
          learning_rate=args.learning_rate, imitation_coef=args.imitation_coef, sequential=args.sequential)

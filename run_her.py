@@ -89,6 +89,7 @@ def arg_parse():
     parser.add_argument('--gamma', type=float, default=0.95)
     parser.add_argument('--reward_type', type=str, default='sparse')
     parser.add_argument('--reward_object',type=int,default=1)
+    parser.add_argument('--random_reset',type=bool,default=False)
     parser.add_argument('--epsilon',type=float,default=0.06)
     parser.add_argument('--n_object', type=int, default=2)
     parser.add_argument('--priority', action="store_true", default=False)
@@ -163,6 +164,19 @@ def create_image_84_sawyer_pnr_arena_train_env_big_v0():
         normalize=True,
         reward_type='hand_puck_success'
     )
+def create_image_84_sawyer_pnr_arena_train_env_big_v5():
+    from multiworld.core.image_env import ImageEnv
+    from multiworld.envs.mujoco.cameras import sawyer_pusher_camera_tdm_v4
+
+    wrapped_env = gym.make('SawyerPushAndReachArenaTrainEnvBig-v5')
+    return ImageEnv(
+        wrapped_env,
+        84,
+        init_camera=sawyer_pusher_camera_tdm_v4,
+        transpose=True,
+        normalize=True,
+        reward_type='hand_puck_success'
+    )
 def create_image_48_pointmass_uwall_train_env_big_v0():
     from multiworld.core.image_env import ImageEnv
 
@@ -188,16 +202,28 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     max_episode_steps = kwargs['max_episode_steps']
     if env_id in IMAGE_ENTRY_POINT.keys():
         if IMAGE_ENTRY_POINT[env_id] == 'ImagePushAndReach':
-            imsize = 84
-            gym.register(
-                id=env_id,
-                entry_point=create_image_84_sawyer_pnr_arena_train_env_big_v0,
-                max_episode_steps=max_episode_steps,
-                tags={
-                    'git-commit-hash': 'e5c11ac',
-                    'author': 'Soroush'
-                },
-            )
+            if kwargs['random_reset']:
+                imsize = 84
+                gym.register(
+                    id=env_id,
+                    entry_point=create_image_84_sawyer_pnr_arena_train_env_big_v5,
+                    max_episode_steps=max_episode_steps,
+                    tags={
+                        'git-commit-hash': 'e5c11ac',
+                        'author': 'Soroush'
+                    },
+                )
+            else:
+                imsize = 84
+                gym.register(
+                    id=env_id,
+                    entry_point=create_image_84_sawyer_pnr_arena_train_env_big_v0,
+                    max_episode_steps=max_episode_steps,
+                    tags={
+                        'git-commit-hash': 'e5c11ac',
+                        'author': 'Soroush'
+                    },
+                )
         elif IMAGE_ENTRY_POINT[env_id] == 'ImageUWall':
             imsize = 48
             gym.register(
@@ -263,10 +289,10 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
     return env
 
 
-def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None, n_object=None,reward_object=None,reward_threshold=None):
+def get_env_kwargs(env_id, random_ratio=None, sequential=None, random_reset=None,reward_type=None, n_object=None,reward_object=None,reward_threshold=None):
     if env_id  in IMAGE_ENTRY_POINT.keys():
         return dict(max_episode_steps=100,
-                          reward_type=reward_type,reward_object=reward_object,reward_threshold=reward_threshold)
+                          reward_type=reward_type,random_reset=random_reset,reward_object=reward_object,reward_threshold=reward_threshold)
     elif env_id == 'FetchStack-v1' or env_id == 'FetchStack-v2':
         return dict(random_box=True,
                     random_ratio=random_ratio,
@@ -297,7 +323,7 @@ def get_env_kwargs(env_id, random_ratio=None, sequential=None, reward_type=None,
 
 
 def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
-         export_gif, gamma, random_ratio, action_noise, reward_type, reward_object,n_object,epsilon,
+         export_gif, gamma, random_ratio, action_noise, reward_type, reward_object,n_object,random_reset,epsilon,
          priority, learning_rate, num_workers, policy, curriculum, sequential,
          sil, sil_coef):
     log_dir = log_path if (log_path is not None) else "/tmp/stable_baselines_" + time.strftime('%Y-%m-%d-%H-%M-%S')
@@ -346,7 +372,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
     #                   reward_type=reward_type,
     #                   n_object=n_object, )
     env_kwargs = get_env_kwargs(env_name, random_ratio=random_ratio, sequential=sequential,
-                                reward_type=reward_type, n_object=n_object,reward_object=reward_object,reward_threshold=epsilon)
+                                reward_type=reward_type, n_object=n_object,random_reset=random_reset,reward_object=reward_object,reward_threshold=epsilon)
     # env = make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
     def make_thunk(rank):
         return lambda: make_env(env_id=env_name, seed=seed, rank=rank, log_dir=log_dir, kwargs=env_kwargs)
@@ -739,6 +765,6 @@ if __name__ == '__main__':
          log_path=args.log_path, load_path=args.load_path, play=args.play,
          batch_size=args.batch_size, export_gif=args.export_gif,
          gamma=args.gamma, random_ratio=args.random_ratio, action_noise=args.action_noise,
-         reward_type=args.reward_type, reward_object=args.reward_object, n_object=args.n_object, epsilon=args.epsilon, priority=args.priority,
+         reward_type=args.reward_type, reward_object=args.reward_object, n_object=args.n_object, random_reset=args.random_reset,epsilon=args.epsilon, priority=args.priority,
          learning_rate=args.learning_rate, num_workers=args.num_workers, policy=args.policy,
          curriculum=args.curriculum, sequential=args.sequential, sil=args.sil, sil_coef=args.sil_coef)
