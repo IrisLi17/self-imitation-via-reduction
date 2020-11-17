@@ -96,6 +96,16 @@ class ParallelVAESubprocVecEnv(VecEnv):
         self.closed = False
         self.env_id = env_id
         self.regressor = regressor
+        self.total_step_time = 0.0
+        self.process_obs_time = 0.0
+        self.compute_rewsuc_time = 0.0
+        self.process_infos_time = 0.0
+        self.get_state_time = 0.0
+        self.log_time = 0.0
+        self.reset_time = 0.0
+        self.reset_count = 0
+        self.done_process_obs_time = 0.0
+        self.process_dones_time = 0.0
         n_envs = len(env_fns)
         # print('env_fns',env_fns)
         self.rewards = [[] for _ in range(n_envs)]
@@ -150,6 +160,8 @@ class ParallelVAESubprocVecEnv(VecEnv):
 
     # TODO update the step function
     def step_wait(self):
+        total_step_time0 = time.time()
+
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
         obs, rews, dones, infos = zip(*results)
@@ -158,54 +170,67 @@ class ParallelVAESubprocVecEnv(VecEnv):
         #     info['terminal_observation'] = self.process_obs(info['terminal_observation'])
 
         if self.env_id is not None:
+            process_obs_time0 = time.time()
             obs_dicts = self.process_obs(obs)
+            self.process_obs_time += time.time()-process_obs_time0
 
             achieved_latent_obs = np.asarray([obs['achieved_goal'] for obs in obs_dicts])
             desired_latent_obs = np.asarray([obs['desired_goal'] for obs in obs_dicts])
+            compute_rewsuc_time0 = time.time()
             rews_and_successes = self.compute_reward_and_success(achieved_goal= achieved_latent_obs,desired_goal=desired_latent_obs,info=True)
             rews = [rew_and_suc[0] for rew_and_suc in rews_and_successes]
             successes = [rew_and_suc[1] for rew_and_suc in rews_and_successes]
             state_infos = [rew_and_suc[2] for rew_and_suc in rews_and_successes]
+
             ## add rewards to the episode reward
             for i,rew_and_suc in enumerate(rews_and_successes):
                 self.rewards[i].append(rew_and_suc[0])
 
             for i,info in enumerate(infos):
                 infos[i]['is_success'] = successes[i]
+            self.compute_rewsuc_time += time.time() - compute_rewsuc_time0
+
             ## done once succeed wrapper and add terminal_observation in this part
+            process_dones_time0 = time.time()
             dones = list(dones)
             for i,done in enumerate(dones):
-            # dones = [done or successes[i] for i,done in enumerate(dones)]
-            #     print('env_num',i,'done',done,'success',successes[i])
                 dones[i] = dones[i] or successes[i]
                 if dones[i]:
                     infos[i]['is_success'] = successes[i]
                     infos[i]['terminal_observation']=obs[i]
+                    get_state_time0 = time.time()
                     infos[i]['terminal_state'] = self.env_method('get_state',indices=i)[0]
+                    self.get_state_time += time.time() - get_state_time0
                     state_dict = state_infos[i]
                 ## adding info[episode] for loggin the episode mean reward
-                    # print('reward_length',len(self.rewards[i]), 'env_id',i)
-                    # assert len(self.rewards[i])>1
+                    log_time0 = time.time()
                     sum_reward = round(sum(self.rewards[i]),6)
                     len_reward = len(self.rewards[i])
                     ep_info = {'r':sum_reward,'l':len_reward,'t':round(time.time() - self.t_start, 6),
                                'is_success':infos[i]['is_success'],
                                'puck_success':state_dict['puck_success'],'hand_success':state_dict['hand_success']}
-                    # infos[i]['episode']['r']= round(sum(self.rewards[i]),6)
-                    # infos[i]['episode']['l']= len(self.rewards[i])
-                    # infos[i]['episode']['is_success']= infos[i]['is_success']
                     infos[i]['episode']= ep_info
-
                     self.loggers[i].writerow(infos[i]['episode'])
                     self.file_handlers[i].flush()
+                    self.log_time += time.time() - log_time0
+                    reset_time0 = time.time()
+                    self.reset_count +=1
                     observation = self.env_method('reset', indices=i)
+                    self.reset_time += time.time() - reset_time0
                     self.rewards[i] = []
+                    done_process_obs_time0 = time.time()
                     observation_process = self.process_obs(observation)
+                    self.done_process_obs_time += time.time() - done_process_obs_time0
                     obs_dicts = list(obs_dicts)
                     obs_dicts[i] = observation_process[0]
                     obs_dicts = tuple(obs_dicts)
+            self.process_dones_time += time.time()-process_dones_time0
+        process_infos_time0 = time.time()
+        real_infos_dict=self.process_infos_dict(infos)
+        self.process_infos_time += time.time() -process_infos_time0
+        self.total_step_time += time.time() - total_step_time0
         #    return flatten_latent_obs,np.stack(rews),np.stack(dones),infos
-        return _flatten_obs(obs_dicts, self.observation_space), np.stack(rews), np.stack(dones), self.process_infos_dict(infos)
+        return _flatten_obs(obs_dicts, self.observation_space), np.stack(rews), np.stack(dones), real_infos_dict
 
     def process_infos_dict(self,infos_dicts):
         img_obs = []
@@ -264,6 +289,7 @@ class ParallelVAESubprocVecEnv(VecEnv):
         # print('img_obs',img_obs)
         # imgs = np.stack(img_obs)
         imgs = img_obs
+        # print('torch use the GPU for computation', torch.cuda.is_available())
         # print('img_shape',imgs.shape)
         if batch_size is None:
             mu, logvar = self.vae_model.encode(ptu.np_to_var(imgs))

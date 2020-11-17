@@ -96,6 +96,11 @@ class ParallelVAESubprocVecEnv(VecEnv):
         self.closed = False
         self.env_id = env_id
         n_envs = len(env_fns)
+        self.total_step_time=0.0
+        self.process_obs_time = 0.0
+        self.compute_rewsuc_time = 0.0
+        self.process_infos_time = 0.0
+        self.process_dones_time = 0.0
         self.rewards = [[] for _ in range(n_envs)]
         self.regressor = regressor
         ## adding some logging info here
@@ -149,6 +154,7 @@ class ParallelVAESubprocVecEnv(VecEnv):
 
     # TODO update the step function
     def step_wait(self):
+        total_step_time0 = time.time()
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
         obs, rews, dones, infos = zip(*results)
@@ -158,7 +164,9 @@ class ParallelVAESubprocVecEnv(VecEnv):
 
         if self.env_id is not None:
             # print('aug_env_obs',obs)
+            process_obs_time0 = time.time()
             obs_latent = self.process_obs(obs)
+            self.process_obs_time += time.time()-process_obs_time0
 
             # achieved_latent_obs = np.asarray([obs['achieved_goal'] for obs in obs_dicts])
             # desired_latent_obs = np.asarray([obs['desired_goal'] for obs in obs_dicts])
@@ -166,15 +174,19 @@ class ParallelVAESubprocVecEnv(VecEnv):
             desired_latent_obs = obs_latent[:,-self.vae_model.representation_size:]
             # print('achieved_latent_obs',achieved_latent_obs.shape)
             # print('desired_latent_obs',desired_latent_obs.shape)
+            compute_rewsuc_time0 = time.time()
             rews_and_successes = self.compute_reward_and_success(achieved_goal= achieved_latent_obs,desired_goal=desired_latent_obs,info=True)
             rews = [rew_and_suc[0] for rew_and_suc in rews_and_successes]
             successes = [rew_and_suc[1] for rew_and_suc in rews_and_successes]
             state_infos = [rew_and_suc[2] for rew_and_suc in rews_and_successes]
+
             for i,rew_and_suc in enumerate(rews_and_successes):
                 self.rewards[i].append(rew_and_suc[0])
             for i, info in enumerate(infos):
                 infos[i]['is_success'] = successes[i]
+            self.compute_rewsuc_time += time.time()-compute_rewsuc_time0
             ## done once succeed wrapper and add terminal_observation in this part
+            process_dones_time0 = time.time()
             dones = list(dones)
             for i,done in enumerate(dones):
             # dones = [done or successes[i] for i,done in enumerate(dones)]
@@ -199,9 +211,13 @@ class ParallelVAESubprocVecEnv(VecEnv):
                     self.loggers[i].writerow(infos[i]['episode'])
                     self.file_handlers[i].flush()
                     self.rewards[i] = []
-
+            self.process_dones_time += time.time()-process_dones_time0
+        process_infos_time0 = time.time()
+        real_infos = self.process_infos(infos)
+        self.process_infos_time += time.time() -process_infos_time0
+        self.total_step_time += time.time() - total_step_time0
         #    return flatten_latent_obs,np.stack(rews),np.stack(dones),infos
-        return obs_latent, np.stack(rews), np.stack(dones), self.process_infos(infos)
+        return obs_latent, np.stack(rews), np.stack(dones), real_infos
 
     def process_infos_dict(self,infos_dicts):
         img_obs = []
@@ -265,7 +281,7 @@ class ParallelVAESubprocVecEnv(VecEnv):
     def img_to_latent(self,img_obs,batch_size=None,noisy=False):
 
         imgs = img_obs
-
+        # print('torch use the GPU for computation',torch.cuda.is_available())
         if batch_size is None:
             mu, logvar = self.vae_model.encode(ptu.np_to_var(imgs))
         else:

@@ -11,4 +11,5 @@ plot/n_subgoal_2/*
 *.gif
 MUJOCO_LOG.TXT
 *.zip
-
+videos/*
+test*

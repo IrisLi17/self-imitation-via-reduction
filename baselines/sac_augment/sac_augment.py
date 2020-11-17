@@ -579,6 +579,19 @@ class SAC_augment(OffPolicyRLModel):
             current_lr = self.learning_rate(1)
 
             start_time = time.time()
+            store_time = 0.0
+            step_time = 0.0
+            reset_time = 0.0
+            callback_time = 0.0
+            compute_reward_time=0.0
+            log_debug_time = 0.0
+            switch_goal_time = 0.0
+            set_goal_time = 0.0
+            # cem_time = 0.0
+            train_time = 0.0
+            aug_step_time = 0.0
+            cem_time = 0.0
+            step_count = 0
             episode_rewards = [[0.0] for _ in range(self.env.env.num_envs)]
             episode_successes = [[] for _ in range(self.env.env.num_envs)]
             if self.action_noise is not None:
@@ -645,14 +658,19 @@ class SAC_augment(OffPolicyRLModel):
                 else:
                     return np.concatenate([dict_obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
 
-            def augment_cond():
+            def augment_cond(success_rate,p):
                 if self.latent_mode:
 
                     ## to do how to define the success
                     # TODO redefine the is_success with either latent distance or latent threshold
                     if not infos[idx]['is_success']:
-                        return True
-                    return False
+                        # return True
+                    # else:
+                    #     return False
+                        if p<=success_rate:
+                            return True
+                        else:
+                            return False
                 elif 'FetchStack' in self.env_id:
                     if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] >= 2:
                         return True
@@ -718,8 +736,10 @@ class SAC_augment(OffPolicyRLModel):
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards
                     # compatibility with callbacks that have no return statement.
+                    callback_time0 = time.time()
                     if callback(locals(), globals()) is False:
                         break
+                    callback_time += time.time()-callback_time0
 
                 if self.curriculum and step % 3000 == 0:
                     if 'FetchStack' in self.env.env.get_attr('spec')[0].id:
@@ -811,7 +831,10 @@ class SAC_augment(OffPolicyRLModel):
                         self.ep_task_mode[i].append(task_modes[i])
                         self.ep_tower_height[i].append(tower_height[i])
                 # print('step_starts')
+                step_time0 = time.time()
                 new_obs, rewards, dones, infos = self.env.step(rescaled_action)
+                step_count +=1
+                step_time += time.time() - step_time0
                 # print('step_stops')
                 next_obs = new_obs.copy()
                 for i in range(self.n_envs):
@@ -820,8 +843,9 @@ class SAC_augment(OffPolicyRLModel):
                     self.ep_transition_buf[i].append((obs[i], action[i], rewards[i], next_obs[i], dones[i]))
                 # Store transition in the replay buffer.
                 # print('add_buffer_starts')
-
+                store_time0 = time.time()
                 self.replay_buffer.add(obs, action, rewards, next_obs, dones)
+                store_time += time.time() - store_time0
                 # print('add_buffer_stops')
                 obs = new_obs
                 
@@ -854,17 +878,19 @@ class SAC_augment(OffPolicyRLModel):
                     if self.num_timesteps >= self.start_augment_time and done:
                         goal = self.ep_transition_buf[idx][0][0][-self.goal_dim:]
                         # if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] >= 2:
-                        if augment_cond():
+                        success_rate = np.mean(np.concatenate([episode_successes[i][-100:] for i in range(self.env.env.num_envs)]))
+                        p = np.random.uniform(0,1)
+                        if augment_cond(success_rate=success_rate,p=p):
                             # Do augmentation
                             # Sample start step and perturbation
                             select_subgoal_time0 = time.time()
                             if self.latent_mode :
 
-
+                                cem_time0 = time.time()
                                 _restart_steps, _subgoals= self.select_subgoal_cem(self.ep_transition_buf[idx],
                                                                                 k=self.n_subgoal)
 
-
+                                cem_time += time.time()-cem_time0
                             else:
                                 _restart_steps, _subgoals = self.select_subgoal(self.ep_transition_buf[idx],
                                                                             k=self.n_subgoal,
@@ -925,7 +951,9 @@ class SAC_augment(OffPolicyRLModel):
                     env_storage = self.transition_storage[:self.aug_env.num_envs]
                     env_increment_storage = [[] for _ in range(self.aug_env.num_envs)]
                     if self.latent_mode:
+                        set_goal_time0 = time.time()
                         self.aug_env.set_goal( [env_subgoals[idx][0] for idx in range(self.aug_env.num_envs)])
+                        set_goal_time += time.time() - set_goal_time0
                     else:
                         self.aug_env.env_method('set_goal', [env_subgoals[idx][0] for idx in range(self.aug_env.num_envs)])
                     switch_goal_flag = [False for _ in range(self.aug_env.num_envs)]
@@ -946,7 +974,9 @@ class SAC_augment(OffPolicyRLModel):
                     increment_step = 0
                     while not sum(env_end_flag) == self.aug_env.num_envs:
                         # Switch subgoal according to switch_goal_flag, and update observation
+                        switch_goal_time0 = time.time()
                         switch_subgoal(switch_goal_flag, env_obs)
+                        switch_goal_time += time.time() - switch_goal_time0
                         env_action, _ = self.predict(np.array(env_obs))
                         if 'FetchStack' in self.env_id:
                             relabel_env_obs = self.aug_env.env_method('switch_obs_goal', env_obs, ultimate_goals,
@@ -958,7 +988,9 @@ class SAC_augment(OffPolicyRLModel):
                         if isinstance(self.aug_env.action_space, gym.spaces.Box):
                             clipped_actions = np.clip(env_action, self.aug_env.action_space.low,
                                                       self.aug_env.action_space.high)
+                        aug_step_time0 = time.time()
                         env_next_obs, _, _, env_info = self.aug_env.step(clipped_actions)
+                        aug_step_time += time.time()-aug_step_time0
                         self.num_aug_steps += (self.aug_env.num_envs - sum(env_end_flag))
                         if self.reward_type in ('sparse','state_distance','state_sparse'):
                             temp_info = [None for _ in range(self.aug_env.num_envs)]
@@ -987,12 +1019,17 @@ class SAC_augment(OffPolicyRLModel):
                                                                                      ultimate_goals,
                                                                                      temp_info)
                         else:
-
+                            switch_goal_time0 = time.time()
                             relabel_env_next_obs = self.aug_env.env_method('switch_obs_goal', env_next_obs,
-                                                                           ultimate_goals)
+                                                               ultimate_goals)
+                            switch_goal_time += time.time() - switch_goal_time0
                             if self.latent_mode:
+                                compute_reward_time0 = time.time()
+
                                 env_reward = self.aug_env.compute_reward(env_next_obs[:,self.latent_dim:self.latent_dim*2], ultimate_goals,
                                                                      temp_info)
+                                compute_reward_time += time.time() - compute_reward_time0
+
                             else:
                                 env_reward = self.aug_env.env_method('compute_reward', env_next_obs, ultimate_goals,
                                                                  temp_info)
@@ -1057,9 +1094,11 @@ class SAC_augment(OffPolicyRLModel):
                     # print('end step', env_end_step)
                     for idx, end_step in enumerate(env_end_step):
                         if end_step <= self.get_horizon(self.current_nobject[idx] if 'FetchStack' in self.env_id else None):
+                            log_debug_time0 = time.time()
                             log_debug_value(self.debug_value1[idx], self.debug_value2[idx],
                                             self.normalize_value1[idx],self.normalize_value2[idx],
                                             np.argmax(temp_subgoals[idx]), True)
+                            log_debug_time += time.time()-log_debug_time0
                             # self.success_value_buf.append(self.value_prod[idx])
                             # print(temp_subgoals[idx])
                             # is_self_aug = temp_subgoals[idx][3]
@@ -1097,9 +1136,11 @@ class SAC_augment(OffPolicyRLModel):
                                     self.augment_replay_buffer.add(*(transitions[i]))
                             # print('len added for transitions',len(self.augment_replay_buffer)-len_prev)
                         else:
+                            log_debug_time0 = time.time()
                             log_debug_value(self.debug_value1[idx], self.debug_value2[idx],
                                             self.normalize_value1[idx], self.normalize_value2[idx],
                                             np.argmax(temp_subgoals[idx]),False)
+                            log_debug_time += time.time() - log_debug_time0
                             # self.fail_value_buf.append(self.value_prod[idx])
                             # self.num_fail_aug_steps += (end_step - env_restart_steps[idx])
 
@@ -1121,7 +1162,7 @@ class SAC_augment(OffPolicyRLModel):
                     self.normalize_value2 = self.normalize_value2[self.aug_env.num_envs:]
                     # self.latent_list = self.latent_list[self.aug_env.num_envs:]
 
-
+                train_time0 = time.time()
                 if step % self.train_freq == 0:
                     mb_infos_vals = []
                     # Update policy, critics and target networks
@@ -1156,7 +1197,7 @@ class SAC_augment(OffPolicyRLModel):
                 #     maybe_is_success = infos.get('is_success')
                 #     if maybe_is_success is not None:
                 #         episode_successes.append(float(maybe_is_success))
-
+                train_time += time.time()-train_time0
                 if len(episode_rewards[0][-101:-1]) == 0:
                     mean_reward = -np.inf
                 else:
@@ -1183,6 +1224,20 @@ class SAC_augment(OffPolicyRLModel):
                     logger.logkv("n_updates", n_updates)
                     logger.logkv("current_lr", current_lr)
                     logger.logkv("fps", fps)
+                    logger.logkv('store_time',int(store_time))
+                    logger.logkv('callback_time',int(callback_time))
+                    logger.logkv('step_total_time',int(self.env.env.total_step_time))
+                    logger.logkv('proces_infos_time',int(self.env.env.process_infos_time))
+                    logger.logkv('step_time',int(step_time))
+                    logger.logkv('aug_step_time',int(aug_step_time))
+                    logger.logkv('train_time',int(train_time))
+                    logger.logkv('process_obs_time',int(self.env.env.process_obs_time))
+                    logger.logkv('cem_time',int(cem_time))
+                    logger.logkv('log_debug_value_time',int(log_debug_time))
+                    logger.logkv('switch_goal_time',int(switch_goal_time))
+                    logger.logkv('set_goal_time',int(set_goal_time))
+                    logger.logkv('step_count',step_count)
+                    logger.logkv('compute_reward_time',int(compute_reward_time))
                     logger.logkv('time_elapsed', int(time.time() - start_time))
                     if len(episode_successes[0]) > 0:
                         logger.logkv("success rate", np.mean(np.concatenate([episode_successes[i][-100:] for i in range(self.env.env.num_envs)])))

@@ -32,19 +32,26 @@ if __name__ == '__main__':
         ep_len_mean = get_item(progress_file,'eplenmean')
             # success_rate = get_item(progress_file, 'ep_reward_mean')
         total_timesteps = get_item(progress_file, 'total timesteps')
+        time_total = get_item(progress_file,'time_elapsed')
         idx = np.where(total_timesteps<1e7)
-        total_timesteps=total_timesteps[idx]
+        # total_timesteps=total_timesteps[idx]
         total_timesteps = total_timesteps/1e6
-        success_rate = success_rate[idx]
+        # success_rate = success_rate[idx]
         # if 'sac_her' in log_path:
         #     print('log_path',log_path)
         #     original_steps = total_timesteps
         #
         # else:
         try:
+            train_time = get_item(progress_file,'train_time')
+            step_time = get_item(progress_file,'step_time')
+            store_time = get_item(progress_file,'store_time')
             original_steps = get_item(progress_file, 'original_timesteps')/1e6
         except:
             original_steps=total_timesteps
+            train_time = np.zeros(total_timesteps.shape)
+            step_time = np.zeros(total_timesteps.shape)
+            store_time = np.zeros(total_timesteps.shape)
         entropy = get_item(progress_file, 'entropy')
         try:
             eval_reward = get_item(eval_file, 'mean_eval_reward')
@@ -70,7 +77,9 @@ if __name__ == '__main__':
                 label = "sir_sparse_reward"
             else:
                 label = log_path
-            ax[0].plot(smooth(total_timesteps, window), smooth(success_rate, window), label=label)
+            # ax[0].plot(smooth(total_timesteps, window), smooth(success_rate, window), label=label)
+            ax[0].plot(smooth(original_steps, window), smooth(success_rate, window), label=label)
+
             # ax[0].plot(smooth(total_timesteps, window), smooth(ep_reward_mean, window), label=label)
 
         elif option == 'eval':
@@ -89,14 +98,15 @@ if __name__ == '__main__':
             self_aug_ratio = get_item(progress_file, 'self_aug_ratio')
             ax[0].plot(smooth(total_timesteps, window), smooth(self_aug_ratio, window), label=log_path)
         try:
-            original_steps = get_item(progress_file, 'original_timesteps')[0]
+            # original_steps = get_item(progress_file, 'original_timesteps')[0]
             augment_steps = get_item(progress_file, 'augmented steps') / original_steps
             num_suc_aug_steps = get_item(progress_file,'num_success_aug_steps')
             num_aug_steps = get_item(progress_file,'num_aug_steps')
-            suc_aug_ratio = num_suc_aug_steps/num_aug_steps
+            # suc_aug_ratio = num_suc_aug_steps/num_aug_steps
             # augment_steps = smooth(augment_steps, window)
         except:
             augment_steps = np.zeros(total_timesteps.shape)
+            num_aug_steps = np.zeros(total_timesteps.shape)
             suc_aug_ratio = np.zeros(total_timesteps.shape)
         if log_path == '../logs/pnr_sac/sac_dense_reward':
             # print(True)
@@ -113,8 +123,11 @@ if __name__ == '__main__':
             label = log_path
         # ax[1].plot(smooth(total_timesteps, window), smooth(augment_steps, window), label=label)
         # ax[1].plot(smooth(total_timesteps, window), smooth(ep_len_mean, window), label=label)
-        ax[1].plot(smooth(total_timesteps, window), smooth(suc_aug_ratio, window), label=label)
+        # ax[1].plot(smooth(total_timesteps, window), smooth(suc_aug_ratio, window), label=label)
         # ax[1].plot(total_timesteps,suc_aug_ratio,label=label)
+        # ax[1].plot(smooth(total_timesteps, window), smooth(time_total, window), label=label)
+        ax[1].plot(smooth(total_timesteps, window), smooth(time_total, window), label=label)
+
         # ax[1].plot(smooth(total_timesteps,window),smooth(num_suc_aug_steps,window),label=label)
     if option == 'success_rate':
         # ax[0].set_title('ep reward mean')
@@ -127,7 +140,7 @@ if __name__ == '__main__':
         ax[0].set_title('aug success episode / total success episode')
     elif option == 'self_aug_ratio':
         ax[0].set_title('self_aug_ratio')
-    ax[1].set_title('augment steps / original rollout steps')
+    ax[1].set_title('number of augment steps')
     ax[0].set_xlabel('samples(1e6)')
     ax[0].grid()
     ax[1].grid()

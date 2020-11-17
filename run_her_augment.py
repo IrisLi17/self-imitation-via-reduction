@@ -1,10 +1,12 @@
 from baselines import HER_HACK, SAC_augment
 from stable_baselines.sac.policies import FeedForwardPolicy as SACPolicy
 from stable_baselines.common.policies import register_policy
-from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
-from utils.parallel_subproc_vec_env2 import ParallelSubprocVecEnv as ParallelSubprocVecEnv2
-from utils.subproc_vec_vae_env import ParallelVAESubprocVecEnv
-from utils.subproc_vec_vae_env2 import ParallelVAESubprocVecEnv as ParallelVAESubprocVecEnv2
+# from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
+# from utils.parallel_subproc_vec_env2 import ParallelSubprocVecEnv as ParallelSubprocVecEnv2
+# from utils.subproc_vec_vae_env import ParallelVAESubprocVecEnv
+# from utils.subproc_vec_vae_env2 import ParallelVAESubprocVecEnv as ParallelVAESubprocVecEnv2
+from utils.subproc_vec_vae_env_new import ParallelVAESubprocVecEnv
+from utils.subproc_vec_vae_env_new2 import ParallelVAESubprocVecEnv as ParallelVAESubprocVecEnv2
 from gym.wrappers import FlattenDictWrapper
 import gym
 import matplotlib.pyplot as plt
@@ -161,7 +163,7 @@ def create_image_84_sawyer_pnr_arena_train_env_big_v0():
         init_camera=sawyer_pusher_camera_tdm_v4,
         transpose=True,
         normalize=True,
-        reward_type='sparse'
+        reward_type='hand_puck_success'
     )
 def create_image_48_pointmass_uwall_train_env_big_v0():
     from multiworld.core.image_env import ImageEnv
@@ -257,7 +259,9 @@ def make_env(env_id, seed, rank, log_dir=None, allow_early_resets=True, kwargs=N
         env = DoneOnSuccessWrapper(env, reward_offset=0.0)
 
     elif env_id in IMAGE_ENTRY_POINT.keys():
-        env = env
+
+        env =DoneOnSuccessWrapper(env, reward_offset=0.0)
+
         # print('env_type',env)
     else:
         env = DoneOnSuccessWrapper(env)
@@ -438,23 +442,26 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             policy_kwargs = {}
 
             def callback(_locals, _globals):
-                if _locals['step'] % int(1e3) == 0:
-                    if 'FetchStack' in env_name:
-                        mean_eval_reward = stack_eval_model(eval_env, _locals["self"],
-                                                            init_on_table=(env_name=='FetchStack-v2'))
-                    elif 'MasspointPushDoubleObstacle-v2' in env_name:
-                        mean_eval_reward = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"])
-                        mean_eval_reward2 = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"],
-                                                              goal_idx=0)
-                        log_eval(_locals['self'].num_timesteps, mean_eval_reward2, file_name="eval_box.csv")
-                    elif env_name in IMAGE_ENTRY_POINT.keys():
-                        mean_eval_reward = eval_img_model(eval_env,_locals["self"],vae_model,regressor=regressor)
-                    else:
-                        mean_eval_reward = eval_model(eval_env, _locals["self"])
-                    log_eval(_locals['self'].num_timesteps, mean_eval_reward)
+                # if _locals['step'] % int(1e3) == 0:
+                #     if 'FetchStack' in env_name:
+                #         mean_eval_reward = stack_eval_model(eval_env, _locals["self"],
+                #                                             init_on_table=(env_name=='FetchStack-v2'))
+                #     elif 'MasspointPushDoubleObstacle-v2' in env_name:
+                #         mean_eval_reward = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"])
+                #         mean_eval_reward2 = egonav_eval_model(eval_env, _locals["self"], env_kwargs["random_ratio"],
+                #                                               goal_idx=0)
+                #         log_eval(_locals['self'].num_timesteps, mean_eval_reward2, file_name="eval_box.csv")
+                #     elif env_name in IMAGE_ENTRY_POINT.keys():
+                #         mean_eval_reward = eval_img_model(eval_env,_locals["self"],vae_model,regressor=regressor)
+                #     else:
+                #         mean_eval_reward = eval_model(eval_env, _locals["self"])
+                #     log_eval(_locals['self'].num_timesteps, mean_eval_reward)
                 if _locals['step'] % int(2e4) == 0:
+                    model_save_time0 = time.time()
                     model_path = os.path.join(log_dir, 'model_' + str(_locals['step'] // int(2e4)))
                     model.save(model_path)
+                    model_save_time = time.time()-model_save_time0
+                    print('model_save_time',model_save_time)
                     print('model saved to', model_path)
                 return True
         else:
@@ -535,7 +542,7 @@ def main(env_name, seed, num_timesteps, batch_size, log_path, load_path, play,
             # images.append(img)
 
             action, _ = model.predict(obs_latent)
-            actions = np.repeat(action,32,axis=0)
+            actions = np.repeat(action,n_workers,axis=0)
             print('action',action)
 
             # print('action', action)

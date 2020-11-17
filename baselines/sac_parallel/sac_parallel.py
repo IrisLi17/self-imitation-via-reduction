@@ -153,6 +153,8 @@ class SAC_parallel(OffPolicyRLModel):
     def setup_model(self):
         with SetVerbosity(self.verbose):
             self.graph = tf.Graph()
+            assert tf.test.is_gpu_available()
+            assert tf.test.is_built_with_cuda()
             with self.graph.as_default():
                 n_cpu = multiprocessing.cpu_count()
                 if sys.platform == 'darwin':
@@ -438,6 +440,8 @@ class SAC_parallel(OffPolicyRLModel):
             start_time = time.time()
             store_time = 0.0
             step_time = 0.0
+            reset_time = 0.0
+            # cem_time = 0.0
             train_time = 0.0
             episode_rewards = [[0.0] for _ in range(self.env.env.num_envs)]
             episode_successes = [[] for _ in range(self.env.env.num_envs)]
@@ -459,7 +463,9 @@ class SAC_parallel(OffPolicyRLModel):
                 self.env.env.env_method('set_task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 print('Set task_array to ', self.env.env.get_attr('task_array')[0])
                 self.env.env.env_method('set_random_ratio', [0.7] * self.env.env.num_envs)
+            reset_time0 = time.time()
             obs = self.env.reset()
+            reset_time += time.time() - reset_time0
             # print(obs.shape)
             for step in range(total_timesteps):
                 if callback is not None:
@@ -638,6 +644,23 @@ class SAC_parallel(OffPolicyRLModel):
                     logger.logkv("current_lr", current_lr)
                     logger.logkv("fps", fps)
                     logger.logkv('time_elapsed', int(time.time() - start_time))
+                    logger.logkv('train_time',int(train_time))
+                    logger.logkv('store_time',int(store_time))
+                    logger.logkv('step_time',int(step_time))
+                    logger.logkv('reset_time',int(reset_time))
+                    logger.logkv('step_done_reset_count',self.env.env.reset_count)
+                    logger.logkv('process_obs_time',round(self.env.env.process_obs_time,2))
+                    logger.logkv('compute_rew_and_suc_time',round(self.env.env.compute_rewsuc_time,2))
+                    logger.logkv('process_dones_time',round(self.env.env.process_dones_time,2))
+                    logger.logkv('process_infos_time',round(self.env.env.process_infos_time,2))
+                    logger.logkv('total_step_wait_time',round(self.env.env.total_step_time,2))
+                    logger.logkv('done_reset_time',round(self.env.env.reset_time,2))
+                    logger.logkv('get_state_time',round(self.env.env.get_state_time,2))
+                    logger.logkv('log_time',round(self.env.env.log_time,2))
+                    logger.logkv('done_process_obs_time',round(self.env.env.done_process_obs_time,2))
+                    self.reset_time = 0.0
+                    self.done_process_obs_time = 0.0
+                    self.process_dones_time = 0.0
                     if len(episode_successes[0]) > 0:
                         logger.logkv("success rate", np.mean(np.concatenate([episode_successes[i][-100:] for i in range(self.env.env.num_envs)])))
                     if len(infos_values) > 0:

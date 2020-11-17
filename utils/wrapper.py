@@ -315,6 +315,7 @@ class LatentWrappedEnv(ProxyEnv,Env):
     def step(self,action):
         new_obs, reward, done, info = self.wrapped_env.step(action)
         # print('latent_env_done',done)
+        # print('reward_lattnet',reward+1.0)
         return new_obs,reward+1.0,done,info
 
     def compute_reward(self, achieved_goal, desired_goal, temp_info=None, action=None, prev_obs=None):

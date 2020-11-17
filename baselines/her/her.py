@@ -70,6 +70,7 @@ class HER_HACK(BaseRLModel):
                 env = HERGoalEnvWrapper(env)
 
         self.env = env
+        # print('env_parameter',self.env.env.process_obs_time)
         # NOTE: we cannot do that check directly with VecEnv
         # maybe we can try calling `compute_reward()` ?
         # assert isinstance(self.env, gym.GoalEnv), "HER only supports gym.GoalEnv"

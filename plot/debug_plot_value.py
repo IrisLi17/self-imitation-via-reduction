@@ -63,13 +63,14 @@ if __name__ == '__main__':
         ax.scatter(fail_idx, normalize_value2[fail_idx], c='tab:purple', s=1.0, label='fail normalize value2')
         ax.scatter(success_idx, normalize_value2[success_idx], c='tab:pink', s=4.0, label='success normalize value2')
     elif plot_choice=='mean':
-        # ax.scatter(fail_idx, (value1[fail_idx] + value2[fail_idx]) / 2, c='tab:orange', s=1.0, label='fail mean value')
-        # ax.scatter(success_idx, (value1[success_idx] + value2[success_idx]) / 2, c='tab:green', s=4.0,
-        #            label='success mean value')
-        ax.scatter(fail_idx_select, (value1_select[fail_idx_select] + value2_select[fail_idx_select]) / 2, c='tab:orange', s=1.0, label='fail mean value')
-        ax.scatter(success_idx_select, (value1_select[success_idx_select] + value2_select[success_idx_select]) / 2, c='tab:green', s=4.0,
+        ax.scatter(fail_idx, (value1[fail_idx] + value2[fail_idx]) / 2, c='tab:orange', s=1.0, label='fail mean value')
+        ax.scatter(success_idx, (value1[success_idx] + value2[success_idx]) / 2, c='tab:green', s=4.0,
                    label='success mean value')
-        # ax.plot(fail_idx,-1*np.ones(fail_idx.shape),c='tab:red')
+        print('fail number',fail_idx.shape[0],'success_num',success_idx.shape[0])
+        # ax.scatter(fail_idx_select, (value1_select[fail_idx_select] + value2_select[fail_idx_select]) / 2, c='tab:orange', s=1.0, label='fail mean value')
+        # ax.scatter(success_idx_select, (value1_select[success_idx_select] + value2_select[success_idx_select]) / 2, c='tab:green', s=4.0,
+        #            label='success mean value')
+        ax.plot(fail_idx,0.7*np.ones(fail_idx.shape),c='tab:red')
         # ax.plot(fail_idx,-0.5*np.ones(fail_idx.shape),c='tab:red')
         # ax.plot(fail_idx,-0.8*np.ones(fail_idx.shape),c='tab:red')
         # ax.plot(fail_idx,-0.9*np.ones(fail_idx.shape),c='tab:red')
