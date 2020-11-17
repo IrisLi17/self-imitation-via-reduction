@@ -137,7 +137,7 @@ class SawyerPushAndReachXYEnv(MujocoEnv, Serializable, MultitaskEnv):
         ])
 
         self.num_mocap_calls_for_reset = num_mocap_calls_for_reset
-
+        #print('num_mocap_calls_for_reset',num_mocap_calls_for_reset)
         self.fix_reset = fix_reset
         self.sample_realistic_goals = sample_realistic_goals
         self.fixed_reset = np.array(fixed_reset)

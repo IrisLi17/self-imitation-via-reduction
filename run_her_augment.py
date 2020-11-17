@@ -165,6 +165,19 @@ def create_image_84_sawyer_pnr_arena_train_env_big_v0():
         normalize=True,
         reward_type='hand_puck_success'
     )
+def create_image_84_sawyer_pnr_arena_train_env_big_v5():
+    from multiworld.core.image_env import ImageEnv
+    from multiworld.envs.mujoco.cameras import sawyer_pusher_camera_tdm_v4
+
+    wrapped_env = gym.make('SawyerPushAndReachArenaTrainEnvBig-v5')
+    return ImageEnv(
+        wrapped_env,
+        84,
+        init_camera=sawyer_pusher_camera_tdm_v4,
+        transpose=True,
+        normalize=True,
+        reward_type='sparse'
+    )
 def create_image_48_pointmass_uwall_train_env_big_v0():
     from multiworld.core.image_env import ImageEnv
 
