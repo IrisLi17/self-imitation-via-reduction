@@ -228,12 +228,12 @@ class ParallelVAESubprocVecEnv(VecEnv):
             #         obs_dicts[i] = observation_process[0]
             #         obs_dicts = tuple(obs_dicts)
             # self.process_dones_time += time.time()-process_dones_time0
-        process_infos_time0 = time.time()
-        real_infos_dict=self.process_infos_dict(infos)
-        self.process_infos_time += time.time() -process_infos_time0
+        # process_infos_time0 = time.time()
+        # real_infos_dict=self.process_infos_dict(infos)
+        # self.process_infos_time += time.time() -process_infos_time0
         self.total_step_time += time.time() - total_step_time0
         #    return flatten_latent_obs,np.stack(rews),np.stack(dones),infos
-        return _flatten_obs(obs_dicts, self.observation_space), np.stack(rews), np.stack(dones), real_infos_dict
+        return _flatten_obs(obs_dicts, self.observation_space), np.stack(rews), np.stack(dones), self.process_infos_dict(infos)
 
     def process_infos_dict(self,infos_dicts):
         img_obs = []

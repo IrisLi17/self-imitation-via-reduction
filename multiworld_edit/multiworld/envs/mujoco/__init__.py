@@ -942,6 +942,28 @@ def register_soroush_envs():
         )
     )
     register(
+        id='SawyerPushAndReachArenaTrainEnvBig-v5',
+        entry_point='multiworld.envs.mujoco.sawyer_xyz'
+                    '.sawyer_push_nips:SawyerPushAndReachXYEnv',
+        tags={
+            'git-commit-hash': 'e5c11ac',
+            'author': 'Soroush',
+        },
+        max_episode_steps=100,
+        kwargs=dict(
+            hand_low=(-0.20, 0.50),
+            hand_high=(0.20, 0.70),
+            puck_low=(-0.20, 0.50),
+            puck_high=(0.20, 0.70),
+            fix_reset=False,
+            sample_realistic_goals=True,
+            #            reward_type='state_distance',
+            reward_type='sparse',
+
+            invisible_boundary_wall=True,
+        )
+    )
+    register(
         id='SawyerPushAndReachArenaTrainEnvBigVectRew-v0',
         entry_point='multiworld.envs.mujoco.sawyer_xyz'
                     '.sawyer_push_nips:SawyerPushAndReachXYEnv',
