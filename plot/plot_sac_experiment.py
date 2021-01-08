@@ -21,11 +21,13 @@ def smooth(array, window):
 if __name__ == '__main__':
     folder_name = sys.argv[1]
     env_name = sys.argv[2]
-    assert env_name in ['push', 'stack2', 'stack3']
+    assert env_name in ['push', 'stack2', 'stack3', 'particle']
     # assert mode in ['train', 'hard', 'iteration']
     max_timesteps = {'push': 1.45e7,
-                     'stack2': 2.8e7,
+                     # 'stack2': 2.8e7,
+                     'stack2': 2.3e7,
                      'stack3': 1e8,
+                     'particle': 9.5e7,
                      }
     max_iterationss = {'push': 440000,
                        'stack2': 8.9e5,
@@ -33,16 +35,14 @@ if __name__ == '__main__':
                        }
     df_timesteps, df_sr, df_eval, df_legend, df_iteration, df_eval_iteration, df_legend_iteration = [], [], [], [], [], [], []
     subfolders = ['sac', 'sir', 'sil', 'ds']
-    if 'particle_random0.7' in folder_name:
-        subfolders = ['ppo', 'sir_re1-8']
-    elif 'particle_random1.0' in folder_name:
-        subfolders = ['ppo', 'sir_re1-8']
+    if 'particle' in folder_name:
+        subfolders = ['sac', 'sir', 'sil']
     elif 'push_random0.7' in folder_name:
         subfolders = ['sac', 'sir', 'sil', 'ds2']
     elif 'push_random1.0' in folder_name:
         subfolders = ['sac', 'sir', 'sil', 'ds']
     elif 'stack_2obj' in folder_name or 'stack_3obj' in folder_name:
-        subfolders = ['sac', 'sir', 'sil', 'ds']
+        subfolders = ['sac', 'sir_noknowledge', 'sil', 'ds']
     for subfolder in subfolders:
         last_sr = []
         last_eval = []
@@ -81,29 +81,29 @@ if __name__ == '__main__':
             last_eval.append(eval_reward[-1])
             df_legend.append(np.array([subfolder.upper()] * len(timesteps)))
 
-            raw_iterations = get_item(progress_file, 'n_updates')
-            iter_step_convert_fn = interpolate.interp1d(raw_iterations, raw_original_timesteps, fill_value="extrapolate")
-            iterations = np.arange(0, max_iterationss[env_name], max_iterationss[env_name] // 500)
-            eval_iteration = eval_f(iter_step_convert_fn(iterations))
-            iterations = smooth(iterations, 50)
-            eval_iteration = smooth(eval_iteration, 50)
-            df_iteration.append(iterations)
-            df_eval_iteration.append(eval_iteration)
-            df_legend_iteration.append(np.array([subfolder.upper()] * len(iterations)))
+            # raw_iterations = get_item(progress_file, 'n_updates')
+            # iter_step_convert_fn = interpolate.interp1d(raw_iterations, raw_original_timesteps, fill_value="extrapolate")
+            # iterations = np.arange(0, max_iterationss[env_name], max_iterationss[env_name] // 500)
+            # eval_iteration = eval_f(iter_step_convert_fn(iterations))
+            # iterations = smooth(iterations, 50)
+            # eval_iteration = smooth(eval_iteration, 50)
+            # df_iteration.append(iterations)
+            # df_eval_iteration.append(eval_iteration)
+            # df_legend_iteration.append(np.array([subfolder.upper()] * len(iterations)))
         print(subfolder, 'sr', np.mean(last_sr), 'eval', np.mean(last_eval))
     df_timesteps = np.concatenate(df_timesteps, axis=0).tolist()
     df_sr = np.concatenate(df_sr, axis=0).tolist()
     df_eval = np.concatenate(df_eval, axis=0).tolist()
     df_legend = np.concatenate(df_legend, axis=0).tolist()
-    df_iteration = np.concatenate(df_iteration, axis=0).tolist()
-    df_eval_iteration = np.concatenate(df_eval_iteration, axis=0).tolist()
-    df_legend_iteration = np.concatenate(df_legend_iteration, axis=0).tolist()
+    # df_iteration = np.concatenate(df_iteration, axis=0).tolist()
+    # df_eval_iteration = np.concatenate(df_eval_iteration, axis=0).tolist()
+    # df_legend_iteration = np.concatenate(df_legend_iteration, axis=0).tolist()
     data = {'samples': df_timesteps, 'success_rate': df_sr, 'algo': df_legend}
     sr_timesteps = pandas.DataFrame(data)
     data = {'samples': df_timesteps, 'eval': df_eval, 'algo': df_legend}
     eval_timesteps = pandas.DataFrame(data)
-    data = {'iterations': df_iteration, 'eval': df_eval_iteration, 'algo': df_legend_iteration}
-    eval_iteration = pandas.DataFrame(data)
+    # data = {'iterations': df_iteration, 'eval': df_eval_iteration, 'algo': df_legend_iteration}
+    # eval_iteration = pandas.DataFrame(data)
 
     wspace = .3
     bottom = .3
@@ -134,8 +134,9 @@ if __name__ == '__main__':
     # axes[2].set_ylabel('')
     # axes[2].get_legend().remove()
     handles, labels = axes[1].get_legend_handles_labels()
+    print(handles)
 
-    f.legend(handles[1:], ['SAC', 'SIR', 'SIL', 'DS'][:len(subfolders)], loc="lower right", ncol=1, bbox_to_anchor=(0.49, 0.18), title='')
+    f.legend(handles[:], ['SAC', 'SIR', 'SIL', 'DS'][:len(subfolders)], loc="lower right", ncol=1, bbox_to_anchor=(0.49, 0.18), title='')
     f.subplots_adjust(top=1. - margin / height, bottom=0.21, wspace=wspace, left=left, right=1. - margin / width)
-    plt.savefig(os.path.join(folder_name, '../', os.path.basename(folder_name) + '.pdf'))
+    plt.savefig(os.path.join(folder_name, '../', os.path.basename(folder_name) + 'clean.pdf'))
     plt.show()

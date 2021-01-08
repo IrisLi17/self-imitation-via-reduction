@@ -135,19 +135,27 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
                           max_episode_steps=100,
                           reward_type=reward_type,)
     elif env_name in MASS_ENTRY_POINT.keys():
-        env_kwargs = dict(random_box=True,
-                          random_ratio=random_ratio,
-                          random_pusher=True,
-                          max_episode_steps=100,
-                          reward_type=reward_type,)
-        if 'MasspointPushSingleObstacle' in env_name:
-            env_kwargs['max_episode_steps']=200
-        if 'MasspointPushDoubleObstacle' in env_name:
-            env_kwargs['max_episode_steps']=150
-        if 'MasspointPushMultiObstacle' in env_name:
-            env_kwargs['n_object'] = n_object
-            # env_kwargs['max_episode_steps'] = 50 * n_object
-            env_kwargs['max_episode_steps'] = 150
+        if env_name == "MasspointMaze-v3":
+            env_kwargs = dict(random_ratio=random_ratio,
+                              random_pusher=False,
+                              fix_goal=False,
+                              max_episode_steps=100,
+                              reward_type=reward_type,
+                              use_cu=curriculum)
+        else:
+            env_kwargs = dict(random_box=True,
+                              random_ratio=random_ratio,
+                              random_pusher=True,
+                              max_episode_steps=100,
+                              reward_type=reward_type,)
+            if 'MasspointPushSingleObstacle' in env_name:
+                env_kwargs['max_episode_steps']=200
+            if 'MasspointPushDoubleObstacle' in env_name:
+                env_kwargs['max_episode_steps']=150
+            if 'MasspointPushMultiObstacle' in env_name:
+                env_kwargs['n_object'] = n_object
+                # env_kwargs['max_episode_steps'] = 50 * n_object
+                env_kwargs['max_episode_steps'] = 150
     elif env_name in PICK_ENTRY_POINT.keys():
         env_kwargs = dict(random_box=True,
                           random_ratio=random_ratio,
@@ -170,6 +178,8 @@ def main(env_name, seed, num_timesteps, log_path, load_path, play, export_gif, r
     elif env_name in MASS_ENTRY_POINT.keys():
         eval_env_kwargs = env_kwargs.copy()
         eval_env_kwargs['random_ratio'] = 0.0
+        if env_name == "MasspointMaze-v3":
+            eval_env_kwargs['use_cu'] = False
     elif env_name in PICK_ENTRY_POINT.keys():
         eval_env_kwargs = dict(random_box=True,
                                random_ratio=0.0,

@@ -1158,7 +1158,8 @@ class MasspointPushMultiObstacleEnv(MasspointPushEnv, utils.EzPickle):
 
 class MasspointEMazeEasyEnv(MasspointPushEnv, utils.EzPickle):
     def __init__(self, reward_type='sparse', random_box=True,
-                 random_ratio=1.0, random_pusher=False, fix_goal=True):
+                 random_ratio=1.0, random_pusher=False, fix_goal=True,
+                 use_cu=False):
         XML_PATH = EMAZE_XML_PATH
         initial_qpos = {
             'masspoint:slidex': 0.0,
@@ -1167,6 +1168,7 @@ class MasspointEMazeEasyEnv(MasspointPushEnv, utils.EzPickle):
         self.random_ratio = random_ratio
         self.random_pusher = random_pusher
         self.fix_goal = fix_goal
+        self.use_cu = use_cu
         MasspointPushEnv.__init__(
             self, XML_PATH, n_substeps=5,
             target_in_the_air=False, target_offset=0.0,
@@ -1201,7 +1203,7 @@ class MasspointEMazeEasyEnv(MasspointPushEnv, utils.EzPickle):
             while self.inside_wall(masspoint_pos):
                 masspoint_pos = np.array([4., 4.]) + self.np_random.uniform(-self.obj_range, self.obj_range, size=2)
         else:
-            masspoint_pos = self.initial_masspoint_xpos[:2]
+            masspoint_pos = np.array([0., 0.])
         sim_state.qpos[2] = self.np_random.uniform(size=1, low=-.1, high=.1)
         sim_state.qpos[0:2] = masspoint_pos
         sim_state.qvel[:3] = self.np_random.randn(3) * 0.1
@@ -1209,6 +1211,9 @@ class MasspointEMazeEasyEnv(MasspointPushEnv, utils.EzPickle):
         self.sim.set_state(sim_state)
         self.sim.forward()
         return True
+
+    def set_random_ratio(self, random_ratio):
+        self.random_ratio = random_ratio
 
     def _sample_goal(self):
         if not hasattr(self, 'size_wall'):
@@ -1219,9 +1224,23 @@ class MasspointEMazeEasyEnv(MasspointPushEnv, utils.EzPickle):
         if self.fix_goal:
             goal = np.array([0., 8.])
         else:
-            goal = np.array([4., 4.]) + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
-            while self.inside_wall(goal):
-                goal = np.array([4., 4.]) + self.target_offset + self.np_random.uniform(-self.target_range, self.target_offset, size=2)
+            if self.use_cu and self.np_random.uniform() < 0.8:
+                if 1 - self.random_ratio < 0.3:
+                    goal = np.array([2., 0.])
+                    goal[0] += self.np_random.uniform(-4., 4.)
+                    goal[1] += self.np_random.uniform(-2., 2.)
+                elif 1 - self.random_ratio < 0.6:
+                    goal = np.array([8., 2.])
+                    goal[0] += self.np_random.uniform(-2., 2.)
+                    goal[1] += self.np_random.uniform(-4., 4.)
+                else:
+                    goal = np.array([4., 8])
+                    goal[0] += self.np_random.uniform(-6., 6.)
+                    goal[1] += self.np_random.uniform(-2., 2.)
+            else:
+                goal = np.array([4., 4.]) + self.target_offset + self.np_random.uniform(-self.target_range, self.target_range, size=2)
+                while self.inside_wall(goal):
+                    goal = np.array([4., 4.]) + self.target_offset + self.np_random.uniform(-self.target_range, self.target_offset, size=2)
 
         goal = np.concatenate([goal, self.initial_masspoint_xpos[2:3]])
         return goal.copy()

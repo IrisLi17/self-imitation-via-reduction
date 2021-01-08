@@ -102,13 +102,14 @@ def select_subgoal(obs_buf, k, tower_height):
 
 if __name__ == '__main__':
     model_path = sys.argv[1]
+    n_object = 3
     env_kwargs = dict(random_box=True,
                       random_ratio=0.0,
                       random_gripper=True,
-                      # max_episode_steps=(50 * 2 if n_object > 3 else 100),
-                      max_episode_steps=100,
+                      max_episode_steps=(50 * n_object if n_object > 3 else 100),
+                      # max_episode_steps=100,
                       reward_type='sparse',
-                      n_object=2,
+                      n_object=n_object,
                       )
     env = make_env(env_id='FetchStack-v1', seed=0, rank=0, kwargs=env_kwargs)
     env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
@@ -119,27 +120,40 @@ if __name__ == '__main__':
     goal_dim = env.goal.shape[0]
     obs_dim = env.observation_space.shape[0] - 2 * goal_dim
     noise_mag = env.size_obstacle[0]
-    n_object = 2
     model = HER_HACK.load(model_path)
 
     obs_buf, state_buf, tower_height_buf = [], [], []
     img_buf = []
-    env.unwrapped.set_task_array([(2, 0)])
+    value_buf = []
+    env.unwrapped.set_task_array([(n_object, 1)])
     obs = env.reset()
     done = False
+    fig, ax = plt.subplots(1, 2, figsize=(10, 5))
     while not done:
-        tower_height = env.tower_height
-        state = env.get_state()
+        value, attention_weight = model.model.sess.run([model.model.step_ops[6], model.model.policy_tf.attention_weight],
+                                                       {model.model.observations_ph: np.expand_dims(obs, axis=0)})
+        value_buf.append(np.squeeze(value))
+        print(np.squeeze(attention_weight))
+        # tower_height = env.tower_height
+        # state = env.get_state()
         obs_buf.append(obs)
-        state_buf.append(state)
-        tower_height_buf.append(tower_height)
+        # state_buf.append(state)
+        # tower_height_buf.append(tower_height)
         img = env.render(mode='rgb_array')
         img_buf.append(img)
+        ax[0].cla()
+        ax[0].imshow(img)
+        ax[0].set_title('value ' + str(value))
+        ax[1].cla()
+        ax[1].plot(value_buf)
+        plt.pause(0.1)
         action, _ = model.predict(obs)
         obs, reward, done, info = env.step(action)
     if info['is_success']:
         print('No need to do reduction')
+        print('values', value_buf)
     else:
+        raise AssertionError
         restart_step, subgoal = select_subgoal(obs_buf, 1, tower_height_buf)
         print(restart_step, subgoal)
         img_buf = img_buf[:restart_step[0]]

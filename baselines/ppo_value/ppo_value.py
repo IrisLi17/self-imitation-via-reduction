@@ -348,6 +348,8 @@ class PPO2(ActorCriticRLModel):
                         _ratio = np.clip(0.7 - 0.8 * (update - start_decay) / 380, 0.3, 0.7)  # from 0.7 to 0.3
                     elif 'FetchPushWallObstacle' in self.env.get_attr('spec')[0].id:
                         _ratio = max(1.0 - (update - 1.0) / n_updates, 0.0)
+                    elif 'MasspointMaze-v3' in self.env.get_attr('spec')[0].id:
+                        _ratio = 1.0 - (update - 1.0) / n_updates
                     else:
                         raise NotImplementedError
                     self.env.env_method('set_random_ratio', _ratio)
