@@ -359,7 +359,7 @@ if __name__ == '__main__':
     #                   random_ratio=0.0,
     #                   random_pusher=True,
     #                   max_episode_steps=200, )
-    env = make_env(env_id=env_name, seed=None, rank=0, log_dir=None, kwargs=env_kwargs)
+    env = make_env(env_id=env_name, rank=0, log_dir=None, flatten_dict=True, kwargs=env_kwargs)
     goal_dim = env.goal.shape[0]
     obs_dim = env.observation_space.shape[0] - 2 * goal_dim
     noise_mag = env.size_obstacle[1]

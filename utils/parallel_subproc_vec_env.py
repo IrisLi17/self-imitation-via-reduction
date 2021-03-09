@@ -8,7 +8,7 @@ from stable_baselines.common.vec_env import VecEnv, CloudpickleWrapper
 from stable_baselines.common.tile_images import tile_images
 
 
-def _worker(remote, parent_remote, env_fn_wrapper):
+def _worker(remote, parent_remote, env_fn_wrapper, reset_when_done):
     parent_remote.close()
     env = env_fn_wrapper.var()
     while True:
@@ -20,6 +20,8 @@ def _worker(remote, parent_remote, env_fn_wrapper):
                     # save final observation where user can get it, then reset
                     info['terminal_observation'] = observation
                     info['terminal_state'] = env.get_state()
+                    if reset_when_done:
+                        observation = env.reset()
                     # observation = env.reset()
                 remote.send((observation, reward, done, info))
             elif cmd == 'reset':
@@ -43,29 +45,6 @@ def _worker(remote, parent_remote, env_fn_wrapper):
                 raise NotImplementedError
         except EOFError:
             break
-
-# class ParallelSubprocVecEnv(VecEnv):
-#     def env_method(self, method_name, *method_args, indices=None, **method_kwargs):
-#         """Call instance methods of vectorized environments."""
-#         target_remotes = self._get_target_remotes(indices)
-#         # TODO: dispatch method_kwargs. Now method_kwargs is the same for every remote
-#         dispatched_args = [[] for _ in range(len(target_remotes))]
-#         for args in method_args:
-#             assert isinstance(args, list) or isinstance(args, tuple) or isinstance(args, np.ndarray), type(args)
-#             for i in range(len(target_remotes)):
-#                 dispatched_args[i].append(args[i])
-#         for i, remote in enumerate(target_remotes):
-#             remote.send(('env_method', (method_name, dispatched_args[i], method_kwargs)))
-#         return [remote.recv() for remote in target_remotes]
-#
-#     def set_attr(self, attr_name, value, indices=None):
-#         """Set attribute inside vectorized environments (see base class)."""
-#         assert isinstance(value, list) or isinstance(value, tuple) or isinstance(value, np.ndarray)
-#         target_remotes = self._get_target_remotes(indices)
-#         for i, remote in enumerate(target_remotes):
-#             remote.send(('set_attr', (attr_name, value[i])))
-#         for remote in target_remotes:
-#             remote.recv()
 
 
 class ParallelSubprocVecEnv(VecEnv):
@@ -92,7 +71,7 @@ class ParallelSubprocVecEnv(VecEnv):
            Defaults to 'forkserver' on available platforms, and 'spawn' otherwise.
     """
 
-    def __init__(self, env_fns, start_method=None):
+    def __init__(self, env_fns, start_method=None, reset_when_done=False):
         self.waiting = False
         self.closed = False
         n_envs = len(env_fns)
@@ -108,7 +87,7 @@ class ParallelSubprocVecEnv(VecEnv):
         self.remotes, self.work_remotes = zip(*[ctx.Pipe() for _ in range(n_envs)])
         self.processes = []
         for work_remote, remote, env_fn in zip(self.work_remotes, self.remotes, env_fns):
-            args = (work_remote, remote, CloudpickleWrapper(env_fn))
+            args = (work_remote, remote, CloudpickleWrapper(env_fn), reset_when_done)
             # daemon=True: if the main process crashes, we should not cause things to hang
             process = ctx.Process(target=_worker, args=args, daemon=True)
             process.start()

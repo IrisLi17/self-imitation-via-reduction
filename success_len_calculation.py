@@ -10,20 +10,16 @@ if __name__ == '__main__':
     algo = sys.argv[2]
     assert algo in ['sac', 'ppo']
     model_paths = sys.argv[3:]
-    if algo == 'sac':
-        from run_her import make_env
-    elif algo == 'ppo':
-        from run_ppo_augment import make_env
-    from run_her import get_env_kwargs
+    from utils.make_env_utils import make_env, get_env_kwargs
     env_kwargs = get_env_kwargs(env_id, random_ratio=0.0, n_object=3)
 
     aug_env_id = env_id.split('-')[0] + 'Unlimit-' + env_id.split('-')[1]
     aug_env_kwargs = env_kwargs.copy()
     aug_env_kwargs['max_episode_steps'] = None
 
-    aug_env = make_env(aug_env_id, seed=0, rank=0, kwargs=aug_env_kwargs)
-    if algo == 'sac':
-        aug_env = FlattenDictWrapper(aug_env, ['observation', 'achieved_goal', 'desired_goal'])
+    aug_env = make_env(aug_env_id, rank=0, flatten_dict=True, kwargs=aug_env_kwargs)
+    # if algo == 'sac':
+    #     aug_env = FlattenDictWrapper(aug_env, ['observation', 'achieved_goal', 'desired_goal'])
 
     if env_id == 'FetchStack-v1':
         # aug_env.set_task_array([(env_kwargs['n_object'], i) for i in range(env_kwargs['n_object'])])
