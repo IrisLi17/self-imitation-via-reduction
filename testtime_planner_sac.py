@@ -126,6 +126,68 @@ def reduction(env, model, initial_state, ultimate_goal, horizon):
     return done, step_so_far
 
 
+def multistep_reduction(env, model, initial_state, ultimate_goal, horizon, seg_horizon=10):
+    env.set_state(initial_state)
+    env.set_goal(ultimate_goal)
+    obs = env.get_obs()
+    obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+    segment_steps = 0
+    step_so_far = 0
+    done = False
+
+    def is_solve(env, goal):
+        cur_goal = env.goal.copy()
+        env.set_goal(goal)
+        obs = env.get_obs()
+        obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+        _, success = env.compute_reward_and_success(obs, goal, None)
+        env.set_goal(cur_goal)
+        return success
+
+    while True:
+        if is_solve(env, ultimate_goal):
+            print("Quick success", 'Reductions takes', step_so_far, 'steps')
+            return True, step_so_far
+        if segment_steps % seg_horizon == 0:
+            # Subgoal
+            env.set_goal(ultimate_goal)
+            obs = env.get_obs()
+            obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+            subgoal, mean_value, reduced_value1, reduced_value2 = search_subgoal(obs, model)
+            print("Select subgoal", subgoal)
+            env.set_goal(subgoal)
+            obs = env.get_obs()
+            obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+            segment_steps = 0
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, done, info = env.step(action)
+        step_so_far += 1
+        segment_steps += 1
+        if done:
+            print("Achieve subgoal")
+            env.set_goal(ultimate_goal)
+            obs = env.get_obs()
+            obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+        if step_so_far >= 0.5 * horizon:
+            break
+    # Ultimate goal
+    done = False
+    print('Reductions takes', step_so_far, 'steps')
+    # Run towards ultimate goal
+    env.set_goal(ultimate_goal)
+    obs = env.get_obs()
+    obs = np.concatenate([obs[key] for key in ['observation', 'achieved_goal', 'desired_goal']])
+    while not done:
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, done, info = env.step(action)
+        step_so_far += 1
+        if step_so_far >= horizon:
+            break
+    if not done:
+        print('Path2 fails')
+    return done, step_so_far
+
+
 if __name__ == '__main__':
     # CUDA_VISIBLE_DEVICES=0 python testtime_planner_sac.py FetchPushWallObstacle-v4 logs/FetchPushWallObstacle-v4new_random0.7/her_sac_32workers/obj0.15new_exp0.1_priority/model_19.zip
     # (horizon150) random_ratio=0.0, no reduction success 40, reduction success 51.
@@ -175,7 +237,8 @@ if __name__ == '__main__':
         else:
             print(i, 'Original success')
         count1 += int(success1)
-        success2, _ = reduction(aug_env, model, initial_state, ultimate_goal, 1. * env_kwargs['max_episode_steps'])
+        # success2, _ = reduction(aug_env, model, initial_state, ultimate_goal, 1. * env_kwargs['max_episode_steps'])
+        success2, _ = multistep_reduction(aug_env, model, initial_state, ultimate_goal, env_kwargs['max_episode_steps'], 20)
         if not success2:
             fail2[np.argmax(ultimate_goal[3:])] += 1
         else:
