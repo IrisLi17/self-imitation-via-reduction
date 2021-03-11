@@ -1,9 +1,9 @@
 import sys, os
 import numpy as np
-from run_her import make_env, get_env_kwargs
+from utils.make_env_utils import make_env, get_env_kwargs
 from baselines import HER_HACK
 from gym.wrappers import FlattenDictWrapper
-from utils.parallel_subproc_vec_env2 import ParallelSubprocVecEnv as ParallelSubprocVecEnv2
+from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
 import matplotlib.pyplot as plt
 from baselines import SAC_augment
 
@@ -200,15 +200,15 @@ if __name__ == '__main__':
     env_kwargs = get_env_kwargs(env_id, random_ratio=0.0)
 
     def make_thunk(rank):
-        return lambda: make_env(env_id=env_id, seed=0, rank=rank, kwargs=env_kwargs)
+        return lambda: make_env(env_id=env_id, rank=rank, kwargs=env_kwargs)
 
-    env = ParallelSubprocVecEnv2([make_thunk(i) for i in range(1)])
+    env = ParallelSubprocVecEnv([make_thunk(i) for i in range(1)], reset_when_done=True)
 
     aug_env_id = env_id.split('-')[0] + 'Unlimit-' + env_id.split('-')[1]
     aug_env_kwargs = env_kwargs.copy()
     aug_env_kwargs['max_episode_steps'] = None
 
-    aug_env = make_env(aug_env_id, seed=0, rank=0, kwargs=aug_env_kwargs)
+    aug_env = make_env(aug_env_id, rank=0, kwargs=aug_env_kwargs)
     aug_env = FlattenDictWrapper(aug_env, ['observation', 'achieved_goal', 'desired_goal'])
 
     goal_dim = aug_env.goal.shape[0]

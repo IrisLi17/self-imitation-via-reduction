@@ -2,7 +2,6 @@ import tensorflow as tf
 from stable_baselines.sac.sac import SACPolicy
 from stable_baselines.sac.policies import mlp, gaussian_entropy, gaussian_likelihood, apply_squashing_func, LOG_STD_MAX, LOG_STD_MIN
 from .attention_policy import attention_mlp_extractor2, attention_mlp_extractor_particle
-from .graph_policy import SelfAttentionBase
 
 
 class AttentionPolicy(SACPolicy):
@@ -70,11 +69,6 @@ class AttentionPolicy(SACPolicy):
                 with tf.variable_scope("attention", reuse=reuse):
                     latent = attention_mlp_extractor_particle(tf.layers.flatten(obs), n_object=3, n_units=128)
                 pi_h = latent
-            elif self.feature_extraction == "relational_mlp":
-                with tf.variable_scope("relational", reuse=reuse):
-                    self_attention_base = SelfAttentionBase(self.n_attn_blocks, self.n_object, self.n_head, self.n_units)
-                    latent = self_attention_base.forward(tf.layers.flatten(obs))
-                pi_h = latent
             else:
                 pi_h = tf.layers.flatten(obs)
 
@@ -140,10 +134,6 @@ class AttentionPolicy(SACPolicy):
                     elif self.feature_extraction == "attention_mlp_particle":
                         with tf.variable_scope("attention", reuse=reuse):
                             critics_latent = attention_mlp_extractor_particle(critics_h, n_object=3, n_units=128)
-                    elif self.feature_extraction == "relational_mlp":
-                        with tf.variable_scope("relational", reuse=reuse):
-                            self_attention_base = SelfAttentionBase(self.n_attn_blocks, self.n_object, self.n_head, self.n_units)
-                            critics_latent = self_attention_base.forward(critics_h)
                     vf_h = mlp(critics_latent, self.critic_layers, self.activ_fn, layer_norm=self.layer_norm)
                     value_fn = tf.layers.dense(vf_h, 1, name="vf")
                 self.value_fn = value_fn
@@ -161,10 +151,6 @@ class AttentionPolicy(SACPolicy):
                     elif self.feature_extraction == "attention_mlp_particle":
                         with tf.variable_scope("attention", reuse=reuse):
                             qf1_h = attention_mlp_extractor_particle(qf_h, n_object=3, n_units=128, has_action=True)
-                    elif self.feature_extraction == "relational_mlp":
-                        with tf.variable_scope("relational", reuse=reuse):
-                            self_attention_base = SelfAttentionBase(self.n_attn_blocks, self.n_object, self.n_head, self.n_units)
-                            qf1_h = self_attention_base.forward(qf_h, has_action=True)
                     qf1_h = mlp(qf1_h, self.critic_layers, self.activ_fn, layer_norm=self.layer_norm)
                     qf1 = tf.layers.dense(qf1_h, 1, name="qf1")
 
@@ -176,10 +162,6 @@ class AttentionPolicy(SACPolicy):
                     elif self.feature_extraction == "attention_mlp_particle":
                         with tf.variable_scope("attention", reuse=reuse):
                             qf2_h = attention_mlp_extractor_particle(qf_h, n_object=3, n_units=128, has_action=True)
-                    elif self.feature_extraction == "relational_mlp":
-                        with tf.variable_scope("relational", reuse=reuse):
-                            self_attention_base = SelfAttentionBase(self.n_attn_blocks, self.n_object, self.n_head, self.n_units)
-                            qf2_h = self_attention_base.forward(qf_h, has_action=True)
                     qf2_h = mlp(qf2_h, self.critic_layers, self.activ_fn, layer_norm=self.layer_norm)
                     qf2 = tf.layers.dense(qf2_h, 1, name="qf2")
 

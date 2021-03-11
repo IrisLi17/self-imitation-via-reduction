@@ -2,7 +2,7 @@ import sys, os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from run_her import make_env, get_env_kwargs
+from utils.make_env_utils import make_env, get_env_kwargs
 from baselines import HER_HACK
 from gym.wrappers import FlattenDictWrapper
 
@@ -52,18 +52,10 @@ if __name__ == '__main__':
         print('Usage: python -m plot.visualize_sac_value [load_path]')
     load_path = sys.argv[1]
     env_name = 'FetchPushWallObstacle-v4'
-    env_kwargs = get_env_kwargs(env_name, random_ratio=0.0)
+    env_kwargs = get_env_kwargs(env_name, random_ratio=0.0, reward_type="sparse")
     env_hyperparam = dict(xlim=(1.05, 1.55), ylim=(0.4, 1.1))
-    # env_name = 'MasspointPushSingleObstacle-v2'
-    # env_kwargs = dict(random_box=True,
-    #                   random_ratio=0.0,
-    #                   random_pusher=True,
-    #                   max_episode_steps=200, )
-    # env_hyperparam = dict(xlim=(-1.0, 4.0), ylim=(-1.5, 3.5),
-    #                       )
     n_cpu = 1
-    env = make_env(env_id=env_name, seed=None, rank=0, log_dir=None, kwargs=env_kwargs)
-    env = FlattenDictWrapper(env, ['observation', 'achieved_goal', 'desired_goal'])
+    env = make_env(env_id=env_name, rank=0, log_dir=None,flatten_dict=True, kwargs=env_kwargs)
 
     model = HER_HACK.load(load_path)
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
@@ -95,7 +87,7 @@ if __name__ == '__main__':
     cb = plt.colorbar(surf)
     plt.tight_layout()
     plt.savefig('value_prod.png')
-
+    ax.set_title("Value prod")
     plt.show()
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
@@ -108,7 +100,7 @@ if __name__ == '__main__':
     cb = plt.colorbar(surf)
     plt.tight_layout()
     plt.savefig('value1.png')
-
+    ax.set_title("Value 1")
     plt.show()
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
@@ -121,6 +113,7 @@ if __name__ == '__main__':
     cb = plt.colorbar(surf)
     plt.tight_layout()
     plt.savefig('value2.png')
+    ax.set_title("Value 2")
     plt.show()
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
@@ -133,6 +126,7 @@ if __name__ == '__main__':
     cb = plt.colorbar(surf)
     plt.tight_layout()
     plt.savefig('value_ave.png')
+    ax.set_title("Value average")
     plt.show()
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
@@ -145,4 +139,5 @@ if __name__ == '__main__':
     cb = plt.colorbar(surf)
     plt.tight_layout()
     plt.savefig('value_min.png')
+    ax.set_title("Value min")
     plt.show()
