@@ -1,4 +1,4 @@
-from baselines import PPO2_augment
+from baselines import PPO2_SIR
 from stable_baselines import logger
 from stable_baselines.common import set_global_seeds
 from stable_baselines.common.vec_env import SubprocVecEnv
@@ -91,9 +91,9 @@ def main(args):
 
         train_kwargs = get_train_kwargs("ppo_sir", args, parsed_action_noise=None, eval_env=eval_env, aug_env=aug_env)
 
-        model = PPO2_augment(args.policy, env, verbose=1, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
-                             ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
-                             horizon=env_kwargs['max_episode_steps'], **train_kwargs)
+        model = PPO2_SIR(args.policy, env, verbose=1, nminibatches=32, lam=0.95, gamma=0.99, noptepochs=10,
+                         ent_coef=0.01, learning_rate=3e-4, cliprange=0.2, policy_kwargs=policy_kwargs,
+                         horizon=env_kwargs['max_episode_steps'], **train_kwargs)
 
         def callback(_locals, _globals):
             num_update = _locals["update"]

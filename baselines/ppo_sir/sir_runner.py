@@ -15,7 +15,7 @@ from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCr
 from stable_baselines.a2c.utils import total_episode_reward_logger
 
 
-class ParallelRunner2(AbstractEnvRunner):
+class SIRRunner(AbstractEnvRunner):
     def __init__(self, *, env, aug_env, model, n_steps, gamma, lam, n_candidate, horizon, dim_candidate=2, log_trace=False):
         """
         A runner to learn the policy of an environment for a model

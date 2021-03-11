@@ -15,7 +15,7 @@ from stable_baselines.a2c.utils import total_episode_reward_logger
 from utils.eval_stack import pp_eval_model
 
 
-class PPO2_augment(ActorCriticRLModel):
+class PPO2_SIR(ActorCriticRLModel):
     """
     Proximal Policy Optimization algorithm (GPU version).
     Paper: https://arxiv.org/abs/1707.06347
@@ -55,8 +55,8 @@ class PPO2_augment(ActorCriticRLModel):
                  verbose=0, tensorboard_log=None, _init_setup_model=True,
                  policy_kwargs=None, full_tensorboard_log=False):
 
-        super(PPO2_augment, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
-                                           _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs)
+        super(PPO2_SIR, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
+                                       _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs)
 
         self.aug_env = aug_env
         self.eval_env = eval_env
@@ -419,33 +419,33 @@ class PPO2_augment(ActorCriticRLModel):
                 runner = Runner(env=self.env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
                                 aug_env=self.aug_env, n_candidate=self.n_candidate)
             elif self.self_imitate:
-                from baselines.ppo_augment.sil_runner import SILRunner
+                from baselines.ppo_sir.sil_runner import SILRunner
                 runner = SILRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
                                                  gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
                                                  dim_candidate=self.dim_candidate, horizon=self.horizon)
             else:
                 if self.env.get_attr('n_object')[0] > 0:
                     if self.dim_candidate != 3:
-                        from baselines.ppo_augment.parallel_runner2 import ParallelRunner2
+                        from baselines.ppo_sir.sir_runner import SIRRunner
                         # runner = ParallelRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam,
                         #                         n_candidate=self.n_candidate, horizon=self.horizon)
-                        runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
-                                                 gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
-                                                 dim_candidate=self.dim_candidate,
-                                                 horizon=self.horizon, log_trace=self.log_trace)
+                        runner = SIRRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                           gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                           dim_candidate=self.dim_candidate,
+                                           horizon=self.horizon, log_trace=self.log_trace)
                     else:
                         # Stacking.
-                        from baselines.ppo_augment.parallel_runner2_stack import ParallelRunner2
-                        runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
-                                                 gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
-                                                 dim_candidate=self.dim_candidate,
-                                                 horizon=self.horizon)
+                        from baselines.ppo_sir.sir_runner_stack import SIRRunner
+                        runner = SIRRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                           gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                           dim_candidate=self.dim_candidate,
+                                           horizon=self.horizon)
                 else:
                     # Maze.
-                    from baselines.ppo_augment.parallel_runner2_maze import ParallelRunner2
-                    runner = ParallelRunner2(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
-                                             gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
-                                             dim_candidate=self.dim_candidate, horizon=self.horizon)
+                    from baselines.ppo_sir.sir_runner_maze import SIRRunner
+                    runner = SIRRunner(env=self.env, aug_env=self.aug_env, model=self, n_steps=self.n_steps,
+                                       gamma=self.gamma, lam=self.lam, n_candidate=self.n_candidate,
+                                       dim_candidate=self.dim_candidate, horizon=self.horizon)
             self.episode_reward = np.zeros((self.n_envs,))
 
             ep_info_buf = deque(maxlen=100)
