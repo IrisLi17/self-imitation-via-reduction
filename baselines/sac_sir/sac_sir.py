@@ -10,13 +10,12 @@ import tensorflow as tf
 from stable_baselines.a2c.utils import total_episode_reward_logger
 from stable_baselines.common import tf_util, OffPolicyRLModel, SetVerbosity, TensorboardWriter
 from stable_baselines.common.vec_env import VecEnv
-from stable_baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
-from utils.replay_buffer import MultiWorkerReplayBuffer, PrioritizedMultiWorkerReplayBuffer, compute_priority
+from utils.replay_buffer import MultiWorkerReplayBuffer, PrioritizedMultiWorkerReplayBuffer
 from utils.replay_buffer import DoublePrioritizedReplayWrapper
 from stable_baselines.ppo2.ppo2 import safe_mean, get_schedule_fn
 from stable_baselines.sac.policies import SACPolicy
 from stable_baselines import logger
-from utils.eval_stack import pp_eval_model, eval_model
+from utils.eval_stack import eval_model
 
 
 def get_vars(scope):
@@ -28,7 +27,7 @@ def get_vars(scope):
     return tf_util.get_trainable_vars(scope)
 
 
-class SAC_augment(OffPolicyRLModel):
+class SAC_SIR(OffPolicyRLModel):
     """
     Soft Actor-Critic (SAC)
     Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor,
@@ -78,8 +77,8 @@ class SAC_augment(OffPolicyRLModel):
                  verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
-        super(SAC_augment, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
-                                          policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs)
+        super(SAC_SIR, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
+                                      policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs)
 
         self.aug_env = aug_env
         self.eval_env = eval_env
@@ -174,7 +173,6 @@ class SAC_augment(OffPolicyRLModel):
                     self.augment_replay_buffer = PrioritizedMultiWorkerReplayBuffer(self.buffer_size, self.alpha,
                                                                                     num_workers=1, gamma=self.gamma)
                 else:
-                    print(self.n_envs)
                     self.replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=self.n_envs, gamma=self.gamma)
                     self.augment_replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=1,
                                                                          gamma=self.gamma)
@@ -199,7 +197,7 @@ class SAC_augment(OffPolicyRLModel):
                                                      name='actions')
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
                     self.importance_weight_ph = tf.placeholder(tf.float32, shape=(None,), name="weights")
-                    self.sum_rs_ph = tf.placeholder(tf.float32, shape=(None, 1), name="sum_rs")
+                    # self.sum_rs_ph = tf.placeholder(tf.float32, shape=(None, 1), name="sum_rs")
 
                 with tf.variable_scope("model", reuse=False):
                     # Create the policy
@@ -367,38 +365,6 @@ class SAC_augment(OffPolicyRLModel):
                 self.summary = tf.summary.merge_all()
 
     def _train_step(self, step, writer, learning_rate):
-        # # Sample a batch from the replay buffer
-        # sample_aug_ratio = len(self.augment_replay_buffer) / (len(self.augment_replay_buffer) + len(self.replay_buffer))
-        # # if len(self.augment_replay_buffer) > 0:
-        # if int(self.batch_size * sample_aug_ratio) > 0 and self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
-        #     if self.priority_buffer:
-        #         batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs, batch1_weights, batch1_idxes = self.replay_buffer.sample(self.batch_size - int(self.batch_size * sample_aug_ratio), beta=0.4)
-        #         batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs, batch2_weights, batch2_idxes = self.augment_replay_buffer.sample(int(self.batch_size * sample_aug_ratio), beta=0.4)
-        #     else:
-        #         batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs = self.replay_buffer.sample(self.batch_size - int(self.batch_size * sample_aug_ratio))
-        #         batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs = self.augment_replay_buffer.sample(int(self.batch_size * sample_aug_ratio))
-        #         batch1_weights = np.ones(batch1_obs.shape[0])
-        #         batch2_weights = np.ones(batch2_obs.shape[0])
-        #     batch_obs = np.concatenate([batch1_obs, batch2_obs])
-        #     batch_actions = np.concatenate([batch1_actions, batch2_actions])
-        #     batch_rewards = np.concatenate([batch1_rewards, batch2_rewards])
-        #     batch_next_obs = np.concatenate([batch1_next_obs, batch2_next_obs])
-        #     batch_dones = np.concatenate([batch1_dones, batch2_dones])
-        #     batch_sumrs = np.concatenate([batch1_sumrs, batch2_sumrs])
-        #     batch_weights = np.concatenate([batch1_weights, batch2_weights])
-        #     batch_is_demo = np.concatenate([np.zeros(batch1_obs.shape[0], dtype=np.float32),
-        #                                     np.ones(batch2_obs.shape[0], dtype=np.float32)])
-        #     # print(batch_obs.shape, batch_actions.shape, batch_rewards.shape)
-        # else:
-        #     if self.priority_buffer:
-        #         batch = self.replay_buffer.sample(self.batch_size, beta=0.4)
-        #         batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs, batch_weights, batch_idxes = batch
-        #     else:
-        #         batch = self.replay_buffer.sample(self.batch_size)
-        #         batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs = batch
-        #         batch_weights = np.ones(batch_obs.shape[0])
-        #     batch_is_demo = np.zeros(batch_obs.shape[0], dtype=np.float32)
-
         def safe_concat(arr1, arr2):
             if len(arr1) == 0:
                 return arr2
@@ -408,14 +374,14 @@ class SAC_augment(OffPolicyRLModel):
 
         if self.priority_buffer:
             batch1, batch2 = self.combined_replay_buffer.sample(self.batch_size, beta=0.4)
-            batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs, batch1_weights, batch1_idxes = batch1
-            batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs, batch2_weights, batch2_idxes = batch2
+            batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_weights, batch1_idxes = batch1
+            batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_weights, batch2_idxes = batch2
             batch_obs = safe_concat(batch1_obs, batch2_obs)
             batch_actions = safe_concat(batch1_actions, batch2_actions)
             batch_rewards = safe_concat(batch1_rewards, batch2_rewards)
             batch_next_obs = safe_concat(batch1_next_obs, batch2_next_obs)
             batch_dones = safe_concat(batch1_dones, batch2_dones)
-            batch_sumrs = safe_concat(batch1_sumrs, batch2_sumrs)
+            # batch_sumrs = safe_concat(batch1_sumrs, batch2_sumrs)
             batch_weights = safe_concat(batch1_weights, batch2_weights)
             batch_is_demo = safe_concat(np.zeros(batch1_obs.shape[0], dtype=np.float32),
                                         np.ones(batch2_obs.shape[0], dtype=np.float32))
@@ -427,20 +393,20 @@ class SAC_augment(OffPolicyRLModel):
             if n_augment > 0 and self.augment_replay_buffer.can_sample(n_augment):
                 batch1 = self.replay_buffer.sample(self.batch_size - n_augment)
                 batch2 = self.augment_replay_buffer.sample(n_augment)
-                batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones, batch1_sumrs = batch1
-                batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones, batch2_sumrs = batch2
+                batch1_obs, batch1_actions, batch1_rewards, batch1_next_obs, batch1_dones = batch1
+                batch2_obs, batch2_actions, batch2_rewards, batch2_next_obs, batch2_dones = batch2
                 batch_obs = safe_concat(batch1_obs, batch2_obs)
                 batch_actions = safe_concat(batch1_actions, batch2_actions)
                 batch_rewards = safe_concat(batch1_rewards, batch2_rewards)
                 batch_next_obs = safe_concat(batch1_next_obs, batch2_next_obs)
                 batch_dones = safe_concat(batch1_dones, batch2_dones)
-                batch_sumrs = safe_concat(batch1_sumrs, batch2_sumrs)
+                # batch_sumrs = safe_concat(batch1_sumrs, batch2_sumrs)
                 batch_is_demo = safe_concat(np.zeros(batch1_obs.shape[0], dtype=np.float32),
                                             np.ones(batch2_obs.shape[0], dtype=np.float32))
                 demo_ratio = batch2_obs.shape[0] / batch_obs.shape[0]
             else:
                 batch = self.replay_buffer.sample(self.batch_size)
-                batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs = batch
+                batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
                 batch_is_demo = np.zeros(batch_obs.shape[0], dtype=np.float32)
                 demo_ratio = 0.0
             batch_weights = np.ones(batch_obs.shape[0])
@@ -451,15 +417,10 @@ class SAC_augment(OffPolicyRLModel):
             self.rewards_ph: batch_rewards.reshape(self.batch_size, -1),
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
             self.learning_rate_ph: learning_rate,
-            # self.sum_rs_ph: batch_sumrs.reshape(self.batch_size, -1),
             self.importance_weight_ph: batch_weights,
         }
         if hasattr(self, 'is_demo_ph'):
-            feed_dict[self.is_demo_ph] =  batch_is_demo
-
-        # out  = [policy_loss, qf1_loss, qf2_loss,
-        #         value_loss, qf1, qf2, value_fn, logp_pi,
-        #         self.entropy, policy_train_op, train_values_op]
+            feed_dict[self.is_demo_ph] = batch_is_demo
 
         # Do one gradient step
         # and optionally compute log for tensorboard
@@ -472,12 +433,10 @@ class SAC_augment(OffPolicyRLModel):
 
         # Unpack to monitor losses and entropy
         policy_loss, qf1_loss, qf2_loss, value_loss, *values = out
-        # qf1, qf2, value_fn, logp_pi, entropy, *_ = values
         entropy = values[4]
 
         # update priority here
         if self.priority_buffer:
-            # priorities = compute_priority(self, batch_obs, batch_actions, batch_next_obs, batch_rewards, batch_dones)
             qf1 = values[0]
             value_target = values[-1]
             batch_rewards = np.reshape(batch_rewards, (self.batch_size, -1))
@@ -485,12 +444,6 @@ class SAC_augment(OffPolicyRLModel):
             priorities = batch_rewards + (1 - batch_dones) * self.gamma * value_target - qf1
             priorities = np.abs(priorities) + 1e-4
             priorities = np.squeeze(priorities, axis=-1).tolist()
-            # # if len(self.augment_replay_buffer) > 0:
-            # if int(self.batch_size * sample_aug_ratio) > 0 and self.augment_replay_buffer.can_sample(int(self.batch_size * sample_aug_ratio)):
-            #     self.replay_buffer.update_priorities(batch1_idxes, priorities[:len(batch1_idxes)])
-            #     self.augment_replay_buffer.update_priorities(batch2_idxes, priorities[len(batch1_idxes):])
-            # else:
-            #     self.replay_buffer.update_priorities(batch_idxes, priorities)
             if len(batch1_idxes):
                 self.replay_buffer.update_priorities(batch1_idxes, priorities[:len(batch1_idxes)])
             if len(batch2_idxes):
@@ -514,7 +467,6 @@ class SAC_augment(OffPolicyRLModel):
                 self.replay_buffer.set_model(self)
                 self.augment_replay_buffer.set_model(self)
                 self.combined_replay_buffer = DoublePrioritizedReplayWrapper(self.replay_buffer.replay_buffer, self.augment_replay_buffer.replay_buffer)
-        # self.augment_replay_buffer = self.augment_replay_buffer
 
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
@@ -526,8 +478,6 @@ class SAC_augment(OffPolicyRLModel):
             self.noise_mag = self.aug_env.get_attr('size_obstacle')[0][1]
             self.n_object = self.aug_env.get_attr('n_object')[0]
             self.reward_type = self.aug_env.get_attr('reward_type')[0]
-            # Get horizon on the fly
-            # self.horizon = self.env.env.get_attr('spec')[0].max_episode_steps
 
             # Transform to callable if needed
             self.learning_rate = get_schedule_fn(self.learning_rate)
@@ -550,7 +500,6 @@ class SAC_augment(OffPolicyRLModel):
             # TODO: should set task_array before reset
             if self.sequential and 'FetchStack' in self.env_id:
                 current_max_nobject = 2
-                # self.env.env.set_attr('task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 self.env.env.env_method('set_task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 print('Set task_array to ', self.env.env.get_attr('task_array')[0])
                 self.env.env.env_method('set_random_ratio', [0.7] * self.env.env.num_envs)
@@ -558,7 +507,7 @@ class SAC_augment(OffPolicyRLModel):
                 self.start_augment_time = np.inf
             obs = self.env.reset()
             infos_values = []
-            # TODO: multi-env
+
             self.ep_state_buf = [[] for _ in range(self.n_envs)]
             self.ep_transition_buf = [[] for _ in range(self.n_envs)]
             if 'FetchStack' in self.env_id:
@@ -566,10 +515,6 @@ class SAC_augment(OffPolicyRLModel):
                 self.ep_selected_objects = [[] for _ in range(self.n_envs)]
                 self.ep_task_mode = [[] for _ in range(self.n_envs)]
                 self.ep_tower_height = [[] for _ in range(self.n_envs)]
-            # state_buf = []
-            # obs_buf = []
-            # transition_buf = []
-            # tower_height_buf = []
             self.restart_steps = []  # Every element should be scalar
             self.subgoals = []  # Every element should be [*subgoals, ultimate goal]
             self.restart_states = []  # list of (n_candidate) states
@@ -578,8 +523,6 @@ class SAC_augment(OffPolicyRLModel):
                 self.current_nobject = []
                 self.selected_objects = []
                 self.task_mode = []
-            # For debugging
-            # self.debug_value1, self.debug_value2 = [], []
 
             # For filtering subgoals
             self.mean_value_buf = deque(maxlen=500)
@@ -664,20 +607,6 @@ class SAC_augment(OffPolicyRLModel):
                         raise NotImplementedError
                     self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
                     print('Set random_ratio to', self.env.env.get_attr('random_ratio')[0])
-                # if self.sequential and step % 3000 == 0 and 'FetchStack' in self.env.env.get_attr('spec')[0].id:
-                #     if current_max_nobject < self.env.env.get_attr('n_object')[0] \
-                #             and eval_model(self.eval_env, self, current_max_nobject, 0.0) > 1 / current_max_nobject:
-                #         current_max_nobject += 1
-                #         previous_task_array = self.env.env.get_attr('task_array')[0]
-                #         # self.env.env.set_attr('task_array', [previous_task_array + [(current_max_nobject, j) for j in
-                #         #                                                             range(current_max_nobject)]] * self.env.env.num_envs)
-                #         self.env.env.env_method('set_task_array', [
-                #             previous_task_array + [(current_max_nobject, j) for j in
-                #                                    range(current_max_nobject)]] * self.env.env.num_envs)
-                #
-                #         print('Set task_array to', self.env.env.get_attr('task_array')[0])
-                #         self.env.env.env_method('set_random_ratio', [0.7] * self.env.env.num_envs)
-                #         print('Set random ratio to', self.env.env.get_attr('random_ratio')[0])
 
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
@@ -741,9 +670,7 @@ class SAC_augment(OffPolicyRLModel):
 
                 if writer is not None:
                     # Write reward per episode to tensorboard
-                    # ep_reward = np.array([reward]).reshape((1, -1))
                     ep_reward = np.reshape(rewards, (self.env.env.num_envs, -1))
-                    # ep_done = np.array([done]).reshape((1, -1))
                     ep_done = np.reshape(dones, (self.env.env.num_envs, -1))
                     self.episode_reward = total_episode_reward_logger(self.episode_reward, ep_reward,
                                                                       ep_done, writer, self.num_timesteps)
@@ -753,7 +680,6 @@ class SAC_augment(OffPolicyRLModel):
                 for idx, done in enumerate(dones):
                     if self.num_timesteps >= self.start_augment_time and done:
                         goal = self.ep_transition_buf[idx][0][0][-self.goal_dim:]
-                        # if (not infos[idx]['is_success']) and task_modes[idx] == 1 and current_nobjects[idx] >= 2:
                         if augment_cond():
                             # Do augmentation
                             # Sample start step and perturbation
@@ -859,10 +785,6 @@ class SAC_augment(OffPolicyRLModel):
                                 env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
                                                                                  env_next_obs, ultimate_goals,
                                                                                  temp_info)
-                        # if self.reward_type != 'sparse':
-                        #     env_reward_and_success = self.aug_env.env_method('compute_reward_and_success',
-                        #                                                      _retask_env_next_obs, ultimate_goals,
-                        #                                                      temp_info)
                         for idx in range(self.aug_env.num_envs):
                             # obs, act, reward, next_obs, done
                             env_increment_storage[idx].append(
@@ -940,10 +862,6 @@ class SAC_augment(OffPolicyRLModel):
                         self.current_nobject = self.current_nobject[self.aug_env.num_envs:]
                         self.selected_objects = self.selected_objects[self.aug_env.num_envs:]
                         self.task_mode = self.task_mode[self.aug_env.num_envs:]
-                    # For debugging
-                    # self.debug_value1 = self.debug_value1[self.aug_env.num_envs:]
-                    # self.debug_value2 = self.debug_value2[self.aug_env.num_envs:]
-
 
                 if step % self.train_freq == 0:
                     mb_infos_vals = []
@@ -967,18 +885,6 @@ class SAC_augment(OffPolicyRLModel):
                     # Log losses and entropy, useful for monitor training
                     if len(mb_infos_vals) > 0:
                         infos_values = np.mean(mb_infos_vals, axis=0)
-
-                # episode_rewards[-1] += rewards
-                # if dones:
-                #     if self.action_noise is not None:
-                #         self.action_noise.reset()
-                #     if not isinstance(self.env, VecEnv):
-                #         obs = self.env.reset()
-                #     episode_rewards.append(0.0)
-                #
-                #     maybe_is_success = infos.get('is_success')
-                #     if maybe_is_success is not None:
-                #         episode_successes.append(float(maybe_is_success))
 
                 if len(episode_rewards[0][-101:-1]) == 0:
                     mean_reward = -np.inf
@@ -1007,9 +913,6 @@ class SAC_augment(OffPolicyRLModel):
                     if len(infos_values) > 0:
                         for (name, val) in zip(self.infos_names, infos_values):
                             logger.logkv(name, val)
-                    # if len(num_augment_ep_buf) > 0:
-                    # logger.logkv('mean_num_augment_ep', safe_mean(num_augment_ep_buf))
-                    # logger.logkv('mean_success_augment_ep', safe_mean(num_success_augment_ep_buf))
                     logger.logkv('augmented steps', len(self.augment_replay_buffer))
                     logger.logkv("original_timesteps", self.num_timesteps)
                     logger.logkv("total timesteps", self.num_timesteps + self.num_aug_steps)
@@ -1048,27 +951,12 @@ class SAC_augment(OffPolicyRLModel):
             filter_high = 0.9
         if 'FetchStack' in self.env_id:
             ultimate_idx = np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:])
-            filter_subgoal = True  # TODO: see if it works
+            filter_subgoal = True
             sample_height = np.array(tower_height)[sample_t]
             for object_idx in range(0, self.n_object):
-                # Try to remove domain knowledge
-                '''
-                if abs(sample_height[0] + 0.05 - sample_obs[0][self.obs_dim + self.goal_dim + 2]) > 0.01 \
-                        and object_idx == np.argmax(sample_obs[0][self.obs_dim + self.goal_dim + 3:]):
-                    # If the goal is not 1 floor above towerheight, we don't perturb self position
-                    continue
-                '''
                 if np.linalg.norm(sample_obs[0][3 + object_idx * 3: 3 + (object_idx + 1) * 3]) < 1e-3:
                     # This object is masked
                     continue
-                # Try to remove domain knowledge
-                '''
-                if np.linalg.norm(sample_obs[0][3 + object_idx * 3: 3 + object_idx * 3 + 2] -
-                                          sample_obs[0][
-                                          self.obs_dim + self.goal_dim: self.obs_dim + self.goal_dim + 2]) < 1e-3:
-                    # This object is part of tower
-                    continue
-                '''
                 obstacle_xy = sample_obs[:, 3 * (object_idx + 1):3 * (object_idx + 1) + 2] + noise
                 # Find how many objects have been stacked
                 obstacle_height = np.expand_dims(sample_height + 0.05, axis=1)
@@ -1156,20 +1044,10 @@ class SAC_augment(OffPolicyRLModel):
         # best_idx = np.argmax(normalize_value1 * normalize_value2)
         ind = np.argsort(normalize_value1 * normalize_value2)
         good_ind = ind[-k:]
-        # if debug:
-        #     print('original value1', 'mean', np.mean(origin_value1), 'std', np.std(origin_value1))
-        #     print('original value2', 'mean', np.mean(origin_value2), 'std', np.std(origin_value2))
-        #     print(value1[good_ind])
-        #     print(value2[good_ind])
-        # restart_step = sample_t[best_idx]
-        # subgoal = subgoal_obs[best_idx, 45:50]
         if filter_subgoal:
             mean_values = (value1[good_ind] + value2[good_ind]) / 2
-            print(mean_values)
+            # print(mean_values)
             assert mean_values.shape[0] == k
-            # for i in range(k):
-            #     self.mean_value_buf.append(mean_values[i])
-            # filtered_idx = np.where(mean_values >= np.mean(self.mean_value_buf))[0]
             # Filter by hard threshold
             # In the beginning, the value fn tends to over estimate
             filtered_idx = np.where(np.logical_and(mean_values < filter_high, mean_values > filter_low))[0]
@@ -1178,12 +1056,6 @@ class SAC_augment(OffPolicyRLModel):
         restart_step = sample_t[good_ind % len(sample_t)]
         subgoal = subgoal_obs_buf[good_ind, self.obs_dim + self.goal_dim:self.obs_dim + self.goal_dim * 2]
 
-        # For debugging
-        # for i in range(k):
-        #     self.debug_value1.append(value1[good_ind[i]])
-        #     self.debug_value2.append(value2[good_ind[i]])
-        # print('subgoal', subgoal, 'with value1', normalize_value1[best_idx], 'value2', normalize_value2[best_idx])
-        # print('restart step', restart_step)
         return restart_step, subgoal
 
     def logpac(self, action):

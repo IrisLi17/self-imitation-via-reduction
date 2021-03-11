@@ -1,7 +1,7 @@
 import sys, os
 import numpy as np
 # from run_her import make_env, get_env_kwargs
-from baselines import HER_HACK, PPO2
+from baselines import HER2, PPO2
 from gym.wrappers import FlattenDictWrapper
 
 
@@ -48,7 +48,7 @@ if __name__ == '__main__':
             test_current_nobject.append(aug_env.current_nobject)
     for model_path in model_paths:
         if algo == 'sac':
-            model = HER_HACK.load(model_path)
+            model = HER2.load(model_path)
         elif algo == 'ppo':
             model = PPO2.load(model_path)
         if 'ds' in model_path:

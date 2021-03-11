@@ -10,12 +10,11 @@ import tensorflow as tf
 from stable_baselines.a2c.utils import total_episode_reward_logger
 from stable_baselines.common import tf_util, OffPolicyRLModel, SetVerbosity, TensorboardWriter
 from stable_baselines.common.vec_env import VecEnv
-# from stable_baselines.deepq.replay_buffer import ReplayBuffer, PrioritizedReplayBuffer
 from utils.replay_buffer import MultiWorkerReplayBuffer, PrioritizedMultiWorkerReplayBuffer
 from stable_baselines.ppo2.ppo2 import safe_mean, get_schedule_fn
 from stable_baselines.sac.policies import SACPolicy
 from stable_baselines import logger
-from utils.eval_stack import pp_eval_model, eval_model
+from utils.eval_stack import eval_model
 
 
 def get_vars(scope):
@@ -168,7 +167,6 @@ class SAC_parallel(OffPolicyRLModel):
                                                                             num_workers=self.env.env.num_envs,
                                                                             gamma=self.gamma)
                 else:
-                    print(self.n_envs)
                     self.replay_buffer = MultiWorkerReplayBuffer(self.buffer_size, num_workers=self.n_envs, gamma=self.gamma)
 
                 with tf.variable_scope("input", reuse=False):
@@ -191,7 +189,7 @@ class SAC_parallel(OffPolicyRLModel):
                                                      name='actions')
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
                     self.importance_weight_ph = tf.placeholder(tf.float32, shape=(None,), name='weights')
-                    self.sum_rs_ph = tf.placeholder(tf.float32, shape=(None, 1), name="sum_rs")
+                    # self.sum_rs_ph = tf.placeholder(tf.float32, shape=(None, 1), name="sum_rs")
 
                 with tf.variable_scope("model", reuse=False):
                     # Create the policy
@@ -274,8 +272,6 @@ class SAC_parallel(OffPolicyRLModel):
                         self.logpac_op = logp_ac = self.logpac(self.actions_ph)
                         policy_kl_loss += self.sil_coef * tf.reduce_mean(
                             -logp_ac * tf.stop_gradient(tf.nn.relu(qf1 - value_fn)))
-                        # policy_kl_loss += self.sil_coef * tf.reduce_mean(
-                        #     -logp_ac * tf.stop_gradient(tf.nn.relu(self.sum_rs_ph - value_fn)))
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -360,12 +356,10 @@ class SAC_parallel(OffPolicyRLModel):
         # Sample a batch from the replay buffer
         if self.priority_buffer:
             batch = self.replay_buffer.sample(self.batch_size, beta=0.4)
-            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs, weights, idxes = batch
-            # For debugging.
-            # weights = np.ones(batch_obs.shape[0])
+            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, weights, idxes = batch
         else:
             batch = self.replay_buffer.sample(self.batch_size)
-            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones, batch_sumrs = batch
+            batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
             weights = np.ones(batch_obs.shape[0])
 
         feed_dict = {
@@ -376,12 +370,7 @@ class SAC_parallel(OffPolicyRLModel):
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
             self.learning_rate_ph: learning_rate,
             self.importance_weight_ph: weights,
-            # self.sum_rs_ph: batch_sumrs.reshape(self.batch_size, -1),
         }
-
-        # out  = [policy_loss, qf1_loss, qf2_loss,
-        #         value_loss, qf1, qf2, value_fn, logp_pi,
-        #         self.entropy, policy_train_op, train_values_op]
 
         # Do one gradient step
         # and optionally compute log for tensorboard
@@ -394,7 +383,6 @@ class SAC_parallel(OffPolicyRLModel):
 
         # Unpack to monitor losses and entropy
         policy_loss, qf1_loss, qf2_loss, value_loss, *values = out
-        # qf1, qf2, value_fn, logp_pi, entropy, *_ = values
         entropy = values[4]
         # Update priority
         if self.priority_buffer:
@@ -452,7 +440,6 @@ class SAC_parallel(OffPolicyRLModel):
             start_decay = total_timesteps
             if self.sequential and 'FetchStack' in self.env_id:
                 current_max_nobject = 2
-                # self.env.env.set_attr('task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 self.env.env.env_method('set_task_array', [[(2, 0), (2, 1), (1, 0)]] * self.env.env.num_envs)
                 print('Set task_array to ', self.env.env.get_attr('task_array')[0])
                 self.env.env.env_method('set_random_ratio', [0.7] * self.env.env.num_envs)
@@ -501,13 +488,6 @@ class SAC_parallel(OffPolicyRLModel):
                         raise NotImplementedError
                     self.env.env.env_method('set_random_ratio', [_ratio] * self.env.env.num_envs)
                     print('Set random_ratio to', self.env.env.get_attr('random_ratio')[0])
-                # if self.sequential and step % 3000 == 0 and 'FetchStack' in self.env.env.get_attr('spec')[0].id:
-                #     if current_max_nobject < self.env.env.get_attr('n_object')[0] and \
-                #             eval_model(self.eval_env, self, current_max_nobject) > 0.2:
-                #         current_max_nobject += 1
-                #         previous_task_array = self.env.env.get_attr('task_array')[0]
-                #         self.env.env.env_method('set_task_array', [previous_task_array + [(current_max_nobject, j) for j in range(current_max_nobject)]] * self.env.env.num_envs)
-                #         print('Set task_array to', self.env.env.get_attr('task_array')[0])
 
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
@@ -515,9 +495,6 @@ class SAC_parallel(OffPolicyRLModel):
                 # if random_exploration is set to 0 (normal setting)
                 if (self.num_timesteps < self.learning_starts
                     or np.random.rand() < self.random_exploration):
-                    # No need to rescale when sampling random action
-                    # rescaled_action = action = self.env.action_space.sample()
-                    # rescaled_action = np.tile(action, (self.env.env.num_envs, 1))
                     rescaled_action = np.stack([self.env.action_space.sample() for _ in range(self.env.env.num_envs)], axis=0)
                     action = rescaled_action
                 else:
@@ -538,16 +515,7 @@ class SAC_parallel(OffPolicyRLModel):
                 next_obs = new_obs.copy()
                 for idx, _done in enumerate(done):
                     if _done:
-                        # print(next_obs[idx], info[idx]['terminal_observation'])
                         next_obs[idx] = self.env.convert_dict_to_obs(info[idx]['terminal_observation'])
-
-                # Calculate absolute td error (Done in wrapper now)
-                # qf1 = self.step_ops[4]
-                # q, v_tp1 = self.sess.run([qf1, self.value_target],
-                #                          {self.observations_ph: obs, self.actions_ph: action,
-                #                           self.next_observations_ph: next_obs})
-                # priority = reward + (1-done) * self.gamma * v_tp1 - q
-                # self.replay_buffer.append_priority(priority)
 
                 # Store transition in the replay buffer.
                 store_time0 = time.time()
@@ -570,9 +538,7 @@ class SAC_parallel(OffPolicyRLModel):
 
                 if writer is not None:
                     # Write reward per episode to tensorboard
-                    # ep_reward = np.array([reward]).reshape((1, -1))
                     ep_reward = np.reshape(reward, (self.env.env.num_envs, -1))
-                    # ep_done = np.array([done]).reshape((1, -1))
                     ep_done = np.reshape(done, (self.env.env.num_envs, -1))
                     self.episode_reward = total_episode_reward_logger(self.episode_reward, ep_reward,
                                                                       ep_done, writer, self.num_timesteps)
@@ -602,24 +568,12 @@ class SAC_parallel(OffPolicyRLModel):
                         infos_values = np.mean(mb_infos_vals, axis=0)
 
 
-                # episode_rewards[-1] += reward
-                # TODO: multi action noise
-                # if done:
-                #     if self.action_noise is not None:
-                #         self.action_noise.reset()
-                    # if not isinstance(self.env, VecEnv):
-                    #     obs = self.env.reset()
-                    # episode_rewards.append(0.0)
-
-                    # maybe_is_success = info.get('is_success')
-                    # if maybe_is_success is not None:
-                    #     episode_successes.append(float(maybe_is_success))
                 train_time += time.time() - train_time0
                 if len(episode_rewards[0][-101:-1]) == 0:
                     mean_reward = -np.inf
                 else:
-                    mean_reward = round(float(np.mean(np.concatenate([episode_rewards[i][-101:-1] for i in range(self.env.env.num_envs)]))), 1)
-                    # mean_reward = round(float(np.mean(episode_rewards[0][-101:-1])), 1)
+                    mean_reward = round(float(np.mean(np.concatenate([episode_rewards[i][-101:-1]
+                                                                      for i in range(self.env.env.num_envs)]))), 1)
 
                 num_episodes = sum([len(episode_rewards[i]) for i in range(len(episode_rewards))])
                 self.num_timesteps += self.env.env.num_envs

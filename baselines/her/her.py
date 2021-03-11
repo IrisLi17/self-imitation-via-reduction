@@ -4,11 +4,11 @@ from stable_baselines.common import BaseRLModel
 from stable_baselines.common import OffPolicyRLModel
 from stable_baselines.common.base_class import _UnvecWrapper
 from stable_baselines.common.vec_env import VecEnvWrapper
-from .replay_buffer import HindsightExperienceReplayWrapper, KEY_TO_GOAL_STRATEGY, SingleHindsightExperienceReplayWrapper
+from .replay_buffer import HindsightExperienceReplayWrapper, KEY_TO_GOAL_STRATEGY
 from .utils import HERGoalEnvWrapper
 
 
-class HER_HACK(BaseRLModel):
+class HER2(BaseRLModel):
     """
     Hindsight Experience Replay (HER) https://arxiv.org/abs/1707.01495
     :param policy: (BasePolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)

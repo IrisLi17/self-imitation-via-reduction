@@ -1,4 +1,4 @@
-from baselines import HER_HACK, SAC_augment
+from baselines import HER2, SAC_SIR
 from stable_baselines.sac.policies import FeedForwardPolicy as SACPolicy
 from stable_baselines.common.policies import register_policy
 from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
@@ -62,7 +62,7 @@ def main(args):
 
     set_global_seeds(args.seed)
 
-    model_class = SAC_augment  # works also with SAC, DDPG and TD3
+    model_class = SAC_SIR  # works also with SAC, DDPG and TD3
 
     env_kwargs = get_env_kwargs(args.env, random_ratio=args.random_ratio, sequential=args.sequential,
                                 reward_type=args.reward_type, n_object=args.n_object)
@@ -142,13 +142,13 @@ def main(args):
             print('train_kwargs', train_kwargs)
             print('policy_kwargs', policy_kwargs)
         # Wrap the model
-        model = HER_HACK(args.policy, env, model_class, n_sampled_goal=4,
-                         start_augment_time=args.start_augment,
-                         goal_selection_strategy=goal_selection_strategy,
-                         num_workers=args.num_workers,
-                         policy_kwargs=policy_kwargs,
-                         verbose=1,
-                         **train_kwargs)
+        model = HER2(args.policy, env, model_class, n_sampled_goal=4,
+                     start_augment_time=args.start_augment,
+                     goal_selection_strategy=goal_selection_strategy,
+                     num_workers=args.num_workers,
+                     policy_kwargs=policy_kwargs,
+                     verbose=1,
+                     **train_kwargs)
         print(model.get_parameter_list())
 
         # Train the model

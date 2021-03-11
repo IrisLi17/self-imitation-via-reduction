@@ -3,7 +3,7 @@ from stable_baselines.common.policies import register_policy
 
 from utils.make_env_utils import configure_logger, make_env, get_env_kwargs, get_train_kwargs, get_policy_kwargs
 from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
-from baselines import HER_HACK, SAC_parallel
+from baselines import HER2, SAC_parallel
 from utils.log_utils import eval_model, log_eval, stack_eval_model, egonav_eval_model
 from gym.wrappers import FlattenDictWrapper
 import matplotlib.pyplot as plt
@@ -128,12 +128,12 @@ def main(args):
             print('train_kwargs', train_kwargs)
             print('policy_kwargs', policy_kwargs)
         # Wrap the model
-        model = HER_HACK(args.policy, env, model_class, n_sampled_goal=4,
-                         goal_selection_strategy=goal_selection_strategy,
-                         num_workers=args.num_workers,
-                         policy_kwargs=policy_kwargs,
-                         verbose=1,
-                         **train_kwargs)
+        model = HER2(args.policy, env, model_class, n_sampled_goal=4,
+                     goal_selection_strategy=goal_selection_strategy,
+                     num_workers=args.num_workers,
+                     policy_kwargs=policy_kwargs,
+                     verbose=1,
+                     **train_kwargs)
         print(model.get_parameter_list())
 
         # Train the model
@@ -146,7 +146,7 @@ def main(args):
     # or wrap your environment with HERGoalEnvWrapper to use the predict method
     if args.play and rank == 0:
         assert args.load_path is not None
-        model = HER_HACK.load(args.load_path, env=env)
+        model = HER2.load(args.load_path, env=env)
 
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         obs = env.reset()

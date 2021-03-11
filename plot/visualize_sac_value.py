@@ -3,8 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from utils.make_env_utils import make_env, get_env_kwargs
-from baselines import HER_HACK
-from gym.wrappers import FlattenDictWrapper
+from baselines import HER2
 
 
 def gen_value_with_obstacle(obs, model, env_hyperparam):
@@ -57,7 +56,7 @@ if __name__ == '__main__':
     n_cpu = 1
     env = make_env(env_id=env_name, rank=0, log_dir=None,flatten_dict=True, kwargs=env_kwargs)
 
-    model = HER_HACK.load(load_path)
+    model = HER2.load(load_path)
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
     plt.rcParams.update({'font.size': 20, 'xtick.labelsize': 20, 'ytick.labelsize': 20,
                          'axes.labelsize': 20})

@@ -1,11 +1,11 @@
 import sys, os
 import numpy as np
 from utils.make_env_utils import make_env, get_env_kwargs
-from baselines import HER_HACK
+from baselines import HER2
 from gym.wrappers import FlattenDictWrapper
 from utils.parallel_subproc_vec_env import ParallelSubprocVecEnv
 import matplotlib.pyplot as plt
-from baselines import SAC_augment
+from baselines import SAC_SIR
 
 
 def no_reduction(env, model, initial_state, ultimate_goal, horizon):
@@ -215,7 +215,7 @@ if __name__ == '__main__':
     obs_dim = aug_env.observation_space.shape[0] - 2 * goal_dim
     noise_mag = aug_env.size_obstacle[1]
     n_object = aug_env.n_object
-    model = HER_HACK.load(model_path, env=env)
+    model = HER2.load(model_path, env=env)
     model.model.env_id = env_id
     model.model.goal_dim = goal_dim
     model.model.obs_dim = obs_dim

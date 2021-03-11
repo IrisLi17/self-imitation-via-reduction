@@ -1,1 +1,1 @@
-from baselines.her.her import HER_HACK
+from baselines.her.her import HER2
