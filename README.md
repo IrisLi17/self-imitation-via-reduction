@@ -1,5 +1,7 @@
 # Self-Imitation via Reduction
-Paper: Solving Compositional Reinforcement Learning Problems via Task Reduction
+Paper: [Solving Compositional Reinforcement Learning Problems via Task Reduction](https://openreview.net/forum?id=9SS69KwomAM)
+
+Project website: https://sites.google.com/view/sir-compositional/.
 
 ### Get Started
 Prerequisite: 
